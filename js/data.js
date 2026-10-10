@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -18,7 +18,7 @@ export const HABITS = [
 
 export const XP = {
   habit: 10, topic: 25, genki: 25, grammar: 15, test: 50, outreach: 15, reply: 20,
-  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40,
+  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15,
 };
 export const LEVEL_XP = 250;
 
@@ -130,3 +130,47 @@ export const SPLIT = {
 export const RUN_GOAL_KM = 12;
 export const MEALS = [["breakfast", "Breakfast"], ["lunch", "Lunch"], ["dinner", "Dinner"], ["snack", "Snacks"]];
 export const RPE = [6, 7, 7.5, 8, 8.5, 9, 9.5, 10];
+
+/* ---------- money (schema 2) ---------- */
+// Arin's first report (2026-10-10). Seeded once with fixed ids so syncing devices never duplicate it.
+export const MONEY = { goal: 500000, debtStart: 142000 };
+export const MONEY_SEED = [{ id: "seed-2026-10-10", u: 1, date: "2026-10-10", bank: 22000, debt: 142000 }];
+export const BILL_SEED = [{ id: "seed-health", u: 1, name: "National health insurance", amount: null, freq: "month", kind: "insurance", paid: {} }];
+
+/* ---------- skills ---------- */
+// Skill levels are computed from what you log; nothing extra is stored.
+// src: habit ids counted, or "run" (longest continuous km). at: totals that unlock each tier.
+export const SKILLS = [
+  { id: "jp", name: "Japanese", short: "JP", c: "mag", src: ["anki", "jp"], at: [5, 20, 50, 100, 180],
+    tiers: ["Daily reps", "Grammar grind", "Reading stamina", "Keigo basics", "Interview Japanese"] },
+  { id: "fin", name: "Finance", short: "FIN", c: "ind", src: ["fin", "news", "case"], at: [5, 20, 45, 80, 130],
+    tiers: ["Accounting basics", "Market reader", "Modelling", "Valuation", "Case-ready"] },
+  { id: "math", name: "Mind", short: "MIND", c: "cyan", src: ["math"], at: [5, 15, 35, 60, 100],
+    tiers: ["Mental math I", "Mental math II", "Speed estimates", "Market sizing", "Under pressure"] },
+  { id: "str", name: "Strength", short: "STR", c: "org", src: ["gym"], at: [3, 12, 30, 55, 90],
+    tiers: ["First session", "Consistent", "Novice gains", "Intermediate", "Iron habit"] },
+  { id: "end", name: "Endurance", short: "END", c: "lime", src: "run", at: [3, 5, 8, 10, 12],
+    tiers: ["3 km", "5 km", "8 km", "10 km", "12 km"] },
+];
+
+// What tiers unlock. need: { skillId: tier }.
+export const UNLOCKS = [
+  { need: { jp: 2, fin: 1 }, title: "Read a 決算短信 (earnings brief) summary page" },
+  { need: { fin: 2, math: 2 }, title: "Build a simple 3-statement model" },
+  { need: { jp: 3, fin: 2 }, title: "Follow a Japanese earnings call with the slides" },
+  { need: { str: 2, end: 2 }, title: "Train after a night shift without skipping" },
+  { need: { jp: 4 }, title: "Write ES and emails in polite Japanese" },
+  { need: { fin: 4, math: 3 }, title: "Value a listed Japanese company end to end" },
+  { need: { jp: 5, fin: 5 }, title: "Pass a finance case interview in Japanese" },
+  { need: { end: 5 }, title: "Run 12 km without stopping" },
+];
+
+// Creative ways to use skills together. Lit when both skills reach tier 2.
+export const COMBOS = [
+  { a: "jp", b: "fin", title: "60-second bilingual market brief", text: "Say today's Nikkei move in Japanese, then English. Record it; keep the best for interviews." },
+  { a: "fin", b: "math", title: "Run your own savings as a model", text: "Use your money reports as real data: weekly pace, slippage, what-if on bills." },
+  { a: "str", b: "jp", title: "Count sets in Japanese", text: "Reps, rest and weights out loud in Japanese. Free daily speaking practice." },
+  { a: "math", b: "fin", title: "Headline to case question", text: "Turn one news story a day into a market-sizing question and solve it in 5 minutes." },
+  { a: "end", b: "jp", title: "Shadowing runs", text: "Easy runs with Japanese podcasts, repeating lines on the way." },
+  { a: "str", b: "math", title: "Plate math sprints", text: "Work out e1RM and next targets in your head before checking the app." },
+];

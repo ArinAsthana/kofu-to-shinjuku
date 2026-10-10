@@ -2,11 +2,12 @@
 // Every record has an id and `u` (last-updated ms). Deletes are tombstones ({del:true})
 // so sync between devices never resurrects or loses records.
 
-import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES } from "./data.js";
+import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED } from "./data.js";
 
 export const RECORD_STORES = [
   "habitLog", "xpEvents", "rewardHistory", "exercises", "areaState",
   "workouts", "runs", "bodyweight", "physique", "meals", "savedMeals",
+  "money", "bills", // schema 2: weekly money reports {date, bank, debt}; bills {name, amount, freq, kind, paid:{YYYY-MM:true}}
 ];
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -14,7 +15,7 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 export function fresh() {
   const s = { app: APP_ID, schemaVersion: SCHEMA_VERSION, settings: freshSettings(), readiness: null };
   RECORD_STORES.forEach(k => (s[k] = []));
-  return s;
+  return seedMoney(s);
 }
 function freshSettings() {
   return {
@@ -25,6 +26,7 @@ function freshSettings() {
     food: { kcalTarget: null, proteinTarget: null },
     habitTargets: Object.fromEntries(HABITS.map(h => [h.id, h.target]).concat([["outreach", 5]])),
     lastExportAt: null,
+    money: { ...MONEY },
   };
 }
 
@@ -96,7 +98,16 @@ export async function snapshot(reason) {
 
 /* ---------- migrations ---------- */
 // MIGRATIONS[n] upgrades a state at schemaVersion n to n+1. Never remove one.
-const MIGRATIONS = {};
+const MIGRATIONS = {
+  // 1 -> 2: money tracker. Adds empty money/bills stores and money settings; nothing existing changes.
+  1: s => { s.money = s.money || []; s.bills = s.bills || []; s.settings = s.settings || {}; s.settings.money = { ...MONEY, ...(s.settings.money || {}) }; return seedMoney(s); },
+};
+// Arin's first money report and the health insurance bill, added once. Fixed ids, so sync merges them.
+function seedMoney(s) {
+  if (!s.money.length) s.money.push(...MONEY_SEED.map(r => ({ ...r })));
+  if (!s.bills.length) s.bills.push(...BILL_SEED.map(r => ({ ...r, paid: {} })));
+  return s;
+}
 export function migrate(s) {
   let v = s.schemaVersion || 1;
   while (v < SCHEMA_VERSION) { s = MIGRATIONS[v](s); v++; s.schemaVersion = v; }
@@ -106,6 +117,7 @@ export function migrate(s) {
   s.settings.food = Object.assign(base.settings.food, s.settings.food || {});
   s.settings.habitTargets = Object.assign(base.settings.habitTargets, s.settings.habitTargets || {});
   s.settings.dates = Object.assign(base.settings.dates, s.settings.dates || {});
+  s.settings.money = Object.assign(base.settings.money, s.settings.money || {});
   s.app = APP_ID;
   return s;
 }

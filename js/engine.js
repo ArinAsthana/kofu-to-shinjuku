@@ -229,3 +229,71 @@ export function dayFood(date) {
   for (const m of meals) for (const it of m.items || []) { t.kcal += +it.kcal || 0; t.protein += +it.protein || 0; }
   return { meals, ...t };
 }
+
+/* ---------- money ---------- */
+export const moneyReports = () => live("money").sort((a, b) => a.date.localeCompare(b.date) || a.u - b.u);
+export const latestMoney = () => moneyReports().slice(-1)[0] || null;
+export const weeksLeft = (from = today()) => Math.max(1, daysBetween(from, S.settings.dates.graduation) / 7);
+// Due when nothing was reported in the current Monday–Sunday week.
+export const moneyDue = (s = today()) => { const w = weekDays(s); return !live("money").some(r => w.includes(r.date)); };
+export function moneyPlan() {
+  const m = S.settings.money, last = latestMoney(), wl = weeksLeft();
+  const bank = last ? last.bank : 0, debt = last ? last.debt : m.debtStart;
+  return {
+    bank, debt, goal: m.goal, debtStart: m.debtStart, weeks: wl,
+    savePct: Math.max(0, Math.min(1, bank / m.goal)),
+    paidPct: m.debtStart ? Math.max(0, Math.min(1, 1 - debt / m.debtStart)) : 1,
+    saveWeek: Math.max(0, m.goal - bank) / wl,
+    debtWeek: Math.max(0, debt) / wl,
+  };
+}
+export const bills = () => live("bills").sort((a, b) => (a.kind === "insurance") - (b.kind === "insurance") || a.name.localeCompare(b.name));
+export const billMonthly = b => b.amount == null ? 0 : b.freq === "year" ? b.amount / 12 : b.amount;
+export const billsMonthly = () => bills().reduce((a, b) => a + billMonthly(b), 0);
+export const monthKey = (s = today()) => s.slice(0, 7);
+
+/* ---------- skills ---------- */
+export function skillValue(sk) {
+  if (sk.src === "run") return Math.max(0, ...live("runs").map(r => r.km));
+  return live("habitLog").filter(h => sk.src.includes(h.habit)).length;
+}
+export function skillInfo(sk) {
+  const v = skillValue(sk), tier = sk.at.filter(t => v >= t).length;
+  const next = sk.at[tier] ?? null, prev = tier ? sk.at[tier - 1] : 0;
+  return { ...sk, value: v, tier, next, pct: Math.min(1, v / sk.at[sk.at.length - 1]), toNext: next == null ? 1 : (v - prev) / (next - prev) };
+}
+// Share of weekly habit targets hit over the last 4 full-or-current weeks (0–1).
+export function discipline(s = today()) {
+  let hit = 0, want = 0;
+  for (let i = 0; i < 4; i++) {
+    const d = addDays(s, -7 * i);
+    for (const h of HABITS) { const tg = habitTarget(h.id) || 0; want += tg; hit += Math.min(tg, habitWeekCount(h.id, d)); }
+  }
+  return want ? hit / want : 0;
+}
+// Days in a row (ending today, or yesterday if today is still empty) with at least one quest done.
+export function streak() {
+  const days = new Set(live("habitLog").map(h => h.date));
+  let d = today(); if (!days.has(d)) d = addDays(d, -1);
+  let n = 0; while (days.has(d)) { n++; d = addDays(d, -1); }
+  return n;
+}
+
+/* ---------- chart series ---------- */
+export const e1rm = s => s.load * (1 + s.reps / 30);
+// Best estimated 1RM per ISO week for one lift, last n weeks. Missing weeks are null.
+export function e1rmWeekly(exId, n = 12, s = today()) {
+  const h = history(exId);
+  return [...Array(n)].map((_, i) => {
+    const w = weekDays(addDays(s, -7 * (n - 1 - i)));
+    const sets = h.filter(x => w.includes(x.date)).flatMap(x => x.entry.sets).filter(x => x.load && x.reps);
+    return sets.length ? Math.max(...sets.map(e1rm)) : null;
+  });
+}
+export function longestRunWeekly(n = 12, s = today()) {
+  return [...Array(n)].map((_, i) => {
+    const w = weekDays(addDays(s, -7 * (n - 1 - i)));
+    const rs = live("runs").filter(r => w.includes(r.date));
+    return rs.length ? Math.max(...rs.map(r => r.km)) : null;
+  });
+}
