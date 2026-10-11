@@ -1,8 +1,9 @@
-import { S, load, save, flush, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
+import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
 import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
+import * as P from "./planner.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -27,12 +28,12 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { draft = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; render(); window.scrollTo(0, 0); });
 
-const TABS = [["home", "System"], ["train", "Train"], ["body", "Body"], ["money", "Money"], ["skills", "Skills"]];
+const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Train"], ["body", "Body"], ["money", "Money"], ["skills", "Skills"]];
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, plan: vPlan, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${tab === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -68,7 +69,9 @@ function vHome() {
   const expDays = lastExp ? E.daysBetween(lastExp.slice(0, 10), t) : null;
   const days = E.daysBetween(t, S.settings.dates.graduation), mp = E.moneyPlan();
   const doneToday = HABITS.filter(h => E.habitDone(h.id, t)).length;
+  const wd = P.windDownNow(), nn = P.nowNext();
   const alerts = [
+    wd ? sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.") : "",
     E.moneyDue() ? sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", `<div class="btns"><button class="btn sm" data-act="nav" data-id="money">Report now</button></div>`) : "",
     flags.length ? sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.") : "",
     hasData && (expDays === null || expDays >= 7) ? sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", `<div class="btns"><button class="btn sm" data-act="nav" data-id="more">Export now</button></div>`) : "",
@@ -90,6 +93,12 @@ function vHome() {
     <div class="card g-cyan"><span class="k">Streak</span>
       <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
   </div>
+
+  <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
+  <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="plan">
+    <div class="grow">${nn.now ? `<b>${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</b> <span class="small muted">until ${P.toHM(nn.now.e)}</span>` : `<b>Free time</b>`}
+      <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
+    <span class="chev">›</span></button>
 
   <h2>Daily quests <span class="n">${doneToday}/${HABITS.length}</span></h2>
   <div class="list">${quests}</div>
@@ -241,6 +250,165 @@ function vMoney() {
     <label class="f">Starting debt (¥)<input type="number" inputmode="numeric" data-ch="debtstart" value="${S.settings.money.debtStart}"></label></div>
     <p class="tiny muted">Starting debt is the 100% mark for the debt bar. Deadline is graduation, ${E.fmtDate(S.settings.dates.graduation)}.</p>
   </details>`;
+}
+
+/* ================= PLAN ================= */
+let planDate = null, taskForm = null, blockForm = null;
+const kindChip = k => { const K = P.KINDS[k] || P.KINDS.other; return `<span class="kchip" style="--c:var(--${K.c})">${esc(K.label)}</span>`; };
+const span = (s, e) => `${P.toHM(s)}–${P.toHM(e)}`;
+const dayLabel = d => d === E.today() ? "Today" : d === E.addDays(E.today(), 1) ? "Tomorrow" : E.fmtDate(d);
+
+function vPlan([sub]) {
+  sub = sub || "day";
+  const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
+  const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : vDay();
+  return `<header class="top"><div><div class="hdr">Timetable · auto-planner</div><h1>Plan</h1></div>
+    <button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">+</button></header>${seg}${body}`;
+}
+
+function agendaRows(date, p) {
+  const n = new Date(), nm = n.getHours() * 60 + n.getMinutes(), isToday = date === E.today();
+  let marked = !isToday;
+  const rows = P.agenda(date, p).map(r => {
+    let pre = "";
+    if (!marked && r.s > nm) { marked = true; pre = `<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`; }
+    if (r.type === "wind") return pre + `<div class="ag wind"><div class="tm">${P.toHM(r.s)}</div><div class="grow"><b>Wind down</b><div class="small muted">Screens off, shower, prep tomorrow. Bed at ${P.toHM(r.w.bed)}.</div></div></div>`;
+    if (r.type === "task") return pre + `<div class="ag task ${r.at.late ? "late" : ""}"><div class="tm">${span(r.s, r.e)}</div>
+      <div class="grow"><b>${esc(r.k.title)}</b><div class="small muted">${P.dur(r.k.mins)}${r.k.energy === "high" ? " · focus" : ""}${r.k.due ? ` · due ${E.fmtDate(r.k.due)}` : ""}${r.at.late ? ` · <span class="warn">after deadline</span>` : ""}${r.at.pinned ? " · pinned" : ""}</div></div>
+      <button class="bx sm" data-act="taskdone" data-id="${r.k.id}" aria-label="Done: ${esc(r.k.title)}"></button></div>`;
+    const b = r.b;
+    return pre + `<div class="ag blk k-${esc(b.kind)}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? "→" + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
+      <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span aria-label="locked">🔒</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div></div></div>`;
+  });
+  if (!marked) rows.push(`<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`);
+  return rows.join("") || `<p class="empty">Nothing on this day.</p>`;
+}
+
+function vDay() {
+  const t = E.today(), d = planDate || t, p = P.plan();
+  const days = [...Array(7)].map((_, i) => E.addDays(t, i));
+  const free = P.agenda(d, p);
+  const tasksToday = free.filter(r => r.type === "task").reduce((a, r) => a + (r.e - r.s), 0);
+  const wd = P.windDownNow();
+  return `${wd ? sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.") : ""}
+  <div class="pills days">${days.map(x => `<button class="pill" data-act="pday" data-id="${x}" aria-pressed="${x === d}">${x === t ? "Today" : P.DAY_NAMES[E.parse(x).getDay()] + " " + E.parse(x).getDate()}</button>`).join("")}</div>
+  <h2>${esc(dayLabel(d))} <span class="n">${tasksToday ? P.dur(tasksToday) + " of tasks planned" : "no tasks planned"}</span></h2>
+  <div class="panel agenda">${agendaRows(d, p)}</div>
+  ${p.unplaced.length ? sysBox(`<span class="warn">${p.unplaced.length} task${p.unplaced.length === 1 ? "" : "s"} didn't fit in the next 2 weeks.</span>`, "Shorten them, split them, or move a block.", `<div class="btns"><button class="btn sm" data-act="go" data-id="plan/todo">Open to-do</button></div>`) : ""}
+  <p class="tiny muted">Tasks fill free gaps by deadline, then priority. Focus tasks stay out of the 8 hours after a night shift and finish by 22:00. Nothing is placed after wind-down.</p>`;
+}
+
+function taskFormHtml(k) {
+  k = k || { mins: 60, prio: 2, energy: "high" };
+  return `<div class="panel" id="taskForm">
+    <label class="f">Task<input data-f="title" value="${esc(k.title || "")}" placeholder="e.g. Read 決算短信 for Toyota" enterkeyhint="done"></label>
+    <div class="grid" style="margin-top:10px">
+      <label class="f">Length<select data-f="mins">${P.TASK_LEN.map(m => `<option value="${m}" ${+k.mins === m ? "selected" : ""}>${P.dur(m)}</option>`).join("")}</select></label>
+      <label class="f">Priority<select data-f="prio">${[[3, "High"], [2, "Normal"], [1, "Low"]].map(([v, l]) => `<option value="${v}" ${+k.prio === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="f">Energy<select data-f="energy"><option value="high" ${k.energy === "high" ? "selected" : ""}>Focus</option><option value="low" ${k.energy === "low" ? "selected" : ""}>Light</option></select></label>
+      <label class="f">Due (optional)<input type="date" data-f="due" value="${esc(k.due || "")}"></label>
+    </div>
+    <div class="btns"><button class="btn go" data-act="savetask" ${k.id ? `data-id="${k.id}"` : ""}>${k.id ? "Save" : "Add and plan"}</button>
+      ${k.id ? `<button class="btn" data-act="taskform">Cancel</button><button class="btn danger" data-act="deltask" data-id="${k.id}">Delete</button>` : ""}</div>
+  </div>`;
+}
+
+function vTodo() {
+  const p = P.plan(), open = live("tasks").filter(k => !k.done);
+  const when = k => p.at.get(k.id);
+  open.sort((a, b) => { const x = when(a), y = when(b); return x && y ? (x.date + String(x.s).padStart(4, "0")).localeCompare(y.date + String(y.s).padStart(4, "0")) : x ? -1 : y ? 1 : 0; });
+  const done = live("tasks").filter(k => k.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
+  const editing = taskForm && taskForm !== "new" ? live("tasks").find(k => k.id === taskForm) : null;
+  return `${editing ? "" : taskFormHtml()}
+  <h2>Open <span class="n">${open.length} · ${P.dur(open.reduce((a, k) => a + k.mins, 0) || 0)}</span></h2>
+  <div class="list">${open.map(k => {
+    if (editing && editing.id === k.id) return taskFormHtml(k);
+    const at = when(k);
+    return `<div class="q ${at && at.late ? "late" : ""}">
+      <button class="bx" data-act="taskdone" data-id="${k.id}" aria-label="Done: ${esc(k.title)}"></button>
+      <button class="grow tbtn" data-act="taskform" data-id="${k.id}"><div class="t">${esc(k.title)}</div>
+        <div class="small muted">${at ? `<span class="${at.late ? "warn" : ""}">${esc(dayLabel(at.date))} ${span(at.s, at.e)}</span>` : `<span class="warn">No slot in 2 weeks</span>`} · ${P.dur(k.mins)}${k.prio === 3 ? " · high" : k.prio === 1 ? " · low" : ""}${k.energy === "high" ? " · focus" : ""}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""}</div></button>
+      ${at ? `<button class="btn sm" data-act="${at.pinned ? "unpin" : "pin"}" data-id="${k.id}" aria-label="${at.pinned ? "Unpin" : "Pin to this slot"}">${at.pinned ? "📌" : "Pin"}</button>` : ""}</div>`;
+  }).join("") || `<p class="empty">Nothing open. Add a task above and the System finds it a slot.</p>`}</div>
+  <p class="tiny muted">Pin keeps a task in its slot even when new tasks arrive. Unpinned tasks re-plan every time you open this screen.</p>
+  ${done.length ? `<details class="panel"><summary>Done (${done.length})</summary>${done.slice(0, 30).map(k => `<div class="item row between"><span class="small">${esc(k.title)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(k.doneAt || Date.now())))}</span></span><button class="btn sm" data-act="taskundo" data-id="${k.id}">Undo</button></div>`).join("")}</details>` : ""}`;
+}
+
+function blockFormHtml(b) {
+  b = b || { title: "", kind: "other", days: [], start: "09:00", end: "10:00", locked: false, date: null };
+  return `<div class="panel" id="blockForm">
+    <h3>${b.id ? "Edit block" : "New block"}</h3>
+    <div class="grid">
+      <label class="f" style="flex-basis:100%">Name<input data-f="title" value="${esc(b.title)}" placeholder="e.g. Seminar"></label>
+      <label class="f">Type<select data-f="kind">${Object.entries(P.KINDS).map(([k, v]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+      <label class="f">Start<input type="time" data-f="start" value="${esc(b.start)}"></label>
+      <label class="f">End<input type="time" data-f="end" value="${esc(b.end)}"></label>
+    </div>
+    <div class="small muted" style="margin-top:10px">Repeats every</div>
+    <div class="chips" id="bdays">${P.WEEK_ORDER.map(d => `<button class="chip" data-act="bday" data-id="${d}" aria-pressed="${(b.days || []).includes(d)}">${P.DAY_NAMES[d]}</button>`).join("")}</div>
+    <label class="f" style="margin-top:10px">Or only on this date<input type="date" data-f="date" value="${esc(b.date || "")}"></label>
+    <label class="row small" style="margin-top:10px"><input type="checkbox" data-f="locked" style="width:auto" ${b.locked ? "checked" : ""}> Locked (school, work, sleep: asks before changing)</label>
+    <p class="tiny muted">An end time before the start runs past midnight, like a 22:00–06:00 shift.</p>
+    <div class="btns"><button class="btn go" data-act="saveblock" ${b.id ? `data-id="${b.id}"` : ""}>Save</button><button class="btn" data-act="blockform">Cancel</button>
+      ${b.id ? `<button class="btn danger" data-act="delblock" data-id="${b.id}">Delete</button>` : ""}</div>
+  </div>`;
+}
+
+function vWeek() {
+  const bl = live("blocks"), wd = S.settings.windDown, pl = S.settings.plan;
+  const perm = typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  const editing = blockForm && blockForm !== "new" ? bl.find(b => b.id === blockForm) : null;
+  const oneOff = bl.filter(b => b.date && b.date >= E.today()).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const row = b => editing && editing.id === b.id ? blockFormHtml(b) : `<button class="ag blk tbtn" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}">
+      <div class="tm">${esc(b.start)}–${esc(b.end)}</div><div class="grow"><b>${esc(b.title)}</b> ${b.locked ? "🔒" : ""}<div class="small muted">${kindChip(b.kind)}</div></div><span class="chev">›</span></button>`;
+  return `${blockForm === "new" ? blockFormHtml() : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="blockform" data-id="new">+ Block</button></div>`}
+  ${P.WEEK_ORDER.map(d => { const list = bl.filter(b => !b.date && (b.days || []).includes(d)).sort((a, b) => P.toMin(a.start) - P.toMin(b.start));
+    return `<h2>${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d]} <span class="n">${list.length}</span></h2><div class="panel agenda">${list.map(row).join("") || `<p class="empty">Free day.</p>`}</div>`; }).join("")}
+  ${oneOff.length ? `<h2>One-off</h2><div class="panel agenda">${oneOff.map(b => row(b).replace(`<b>`, `<span class="small muted">${E.fmtDate(b.date)}</span> <b>`)).join("")}</div>` : ""}
+
+  <h2>Wind-down</h2>
+  <div class="panel">
+    <label class="row"><input type="checkbox" data-ch="wdon" style="width:auto" ${wd.on !== false ? "checked" : ""}> Remind me before bed</label>
+    <div class="grid" style="margin-top:10px">
+      <label class="f">Minutes before sleep<input type="number" inputmode="numeric" min="15" max="180" step="15" data-ch="wdmins" value="${wd.mins ?? 60}"></label>
+    </div>
+    <p class="small muted" style="margin-top:8px">Bedtime comes from your Sleep blocks. On shift nights there is no wind-down; it would land mid-shift.</p>
+    <h3 style="margin-top:12px">Get it on your phone</h3>
+    <p class="small muted">A web app can't ring at a set time while it's closed. Your calendar can. Add the wind-down there once and set its notification to "At time of event".</p>
+    <div class="btns">${P.windDownLinks().map(l => `<a class="btn sm" href="${esc(l.url)}" target="_blank" rel="noopener">+ Google Calendar · ${P.toHM(l.at)} ${l.days.map(x => P.DAY_NAMES[x]).join(" ")}</a>`).join("") || `<span class="small muted">Turn the reminder on and add a Sleep block first.</span>`}</div>
+    <div class="btns"><button class="btn sm" data-act="ics">Download whole timetable (.ics)</button></div>
+    <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>
+    <h3 style="margin-top:12px">While the app is open</h3>
+    <p class="small muted">${perm === "unsupported" ? "This browser has no notifications." : perm === "denied" ? "Notifications are blocked for this site. Allow them in the browser's site settings." : wd.notify && perm === "granted" ? "On. You'll get a notification at wind-down if the app is still open or in the background." : "Best effort: a notification at wind-down if the app is still open or in the background."}</p>
+    ${perm === "unsupported" || perm === "denied" ? "" : `<div class="btns"><button class="btn sm" data-act="wdnotify">${wd.notify && perm === "granted" ? "Turn off" : "Turn on"}</button></div>`}
+  </div>
+
+  <h2>Planner window</h2>
+  <div class="panel"><div class="grid">
+    <label class="f">Plan tasks from<input type="time" data-ch="dayStart" value="${esc(pl.dayStart)}"></label>
+    <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label></div>
+    <p class="tiny muted">Tasks only go inside this window, outside blocks, and before wind-down.</p></div>`;
+}
+
+// Fires the wind-down as a notification while the app is open or backgrounded. The calendar covers the rest.
+let wdTimer = null;
+function scheduleWindDown() {
+  clearTimeout(wdTimer);
+  const wd = S.settings.windDown;
+  if (!wd || wd.on === false || !wd.notify || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  const now = Date.now();
+  for (let i = 0; i < 2; i++) {
+    const w = P.windDownOn(E.addDays(E.today(), i)); if (!w) continue;
+    const at = E.parse(w.date).getTime() + w.at * 60000;
+    if (at > now) {
+      wdTimer = setTimeout(async () => {
+        const body = `Bed at ${P.toHM(w.bed)}. Screens off, shower, set out tomorrow.`;
+        try { const reg = await navigator.serviceWorker?.getRegistration(); if (reg) reg.showNotification("Wind down", { body, icon: "icons/icon-192.png", tag: "winddown" }); else new Notification("Wind down", { body }); } catch (e) {}
+        render(); scheduleWindDown();
+      }, Math.min(at - now, 2 ** 31 - 1));
+      return;
+    }
+  }
 }
 
 function weeklyReport() {
@@ -635,12 +803,12 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.2 · data schema ${S.schemaVersion}</p>`;
 }
 
-function download(name, text) {
-  const blob = new Blob([text], { type: "application/json" });
-  const file = new File([blob], name, { type: "application/json" });
+function download(name, text, type = "application/json") {
+  const blob = new Blob([text], { type });
+  const file = new File([blob], name, { type });
   if (navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
     return navigator.share({ files: [file], title: name }).catch(() => saveLink(blob, name));
   }
@@ -793,6 +961,58 @@ document.addEventListener("click", async ev => {
       put("bills", b); save(); return render();
     }
 
+    // plan
+    case "pday": planDate = id === E.today() ? null : id; return render();
+    case "taskdone": {
+      const k = live("tasks").find(x => x.id === id); if (!k) return;
+      put("tasks", { ...k, done: true, doneAt: Date.now() });
+      const ref = "task:" + id, gains = live("xpEvents").some(e => e.ref === ref) ? [] : [E.gainXP("task", ref, k.title)];
+      save(); announce(gains); if (!gains.length) toast("Done"); return render();
+    }
+    case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return; E.revokeXP("task:" + id); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
+    case "taskform": taskForm = id && taskForm !== id ? id : null; return render();
+    case "savetask": {
+      const f = readForm("#taskForm"); if (!f.title) { toast("Name the task"); return $("#taskForm input")?.focus(); }
+      const old = id ? live("tasks").find(x => x.id === id) : null;
+      const k = put("tasks", { ...(old || { done: false, created: Date.now(), pin: null }), title: f.title, mins: +f.mins, prio: +f.prio, energy: f.energy, due: f.due || null });
+      if (old && old.mins !== k.mins && k.pin) { k.pin = null; put("tasks", k); }
+      taskForm = null; save();
+      const at = P.plan().at.get(k.id);
+      toast(at ? `Planned: ${dayLabel(at.date)} ${P.toHM(at.s)}${at.late ? " (after deadline)" : ""}` : "No free slot in the next 2 weeks");
+      return render();
+    }
+    case "deltask": if (confirm("Delete this task?")) { remove("tasks", id); taskForm = null; save(); render(); } return;
+    case "pin": case "unpin": {
+      const k = live("tasks").find(x => x.id === id); if (!k) return;
+      const at = a === "pin" ? P.plan().at.get(id) : null;
+      put("tasks", { ...k, pin: at ? { date: at.date, start: P.toHM(at.s) } : null }); save(); toast(at ? "Pinned to " + dayLabel(at.date) + " " + P.toHM(at.s) : "Unpinned"); return render();
+    }
+    case "blockform": blockForm = id && blockForm !== id ? id : null; render(); if (blockForm) document.querySelector("#blockForm")?.scrollIntoView({ block: "center" }); return;
+    case "bday": el.setAttribute("aria-pressed", el.getAttribute("aria-pressed") !== "true"); return;
+    case "saveblock": {
+      const f = readForm("#blockForm"), locked = $("#blockForm [data-f=locked]").checked;
+      const days = [...document.querySelectorAll("#bdays [aria-pressed=true]")].map(b => +b.dataset.id);
+      if (!f.title) return toast("Name the block");
+      if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
+      if (!days.length && !f.date) return toast("Pick days or a date");
+      const old = id ? live("blocks").find(x => x.id === id) : null;
+      if (old && old.locked && !confirm(`"${old.title}" is locked. Change it anyway?`)) return;
+      put("blocks", { ...(old || {}), title: f.title, kind: f.kind, days: f.date ? [] : days, date: f.date || null, start: f.start, end: f.end, locked });
+      blockForm = null; save(); toast("Timetable updated. Tasks re-planned."); return render();
+    }
+    case "delblock": {
+      const b = live("blocks").find(x => x.id === id); if (!b) return;
+      if (!confirm(b.locked ? `"${b.title}" is locked. Delete it anyway?` : `Delete "${b.title}"?`)) return;
+      remove("blocks", id); blockForm = null; save(); return render();
+    }
+    case "ics": { await download("kofu-to-shinjuku.ics", P.ics(), "text/calendar"); return toast("Calendar file ready"); }
+    case "wdnotify": {
+      const wd = S.settings.windDown;
+      if (wd.notify && Notification.permission === "granted") wd.notify = false;
+      else { const r = await Notification.requestPermission(); wd.notify = r === "granted"; if (r !== "granted") toast("Notifications not allowed"); }
+      touchSettings(); save(); scheduleWindDown(); return render();
+    }
+
     // more
     case "export": case "exportcopy": {
       const o = exportObject(), txt = JSON.stringify(o, null, 1), name = `export-${E.today()}.json`;
@@ -835,6 +1055,9 @@ document.addEventListener("change", async ev => {
   if (k === "photos") { pendingPhotos = [...el.files]; $("#photoCount").textContent = pendingPhotos.length + " photo(s) ready"; return; }
   if (k === "billamt") { const b = live("bills").find(x => x.id === el.dataset.id); if (!b) return; b.amount = num(el.value); put("bills", b); save(); return render(); }
   if (k === "moneygoal" || k === "debtstart") { const v = num(el.value); if (v === null || v < 0) return render(); S.settings.money[k === "moneygoal" ? "goal" : "debtStart"] = v; touchSettings(); save(); return render(); }
+  if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
+  if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
+  if (k === "dayStart" || k === "dayEnd") { if (!el.value) return render(); S.settings.plan[k] = el.value; touchSettings(); save(); return render(); }
   if (k === "kcalTarget" || k === "proteinTarget") { S.settings.food[k] = num(el.value); touchSettings(); save(); return; }
   if (k === "htarget") { S.settings.habitTargets[el.dataset.id] = Math.max(0, Math.min(7, Math.round(num(el.value) || 0))); touchSettings(); save(); return; }
   if (k === "chance") { S.settings.rewardChance = Math.max(0, Math.min(100, num(el.value) || 0)) / 100; touchSettings(); save(); return; }
@@ -852,6 +1075,12 @@ document.addEventListener("change", async ev => {
   await load();
   render();
   Sync.init({ render, toast });
+  scheduleWindDown(); onSave(scheduleWindDown);
+  // Keep "now" and the wind-down banner current, without wiping a form being filled in.
+  setInterval(() => {
+    const busy = document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+    if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && ["home", "plan"].includes(route()[0])) render();
+  }, 60000);
   if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush().catch(() => {}); });
 })();

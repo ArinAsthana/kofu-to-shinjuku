@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -18,7 +18,7 @@ export const HABITS = [
 
 export const XP = {
   habit: 10, topic: 25, genki: 25, grammar: 15, test: 50, outreach: 15, reply: 20,
-  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15,
+  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15, task: 10,
 };
 export const LEVEL_XP = 250;
 
@@ -174,3 +174,30 @@ export const COMBOS = [
   { a: "end", b: "jp", title: "Shadowing runs", text: "Easy runs with Japanese podcasts, repeating lines on the way." },
   { a: "str", b: "math", title: "Plate math sprints", text: "Work out e1RM and next targets in your head before checking the app." },
 ];
+
+/* ---------- timetable (schema 3) ---------- */
+// Arin's fixed week, seeded once with fixed ids so syncing devices never duplicate it. Days: 0 = Sunday … 6 = Saturday.
+// Locked blocks are things Arin can't move (school, work, sleep). Quest blocks are protected study and training time.
+const blk = (id, title, kind, days, start, end, locked = false) => ({ id: "seed-" + id, u: 1, title, kind, days, date: null, start, end, locked });
+export const BLOCK_SEED = [
+  blk("class-mon-am", "Classes", "class", [1], "09:00", "11:40", true),
+  blk("class-mon-pm", "Classes", "class", [1], "15:30", "18:10", true),
+  blk("class-wed", "Classes", "class", [3], "09:00", "18:00", true),
+  blk("shift", "FamilyMart night shift", "work", [1, 4], "22:00", "06:00", true),
+  blk("sleep", "Sleep", "sleep", [0, 1, 3, 4, 6], "00:30", "08:00", true),
+  blk("sleep-post-shift", "Sleep after shift", "sleep", [2, 5], "06:30", "12:30", true),
+  blk("lift-mon", "Lift", "quest", [1], "11:50", "13:20"),
+  blk("lift", "Lift", "quest", [2, 5], "13:30", "15:00"),
+  blk("lift-thu", "Lift", "quest", [4], "10:00", "11:30"),
+  blk("cali-wed", "Calisthenics", "quest", [3], "18:30", "19:30"),
+  blk("cali", "Calisthenics", "quest", [0, 6], "10:00", "11:00"),
+  blk("fin-mon", "Finance block", "quest", [1], "19:00", "20:30"),
+  blk("fin-tue", "Finance block", "quest", [2, 5], "15:30", "17:30"),
+  blk("fin-wed", "Finance block", "quest", [3], "20:00", "21:30"),
+  blk("fin-thu", "Finance block", "quest", [4], "13:00", "16:00"),
+  blk("fin-wknd", "Finance block", "quest", [0, 6], "11:30", "15:00"),
+  blk("music", "Music club", "club", [2], "18:00", "20:00"),
+  blk("friends", "Friends", "social", [5], "19:00", "23:00"),
+];
+export const PLAN_SETTINGS = { dayStart: "07:00", dayEnd: "23:30" };
+export const WIND_DOWN = { on: true, mins: 60, notify: false };
