@@ -8,7 +8,7 @@ export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 export const KINDS = {
   class: { label: "Class", c: "ind" }, work: { label: "Work", c: "org" }, sleep: { label: "Sleep", c: "dim" },
-  quest: { label: "Quest", c: "lime" }, club: { label: "Club", c: "mag" }, social: { label: "Social", c: "mag" },
+  nap: { label: "Nap", c: "dim" }, quest: { label: "Quest", c: "lime" }, club: { label: "Club", c: "mag" }, social: { label: "Social", c: "mag" },
   other: { label: "Other", c: "cyan" },
 };
 export const TASK_LEN = [15, 30, 45, 60, 90, 120, 180];

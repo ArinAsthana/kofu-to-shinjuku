@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -18,7 +18,7 @@ export const HABITS = [
 
 export const XP = {
   habit: 10, topic: 25, genki: 25, grammar: 15, test: 50, outreach: 15, reply: 20,
-  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15, task: 10,
+  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15, task: 10, social: 15,
 };
 export const LEVEL_XP = 250;
 
@@ -179,20 +179,22 @@ export const COMBOS = [
 // Arin's fixed week, seeded once with fixed ids so syncing devices never duplicate it. Days: 0 = Sunday … 6 = Saturday.
 // Locked blocks are things Arin can't move (school, work, sleep). Quest blocks are protected study and training time.
 const blk = (id, title, kind, days, start, end, locked = false) => ({ id: "seed-" + id, u: 1, title, kind, days, date: null, start, end, locked });
+// 7.5 h sleep every night; workouts are 1 h; gym is reliably open 9:00–16:00 (till 20:00 on paper, hit or miss).
 export const BLOCK_SEED = [
   blk("class-mon-am", "Classes", "class", [1], "09:00", "11:40", true),
   blk("class-mon-pm", "Classes", "class", [1], "15:30", "18:10", true),
-  blk("class-wed", "Classes", "class", [3], "09:00", "18:00", true),
+  blk("class-wed", "Classes", "class", [3], "09:00", "18:10", true),
   blk("shift", "FamilyMart night shift", "work", [1, 4], "22:00", "06:00", true),
   blk("sleep", "Sleep", "sleep", [0, 1, 3, 4, 6], "00:30", "08:00", true),
-  blk("sleep-post-shift", "Sleep after shift", "sleep", [2, 5], "06:30", "12:30", true),
-  blk("lift-mon", "Lift", "quest", [1], "11:50", "13:20"),
-  blk("lift", "Lift", "quest", [2, 5], "13:30", "15:00"),
-  blk("lift-thu", "Lift", "quest", [4], "10:00", "11:30"),
+  blk("sleep-post-shift", "Sleep after shift", "sleep", [2, 5], "06:30", "14:00", true),
+  blk("nap-mon", "Nap before shift", "nap", [1], "19:00", "21:00", true),
+  blk("lift-mon", "Lift", "quest", [1], "11:50", "12:50"),
+  blk("lift", "Lift", "quest", [2, 5], "14:30", "15:30"),
+  blk("lift-thu", "Lift", "quest", [4], "10:00", "11:00"),
   blk("cali-wed", "Calisthenics", "quest", [3], "18:30", "19:30"),
   blk("cali", "Calisthenics", "quest", [0, 6], "10:00", "11:00"),
-  blk("fin-mon", "Finance block", "quest", [1], "19:00", "20:30"),
-  blk("fin-tue", "Finance block", "quest", [2, 5], "15:30", "17:30"),
+  blk("fin-mon", "Finance block", "quest", [1], "13:15", "15:15"),
+  blk("fin-tue", "Finance block", "quest", [2, 5], "15:45", "17:45"),
   blk("fin-wed", "Finance block", "quest", [3], "20:00", "21:30"),
   blk("fin-thu", "Finance block", "quest", [4], "13:00", "16:00"),
   blk("fin-wknd", "Finance block", "quest", [0, 6], "11:30", "15:00"),
@@ -201,3 +203,31 @@ export const BLOCK_SEED = [
 ];
 export const PLAN_SETTINGS = { dayStart: "07:00", dayEnd: "23:30" };
 export const WIND_DOWN = { on: true, mins: 60, notify: false };
+
+/* ---------- care (schema 4) ---------- */
+// Meds, skincare and teeth. days: [] = every day. Ordered thinnest to thickest within a slot.
+export const CARE_SLOTS = [["am", "Morning"], ["amShower", "After morning shower"], ["pmShower", "After night shower"], ["pm", "Before bed"]];
+const care = (id, name, slot, order, days = [], note = "") => ({ id: "seed-" + id, u: 1, name, slot, order, days, note });
+export const CARE_SEED = [
+  care("finasteride", "Finasteride", "am", 1),
+  care("vitd", "Vitamin D", "am", 2, [5], "With breakfast"),
+  care("brush-am", "Brush teeth", "am", 3),
+  care("ha", "Hyaluronic acid", "amShower", 1, [], "On damp skin"),
+  care("nia", "Niacinamide", "amShower", 2),
+  care("aza", "Azelaic acid", "amShower", 3),
+  care("spf", "Sunscreen", "amShower", 4, [], "Last step"),
+  care("tret", "Tretinoin", "pmShower", 1, [], "On dry skin, pea-sized, keep off under-eyes"),
+  care("cetaphil", "Cetaphil cream", "pmShower", 2),
+  care("eye", "Under-eye hyaluronic", "pmShower", 3),
+  care("brush-pm", "Brush teeth", "pm", 1),
+  care("powder", "Whitening tooth powder", "pm", 2, [3, 5]),
+];
+
+/* ---------- social (schema 4) ---------- */
+// Ranks like the Hunter Association: average of your criteria scores (1–5).
+export const RANKS = [["S", 4.5, "mag"], ["A", 3.8, "org"], ["B", 3.0, "ind"], ["C", 2.2, "cyan"], ["D", 1.5, "lime"], ["E", 0, "dim"]];
+export const PERSON_TYPES = [
+  ["partner", "Partner", null], ["close", "Close friend", 7], ["friend", "Friend", 14],
+  ["acq", "Acquaintance", 30], ["regular", "Recurring stranger", null],
+];
+export const SOCIAL = { criteria: ["Communication", "Style", "Charisma", "Reliability", "Ambition"] };

@@ -1,5 +1,5 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS } from "./data.js";
+import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
@@ -28,12 +28,12 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
 
-const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Train"], ["body", "Body"], ["money", "Money"], ["skills", "Skills"]];
+const TABS = [["home", "System"], ["plan", "Plan"], ["social", "Social"], ["train", "Train"], ["body", "Body"], ["money", "Money"], ["skills", "Skills"]];
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, plan: vPlan, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${tab === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -72,6 +72,7 @@ function vHome() {
   const wd = P.windDownNow(), nn = P.nowNext();
   const alerts = [
     wd ? sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.") : "",
+    overduePeople().length ? sysBox(`${overduePeople().length} ${overduePeople().length === 1 ? "person is" : "people are"} overdue for a catch-up.`, overduePeople().slice(0, 3).map(p => esc(p.name)).join(", "), `<div class="btns"><button class="btn sm" data-act="nav" data-id="social">Open Social</button></div>`) : "",
     E.moneyDue() ? sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", `<div class="btns"><button class="btn sm" data-act="nav" data-id="money">Report now</button></div>`) : "",
     flags.length ? sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.") : "",
     hasData && (expDays === null || expDays >= 7) ? sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", `<div class="btns"><button class="btn sm" data-act="nav" data-id="more">Export now</button></div>`) : "",
@@ -102,6 +103,11 @@ function vHome() {
 
   <h2>Daily quests <span class="n">${doneToday}/${HABITS.length}</span></h2>
   <div class="list">${quests}</div>
+
+  <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="body/care">
+    <div class="grow"><div class="small muted">Care: meds, skin, teeth</div><b>${careToday().done}/${careToday().items.length} today</b>
+      <div class="small muted">${esc(careToday().items.filter(c => !careDone(c.id, t)).slice(0, 3).map(c => c.name).join(", ")) || "All done"}</div></div>
+    <span class="chev">›</span></button>
 
   <h2>Today's dungeon</h2>
   <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="train">
@@ -250,6 +256,133 @@ function vMoney() {
     <label class="f">Starting debt (¥)<input type="number" inputmode="numeric" data-ch="debtstart" value="${S.settings.money.debtStart}"></label></div>
     <p class="tiny muted">Starting debt is the 100% mark for the debt bar. Deadline is graduation, ${E.fmtDate(S.settings.dates.graduation)}.</p>
   </details>`;
+}
+
+/* ================= CARE ================= */
+const careDue = (c, date) => !(c.days || []).length || c.days.includes(E.parse(date).getDay());
+const careDone = (id, date) => live("careLog").find(l => l.item === id && l.date === date);
+function careToday(date = E.today()) {
+  const items = live("care").filter(c => careDue(c, date));
+  return { items, done: items.filter(c => careDone(c.id, date)).length };
+}
+let careForm = false;
+function vCare() {
+  const t = E.today(), { items, done } = careToday(t), all = live("care");
+  const week = [...Array(7)].map((_, i) => E.addDays(t, -i));
+  const adh = c => { const due = week.filter(d => careDue(c, d) && d >= (c.since || "0")); return due.length ? due.filter(d => careDone(c.id, d)).length + "/" + due.length : "–"; };
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `<h2>Today <span class="n">${done}/${items.length}</span></h2>
+  ${CARE_SLOTS.map(([k, l]) => { const list = items.filter(c => c.slot === k).sort((a, b) => (a.order || 0) - (b.order || 0)); if (!list.length) return "";
+    return `<div class="small muted" style="margin:14px 0 6px">${esc(l)}</div><div class="list">${list.map(c => { const on = !!careDone(c.id, t);
+      return `<div class="q ${on ? "done" : ""}"><button class="bx" data-act="care" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)} done">${on ? "✓" : ""}</button>
+        <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.note ? esc(c.note) + " · " : ""}${adh(c)} last 7 days</div></div><div></div></div>`; }).join("")}</div>`; }).join("")}
+  <details class="panel" style="margin-top:18px" ${careForm ? "open" : ""}><summary>Edit list (${all.length})</summary>
+    ${all.sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0)).map(c => `<div class="item row between"><div class="grow"><b>${esc(c.name)}</b><div class="small muted">${esc((CARE_SLOTS.find(x => x[0] === c.slot) || [, ""])[1])} · ${(c.days || []).length ? c.days.map(d => dayNames[d]).join(" ") : "daily"}</div></div>
+      <button class="btn sm danger" data-act="delcare" data-id="${c.id}" aria-label="Delete ${esc(c.name)}">✕</button></div>`).join("")}
+    <div class="grid" id="careForm" style="margin-top:10px">
+      <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Retinol serum"></label>
+      <label class="f">When<select data-f="slot">${CARE_SLOTS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
+      <label class="f">Note<input data-f="note" placeholder="optional"></label></div>
+    <div class="small muted" style="margin-top:8px">Days (none = every day)</div>
+    <div class="chips" id="cdays">${[1, 2, 3, 4, 5, 6, 0].map(d => `<button class="chip" data-act="bday" data-id="${d}" aria-pressed="false">${dayNames[d]}</button>`).join("")}</div>
+    <div class="btns"><button class="btn go" data-act="addcare">Add</button></div>
+  </details>`;
+}
+
+/* ================= SOCIAL ================= */
+const ptype = k => PERSON_TYPES.find(x => x[0] === k) || PERSON_TYPES[2];
+function rankOf(p) {
+  const v = Object.values(p.scores || {}).filter(x => x > 0); if (!v.length) return { r: "?", c: "dim", avg: null };
+  const avg = v.reduce((a, b) => a + b, 0) / v.length, R = RANKS.find(([, min]) => avg >= min);
+  return { r: R[0], c: R[2], avg };
+}
+const lastSeen = id => live("hangouts").filter(h => (h.people || []).includes(id)).reduce((a, h) => h.date > a ? h.date : a, "");
+const every = p => p.every === undefined || p.every === null || p.every === "" ? ptype(p.type)[2] : +p.every || null;
+function personState(p) {
+  const ls = lastSeen(p.id), ev = every(p), since = ls ? E.daysBetween(ls, E.today()) : null;
+  return { ls, since, ev, overdue: !!ev && (since === null || since > ev) };
+}
+const overduePeople = () => live("people").filter(p => personState(p).overdue);
+const badge = (rk, big) => `<span class="rank ${big ? "big" : ""}" style="--c:var(--${rk.c})">${rk.r}</span>`;
+let personForm = false, hangSel = null;
+
+function vSocial([sub, id]) {
+  if (sub === "p" && id) return vPerson(id);
+  sub = sub || "people";
+  const seg = `<div class="pills">${[["people", "People"], ["log", "Hangouts"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="social/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
+  return `<header class="top"><div><div class="hdr">Hunter registry</div><h1>Social</h1></div>
+    <button class="rbtn" data-act="go" data-id="social/log" aria-label="Log a hangout">+</button></header>${seg}${sub === "log" ? vHangouts() : vPeople()}`;
+}
+function balance() {
+  const t = E.today(), hs = live("hangouts").filter(h => E.daysBetween(h.date, t) < 30), ppl = Object.fromEntries(live("people").map(p => [p.id, p]));
+  const partnerOnly = hs.filter(h => (h.people || []).length && h.people.every(id => ppl[id] && ppl[id].type === "partner")).length;
+  return { total: hs.length, partnerOnly, others: hs.length - partnerOnly };
+}
+function vPeople() {
+  const ppl = live("people").map(p => ({ p, st: personState(p), rk: rankOf(p) }));
+  ppl.sort((a, b) => (b.st.overdue - a.st.overdue) || ("SABCDE?".indexOf(a.rk.r) - "SABCDE?".indexOf(b.rk.r)) || a.p.name.localeCompare(b.p.name));
+  const od = ppl.filter(x => x.st.overdue), bl = balance();
+  const counts = RANKS.map(([r, , c]) => [r, c, ppl.filter(x => x.rk.r === r).length]);
+  return `${od.length ? sysBox(`<span class="warn">${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.</span>`, od.slice(0, 4).map(x => esc(x.p.name)).join(", ") + (od.length > 4 ? "…" : "") + ". One message counts as a start.") : ""}
+  <div class="panel">
+    <div class="row between"><span class="k">Last 30 days</span><span class="mono small muted">${bl.total} hangouts</span></div>
+    <div class="row between" style="margin-top:6px"><div><div class="dm big2">${bl.others}</div><div class="small muted">with friends and others</div></div>
+      <div style="text-align:right"><div class="dm big2">${bl.partnerOnly}</div><div class="small muted">only with your partner</div></div></div>
+    ${bl.total >= 3 && bl.partnerOnly / bl.total > 0.7 ? `<p class="small warn" style="margin-top:8px">Over 70% of your time out is just the two of you. Book one friend this week.</p>` : ""}
+    <div class="chips" style="margin-top:10px">${counts.map(([r, c, n]) => `<span class="chip" style="min-height:0;padding:3px 10px">${badge({ r, c })} ${n}</span>`).join("")}</div>
+  </div>
+  ${personForm ? `<div class="panel" id="personForm"><div class="grid">
+      <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="Name or nickname"></label>
+      <label class="f">Type<select data-f="type">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${k === "friend" ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="f">Where you met<input data-f="where" placeholder="optional"></label></div>
+    <div class="btns"><button class="btn go" data-act="addperson">Add and rate</button><button class="btn" data-act="personform">Cancel</button></div></div>`
+    : `<div class="btns"><button class="btn primary" data-act="personform">+ Person</button></div>`}
+  <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="social/p/${p.id}">
+      ${badge(rk)}<div class="grow"><div class="t">${esc(p.name)}</div>
+      <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}${st.ev ? ` · every ${st.ev}d` : ""}${st.overdue ? ` · <span class="warn">overdue</span>` : ""}</div></div><span class="chev">›</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
+  <p class="tiny muted">Rank is the average of your scores: S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. It's your private read, not a verdict on them.</p>`;
+}
+function vPerson(id) {
+  const p = live("people").find(x => x.id === id);
+  if (!p) return `<button class="back" data-act="nav" data-id="social">‹ Social</button><p class="empty">Not found.</p>`;
+  const rk = rankOf(p), st = personState(p), crit = S.settings.social.criteria;
+  const hs = live("hangouts").filter(h => (h.people || []).includes(id)).sort((a, b) => b.date.localeCompare(a.date));
+  return `<button class="back" data-act="nav" data-id="social">‹ Social</button>
+  <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
+  <h2>Assessment</h2>
+  <div class="panel">${crit.map(c => { const v = (p.scores || {})[c] || 0; return `<div class="item"><div class="row between"><b>${esc(c)}</b><span class="mono small muted">${v || "–"}/5</span></div>
+    <div class="seg" style="margin-top:6px">${[1, 2, 3, 4, 5].map(n => `<button data-act="score" data-id="${p.id}" data-c="${esc(c)}" data-n="${n}" aria-pressed="${v === n}">${n}</button>`).join("")}</div></div>`; }).join("")}</div>
+  <h2>Keep in touch</h2>
+  <div class="panel"><div class="grid">
+    <label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label class="f">See every (days)<input type="number" inputmode="numeric" min="0" data-ch="pevery" data-id="${p.id}" value="${p.every ?? ""}" placeholder="${ptype(p.type)[2] ?? "no reminder"}"></label></div>
+    <p class="small muted" style="margin-top:8px">${st.since === null ? "No hangouts logged yet." : `Last seen ${E.fmtDate(st.ls)} (${st.since}d ago).`}${st.overdue ? ` <span class="warn">Overdue.</span>` : ""}</p>
+    <div class="btns"><button class="btn go" data-act="hangwith" data-id="${p.id}">Log a hangout with ${esc(p.name)}</button></div></div>
+  <h2>Notes</h2>
+  <div class="panel"><label class="f">Where you met<input data-ch="pwhere" data-id="${p.id}" value="${esc(p.where || "")}"></label>
+    <label class="f" style="margin-top:8px">Notes (birthday, interests, what you talked about)<textarea data-ch="pnote" data-id="${p.id}" rows="4">${esc(p.note || "")}</textarea></label></div>
+  <h2>History <span class="n">${hs.length}</span></h2>
+  <div class="panel">${hs.map(h => `<div class="item small"><b>${E.fmtDate(h.date)}</b> ${esc(h.what || "")}${h.note ? `<div class="muted">${esc(h.note)}</div>` : ""}</div>`).join("") || `<p class="empty">Nothing yet.</p>`}</div>
+  <div class="btns"><button class="btn danger" data-act="delperson" data-id="${p.id}">Delete ${esc(p.name)}</button></div>`;
+}
+function vHangouts() {
+  const ppl = live("people").sort((a, b) => (a.type === "partner" ? -1 : 0) - (b.type === "partner" ? -1 : 0) || a.name.localeCompare(b.name));
+  const sel = new Set(hangSel || []), byId = Object.fromEntries(ppl.map(p => [p.id, p]));
+  const hs = live("hangouts").sort((a, b) => b.date.localeCompare(a.date));
+  return `<div class="panel" id="hangForm">
+    <div class="small muted">Who</div>
+    <div class="chips" id="hpeople">${ppl.map(p => `<button class="chip" data-act="bday" data-id="${p.id}" aria-pressed="${sel.has(p.id)}">${esc(p.name)}</button>`).join("") || `<span class="small muted">Add people first.</span>`}</div>
+    <div class="grid" style="margin-top:10px">
+      <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
+      <label class="f">What<input data-f="what" placeholder="e.g. Izakaya, study, date night"></label>
+      <label class="f" style="flex-basis:100%">Note<input data-f="note" placeholder="optional"></label></div>
+    <div class="btns"><button class="btn go" data-act="addhang">Log hangout</button></div></div>
+  <h2>History <span class="n">${hs.length}</span></h2>
+  <div class="panel">${hs.map(h => `<div class="item row between"><div class="grow small"><b>${E.fmtDate(h.date)}</b> ${esc(h.what || "")}<div class="muted">${(h.people || []).map(id => byId[id] ? esc(byId[id].name) : "?").join(", ")}${h.note ? " · " + esc(h.note) : ""}</div></div>
+    <button class="btn sm danger" data-act="delhang" data-id="${h.id}" aria-label="Delete hangout">✕</button></div>`).join("") || `<p class="empty">No hangouts logged.</p>`}</div>
+  <details class="panel"><summary>Rating criteria</summary>
+    <p class="small muted">One per line. Renaming one drops its old scores.</p>
+    <textarea data-ch="criteria" rows="6">${esc(S.settings.social.criteria.join("\n"))}</textarea></details>`;
 }
 
 /* ================= PLAN ================= */
@@ -676,8 +809,8 @@ function vRuns() {
 let foodDate = null, foodForm = null;
 function vBody([sub]) {
   sub = sub || "weight";
-  const seg = `<div class="seg">${[["weight", "Weight"], ["food", "Food"], ["check", "Weekly check"]].map(([k, l]) => `<button data-act="go" data-id="body/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
-  return `<h1>Body</h1>${seg}` + ({ weight: vWeight, food: vFood, check: vCheck }[sub] || vWeight)();
+  const seg = `<div class="seg">${[["weight", "Weight"], ["food", "Food"], ["care", "Care"], ["check", "Weekly check"]].map(([k, l]) => `<button data-act="go" data-id="body/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
+  return `<h1>Body</h1>${seg}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
 }
 
 function weightChart() {
@@ -803,7 +936,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.3 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -961,6 +1094,51 @@ document.addEventListener("click", async ev => {
       put("bills", b); save(); return render();
     }
 
+    // care
+    case "care": {
+      const done = careDone(id, E.today());
+      if (done) remove("careLog", done.id); else put("careLog", { item: id, date: E.today() });
+      save(); return render();
+    }
+    case "addcare": {
+      const f = readForm("#careForm"); if (!f.name) return toast("Name it");
+      const days = [...document.querySelectorAll("#cdays [aria-pressed=true]")].map(b => +b.dataset.id);
+      const order = Math.max(0, ...live("care").filter(c => c.slot === f.slot).map(c => c.order || 0)) + 1;
+      put("care", { name: f.name, slot: f.slot, note: f.note, days, order, since: E.today() }); careForm = true; save(); return render();
+    }
+    case "delcare": if (confirm("Remove this from your care list? Past ticks stay in the log.")) { remove("care", id); careForm = true; save(); render(); } return;
+
+    // social
+    case "personform": personForm = !personForm; render(); if (personForm) $("#personForm input")?.focus(); return;
+    case "addperson": {
+      const f = readForm("#personForm"); if (!f.name) return toast("Add a name");
+      const p = put("people", { name: f.name, type: f.type, where: f.where, scores: {}, every: null, note: "" });
+      personForm = false; save(); return go("social/p/" + p.id);
+    }
+    case "score": {
+      const p = live("people").find(x => x.id === id); if (!p) return;
+      const c = el.dataset.c, n = +el.dataset.n, sc = { ...(p.scores || {}) };
+      if (sc[c] === n) delete sc[c]; else sc[c] = n;
+      const before = rankOf(p).r; p.scores = sc; put("people", p); save();
+      const after = rankOf(p).r; if (after !== before && after !== "?") toast(`${p.name}: rank ${after}`);
+      return render();
+    }
+    case "delperson": {
+      const p = live("people").find(x => x.id === id); if (!p || !confirm(`Delete ${p.name}? Hangouts stay, without their name.`)) return;
+      remove("people", id); save(); return go("social");
+    }
+    case "hangwith": hangSel = [id]; return go("social/log");
+    case "addhang": {
+      const f = readForm("#hangForm"), ids = [...document.querySelectorAll("#hpeople [aria-pressed=true]")].map(b => b.dataset.id);
+      if (!ids.length) return toast("Pick who you were with");
+      if (!f.date) return toast("Pick a date");
+      const h = put("hangouts", { date: f.date, people: ids, what: f.what, note: f.note });
+      const ppl = live("people"), social = ids.some(i => { const p = ppl.find(x => x.id === i); return p && p.type !== "partner"; });
+      const gains = social ? [E.gainXP("social", "hang:" + h.id, "Hangout")] : [];
+      hangSel = null; save(); announce(gains); if (!gains.length) toast("Logged"); return render();
+    }
+    case "delhang": if (confirm("Delete this hangout?")) { E.revokeXP("hang:" + id); remove("hangouts", id); save(); render(); } return;
+
     // plan
     case "pday": planDate = id === E.today() ? null : id; return render();
     case "taskdone": {
@@ -1055,6 +1233,15 @@ document.addEventListener("change", async ev => {
   if (k === "photos") { pendingPhotos = [...el.files]; $("#photoCount").textContent = pendingPhotos.length + " photo(s) ready"; return; }
   if (k === "billamt") { const b = live("bills").find(x => x.id === el.dataset.id); if (!b) return; b.amount = num(el.value); put("bills", b); save(); return render(); }
   if (k === "moneygoal" || k === "debtstart") { const v = num(el.value); if (v === null || v < 0) return render(); S.settings.money[k === "moneygoal" ? "goal" : "debtStart"] = v; touchSettings(); save(); return render(); }
+  if (k === "ptype" || k === "pevery" || k === "pwhere" || k === "pnote") {
+    const p = live("people").find(x => x.id === el.dataset.id); if (!p) return;
+    if (k === "ptype") p.type = el.value;
+    if (k === "pevery") p.every = el.value === "" ? null : Math.max(0, Math.round(num(el.value) || 0));
+    if (k === "pwhere") p.where = el.value.trim();
+    if (k === "pnote") p.note = el.value;
+    put("people", p); save(); return k === "pnote" || k === "pwhere" ? undefined : render();
+  }
+  if (k === "criteria") { const list = el.value.split("\n").map(x => x.trim()).filter(Boolean); if (!list.length) return render(); S.settings.social.criteria = [...new Set(list)]; touchSettings(); save(); return render(); }
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "dayStart" || k === "dayEnd") { if (!el.value) return render(); S.settings.plan[k] = el.value; touchSettings(); save(); return render(); }
@@ -1079,7 +1266,7 @@ document.addEventListener("change", async ev => {
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
   setInterval(() => {
     const busy = document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
-    if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && ["home", "plan"].includes(route()[0])) render();
+    if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0])) render();
   }, 60000);
   if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush().catch(() => {}); });
