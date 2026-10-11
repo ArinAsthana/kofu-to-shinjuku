@@ -2,13 +2,14 @@
 // Every record has an id and `u` (last-updated ms). Deletes are tombstones ({del:true})
 // so sync between devices never resurrects or loses records.
 
-import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED, BLOCK_SEED, PLAN_SETTINGS, WIND_DOWN } from "./data.js";
+import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED, BLOCK_SEED, PLAN_SETTINGS, WIND_DOWN, CARE_SEED, SOCIAL } from "./data.js";
 
 export const RECORD_STORES = [
   "habitLog", "xpEvents", "rewardHistory", "exercises", "areaState",
   "workouts", "runs", "bodyweight", "physique", "meals", "savedMeals",
   "money", "bills", // schema 2: weekly money reports {date, bank, debt}; bills {name, amount, freq, kind, paid:{YYYY-MM:true}}
   "blocks", "tasks", // schema 3: timetable {title, kind, days:[0-6], date|null, start, end "HH:MM", locked}; tasks {title, mins, prio 1-3, due, energy, done, doneAt, pin:{date,start}|null}
+  "care", "careLog", "people", "hangouts", // schema 4: care items {name, slot, order, days, note}; careLog {item, date}; people {name, type, scores:{criterion:1-5}, every, where, note}; hangouts {date, people:[ids], what, note}
 ];
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -16,7 +17,7 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 export function fresh() {
   const s = { app: APP_ID, schemaVersion: SCHEMA_VERSION, settings: freshSettings(), readiness: null };
   RECORD_STORES.forEach(k => (s[k] = []));
-  return seedBlocks(seedMoney(s));
+  return seedCare(seedBlocks(seedMoney(s)));
 }
 function freshSettings() {
   return {
@@ -30,6 +31,7 @@ function freshSettings() {
     money: { ...MONEY },
     plan: { ...PLAN_SETTINGS },
     windDown: { ...WIND_DOWN },
+    social: { criteria: SOCIAL.criteria.slice() },
   };
 }
 
@@ -106,7 +108,24 @@ const MIGRATIONS = {
   1: s => { s.money = s.money || []; s.bills = s.bills || []; s.settings = s.settings || {}; s.settings.money = { ...MONEY, ...(s.settings.money || {}) }; return seedMoney(s); },
   // 2 -> 3: timetable and to-do planner. Adds blocks/tasks stores seeded with Arin's fixed week; nothing existing changes.
   2: s => { s.blocks = s.blocks || []; s.tasks = s.tasks || []; return seedBlocks(s); },
+  // 3 -> 4: care tracker and social. New stores; seed blocks Arin hasn't edited (u === 1) take the corrected week
+  // (7.5 h sleep, 1 h workouts, classes to 18:10, Monday nap). Edited or deleted blocks are left alone.
+  3: s => {
+    s.care = s.care || []; s.careLog = s.careLog || []; s.people = s.people || []; s.hangouts = s.hangouts || [];
+    for (const seed of BLOCK_SEED) {
+      const i = s.blocks.findIndex(b => b.id === seed.id);
+      // u: 2 so the corrected seed wins a sync merge against an older device's untouched copy.
+      if (i < 0) s.blocks.push({ ...seed, u: 2, days: seed.days.slice() });
+      else if (s.blocks[i].u === 1 && !s.blocks[i].del) s.blocks[i] = { ...seed, u: 2, days: seed.days.slice() };
+    }
+    return seedCare(s);
+  },
 };
+function seedCare(s) {
+  const d = new Date(), since = localIso(d).slice(0, 10); // adherence counts from the day tracking starts
+  if (!s.care.length) s.care.push(...CARE_SEED.map(r => ({ ...r, days: r.days.slice(), since })));
+  return s;
+}
 function seedBlocks(s) {
   if (!s.blocks.length) s.blocks.push(...BLOCK_SEED.map(r => ({ ...r, days: r.days.slice() })));
   return s;
@@ -129,6 +148,7 @@ export function migrate(s) {
   s.settings.money = Object.assign(base.settings.money, s.settings.money || {});
   s.settings.plan = Object.assign(base.settings.plan, s.settings.plan || {});
   s.settings.windDown = Object.assign(base.settings.windDown, s.settings.windDown || {});
+  s.settings.social = Object.assign(base.settings.social, s.settings.social || {});
   s.app = APP_ID;
   return s;
 }
