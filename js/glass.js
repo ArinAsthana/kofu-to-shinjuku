@@ -5,11 +5,11 @@ import { photos } from "./store.js";
 
 const K = "kts-bg";
 // blur px · dim = brightness (0–1) · zoom = scale on top of the tightest fit · y = vertical crop (0 = show the top) · full = hide system bars
-export const DEFAULTS = { photo: false, mins: 10, blur: 6, dim: 0.5, zoom: 1, y: 30, full: true };
+export const DEFAULTS = { photo: false, mins: 10, blur: 6, dim: 0.5, zoom: 1, y: 30, full: true, cam: "" };
 export function cfg() { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(K)) }; } catch (e) { return { ...DEFAULTS }; } }
 export function setCfg(patch) { const c = { ...cfg(), ...patch }; try { localStorage.setItem(K, JSON.stringify(c)); } catch (e) {} tune(c); return c; }
 
-let stream = null, offTimer = null, endsAt = 0, bat = null, onStop = null, wentFull = false, sampler = null;
+let cams = [], stream = null, offTimer = null, endsAt = 0, bat = null, onStop = null, wentFull = false, sampler = null;
 export const live = () => !!stream;
 export const minsLeft = () => stream ? Math.max(0, Math.ceil((endsAt - Date.now()) / 60000)) : 0;
 const el = s => document.querySelector("#bg " + s);
@@ -49,6 +49,33 @@ function sample() {
   meta()?.setAttribute("content", "#" + hx(r) + hx(g) + hx(b));
 }
 
+// The back lenses, as the browser lists them once camera permission is granted.
+async function listCams() {
+  try { cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput" && !/front|user|selfie/i.test(d.label)); } catch (e) { cams = []; }
+}
+const camId = () => { try { return stream.getVideoTracks()[0].getSettings().deviceId || ""; } catch (e) { return ""; } };
+async function open(id) {
+  const video = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } };
+  let s;
+  if (id) { try { s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...video, deviceId: { exact: id } } }); } catch (e) { s = null; } }
+  if (!s) s = await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...video, facingMode: { ideal: "environment" } } });
+  // Widest view the lens offers, where the phone supports camera zoom.
+  try { const t = s.getVideoTracks()[0], caps = t.getCapabilities ? t.getCapabilities() : {}; if (caps.zoom) await t.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (e) {}
+  return s;
+}
+async function swap(id) {
+  stream.getTracks().forEach(t => t.stop());
+  stream = await open(id);
+  const v = el("video"); if (v && v.srcObject) { v.srcObject = stream; v.play().catch(() => {}); }
+}
+// Lens picker: "Back 2 of 3". Only after Glass mode has run once (labels need permission).
+export const lens = () => { const i = cams.findIndex(d => d.deviceId === camId()); return { n: cams.length, i: i < 0 ? 0 : i }; };
+export async function nextLens() {
+  if (!stream || cams.length < 2) return;
+  const { i } = lens(), next = cams[(i + 1) % cams.length];
+  try { await swap(next.deviceId); setCfg({ cam: next.deviceId }); } catch (e) { stopGlass("That lens couldn't start"); }
+}
+
 // Returns "" on success, or why it couldn't start. Call straight from a tap: full screen needs the tap.
 export async function startGlass(stopped) {
   if (stream) return "";
@@ -62,18 +89,11 @@ export async function startGlass(stopped) {
   try { bat = navigator.getBattery ? await navigator.getBattery() : null; } catch (e) { bat = null; }
   if (lowBattery(bat)) { exitFull(); return "Battery under 20%. Glass mode stays off."; }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { exitFull(); return "This browser can't use the camera."; }
-  // Ask for a frame shaped like the screen (portrait), so the picture isn't cropped and magnified to fill it.
-  const W = window.innerWidth, H = window.innerHeight, ar = W / H;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-      facingMode: { ideal: "environment" }, aspectRatio: { ideal: ar },
-      width: { ideal: Math.round(720 * Math.min(1, ar)) }, height: { ideal: Math.round(720 * Math.min(1, 1 / ar)) }, frameRate: { ideal: 24, max: 30 } } });
-  } catch (e) { stream = null; exitFull(); return e && e.name === "NotAllowedError" ? "Camera permission was refused." : "No camera available."; }
-  // Widest view the lens offers, where the phone supports camera zoom.
-  try {
-    const t = stream.getVideoTracks()[0], caps = t.getCapabilities ? t.getCapabilities() : {};
-    if (caps.zoom) await t.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
-  } catch (e) {}
+  try { stream = await open(c.cam); }
+  catch (e) { stream = null; exitFull(); return e && e.name === "NotAllowedError" ? "Camera permission was refused." : "No camera available."; }
+  await listCams();
+  // First run: prefer a lens labelled ultra-wide, if the phone names it.
+  if (!c.cam) { const w = cams.find(d => /ultra|wide|0\.[56]/i.test(d.label)); if (w && w.deviceId !== camId()) { try { await swap(w.deviceId); } catch (e) { try { stream = await open(""); } catch (e2) { stream = null; exitFull(); return "No camera available."; } } } }
   const v = el("video"); v.srcObject = stream; v.play().catch(() => {});
   document.body.classList.add("has-bg", "glass-live");
   const mins = Math.max(1, c.mins || 10); endsAt = Date.now() + mins * 60000;
