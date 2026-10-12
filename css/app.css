@@ -522,9 +522,11 @@ body.modal-open{overflow:hidden}
 @media (prefers-reduced-motion:reduce){.sheet,.modal,.modal-scrim,.fold[open] .fold-b{animation:none}.fold .fchev{transition:none}}
 
 /* backgrounds: blurred photo or live camera (Glass mode) */
-#bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
-#bg img,#bg video{position:absolute;top:-40px;left:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;opacity:0;transition:opacity .5s;
-  filter:blur(22px) brightness(.36) saturate(1.2)}
+#bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;--bgblur:6px;--bgdim:.5;--bgscale:1;--bgy:30%}
+/* bleed past the edges by twice the blur so blurred edges never show */
+#bg img,#bg video{position:absolute;top:calc(var(--bgblur) * -2);left:calc(var(--bgblur) * -2);width:calc(100% + var(--bgblur) * 4);height:calc(100% + var(--bgblur) * 4);
+  object-fit:cover;object-position:50% var(--bgy);transform:scale(var(--bgscale));transform-origin:50% var(--bgy);opacity:0;transition:opacity .5s;
+  filter:blur(var(--bgblur)) brightness(var(--bgdim)) saturate(1.15)}
 body.has-bg #bg img[src]{opacity:1}
 body.glass-live #bg video{opacity:1}
 body.glass-live #bg img{opacity:0}
@@ -537,3 +539,10 @@ body.has-bg nav .in,body.has-bg .cmdline.dock{background:rgba(4,12,30,.72);-webk
 header.top>div:first-child{min-width:0}
 header.top h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(21px,6.2vw,26px)}
 header.top .hdr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* v1.13.1 glass tuning sliders */
+.tune{display:grid;gap:10px;margin-top:8px}
+.tune label{display:grid;grid-template-columns:96px 1fr 40px;align-items:center;gap:10px;font-size:13px;color:var(--soft)}
+.tune input[type=range]{padding:0;border:0;background:none;accent-color:var(--sys);height:28px}
+.tune output{font:12px var(--mono);text-align:right;color:var(--fg)}
+:fullscreen body,body:fullscreen{padding-top:env(safe-area-inset-top,0px)}

@@ -216,7 +216,13 @@ function homeSettings() {
     <h3 style="margin-top:14px">Glass mode</h3>
     <p class="small muted">Uses the back camera so the app looks see-through. It turns itself off after the time below, when the battery drops under 20%, or when you leave the app. The camera runs only on this phone; nothing is recorded.</p>
     <div class="grid"><label class="f">Turn off after (min)<input type="number" inputmode="numeric" min="1" max="60" data-ch="glassmins" value="${c.mins}"></label></div>
-    <div class="btns"><button class="btn sm ${G.live() ? "" : "primary"}" data-act="glass">${G.live() ? `Turn off (${G.minsLeft()} min left)` : "Turn on"}</button></div>`;
+    <label class="row small" style="margin-top:10px"><input type="checkbox" data-ch="glassfull" style="width:auto" ${c.full ? "checked" : ""}> Full screen (hides the status and navigation bars)</label>
+    <div class="btns"><button class="btn sm ${G.live() ? "" : "primary"}" data-act="glass">${G.live() ? `Turn off (${G.minsLeft()} min left)` : "Turn on"}</button></div>
+    <h3 style="margin-top:14px">Line it up</h3>
+    <p class="small muted">Turn Glass mode on, hold the phone where you normally do, and drag until the picture matches what's behind it. Also applies to the photo.</p>
+    <div class="tune">${[["blur", "Blur", 0, 20, 1, "px"], ["dim", "Brightness", 0.15, 1, 0.05, ""], ["zoom", "Zoom", 1, 1.8, 0.02, "×"], ["y", "Crop height", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
+      `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${c[k]}" data-tune="${k}"><output>${c[k]}${u}</output></label>`).join("")}</div>
+    <div class="btns"><button class="btn sm" data-act="glassreset">Reset look</button></div>`;
 }
 
 /* ---------- morning brief ---------- */
@@ -1386,7 +1392,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.13 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.13.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1666,6 +1672,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       toast(err || `Glass mode on for ${G.cfg().mins} min`); return render();
     }
     case "bgclear": await G.clearPhoto(); return render();
+    case "glassreset": { const d = G.DEFAULTS; G.setCfg({ blur: d.blur, dim: d.dim, zoom: d.zoom, y: d.y }); return render(); }
 
     // study blocks
     case "pomo": {
@@ -1779,7 +1786,8 @@ function addItems(meal, items) {
   m.items = (m.items || []).concat(items); put("meals", m);
 }
 
-document.addEventListener("input", ev => { if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
+document.addEventListener("input", ev => {
+  if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
 document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-cmd]")) { ev.preventDefault(); cmdRun(ev.target.value); } });
 document.addEventListener("change", async ev => {
   const el = ev.target.closest("[data-ch]"); if (!el) return;
@@ -1818,6 +1826,7 @@ document.addEventListener("change", async ev => {
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
+  if (k === "glassfull") { G.setCfg({ full: el.checked }); return; }
   if (k === "glassmins") { const v = num(el.value); if (v === null || v < 1 || v > 60) return render(); G.setCfg({ mins: Math.round(v) }); return render(); }
   if (k === "studynum") { const v = num(el.value), id = el.dataset.id; if (v === null || v < (id === "penaltyXp" || id === "grace" ? 0 : 1) || v > 500) return render(); S.settings.study[id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "planmin") { const v = num(el.value); if (v === null || v < 0 || v > 120) return render(); S.settings.plan[el.dataset.id] = Math.round(v); touchSettings(); save(); return render(); }
