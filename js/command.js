@@ -12,6 +12,7 @@ export const EXAMPLES = [
   "add music practice tue 6-8pm",
   "add task read Toyota report 1h due fri",
   "add Paco Rabanne 1 Million ¥9800 on Amazon to my wishlist",
+  "card 泳ぐ | to swim",
 ];
 
 const DAYS = { sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, weds: 3, wednesday: 3, thu: 4, thur: 4, thurs: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6 };
@@ -173,7 +174,16 @@ function parseAddBlock(t) {
   return { type: "block", title, kind, date: weekly ? null : date || E.today(), days: weekly ? [wd] : [], start: P.toHM(s), end: P.toHM(e) };
 }
 
+// "card 泳ぐ | to swim", "add card: 先輩 | senior". Read from the typed text as is, so case and Japanese survive.
+function parseCard(raw) {
+  const m = raw.trim().match(/^(?:add\s+(?:a\s+)?)?(?:flash\s?)?card\s*:?\s+(.+)$/i); if (!m) return null;
+  const parts = m[1].split(/\s*[|｜]\s*|\s+=\s+/);
+  if (parts.length < 2 || !parts[0].trim() || !parts.slice(1).join(" | ").trim()) return { error: "Put a | between the front and the back.", hint: "card 泳ぐ | to swim" };
+  return { type: "card", front: parts[0].trim(), back: parts.slice(1).join(" | ").trim() };
+}
+
 export function parse(input) {
+  const card = parseCard(String(input || "")); if (card) return card;
   CASE = {}; for (const w of String(input || "").replace(/[.!?,]+/g, " ").split(/\s+/)) if (w && w !== w.toLowerCase()) CASE[w.toLowerCase()] = w;
   const t = String(input || "").toLowerCase().replace(/[‘’]/g, "'").replace(/[.!?]+$/, "").replace(/\s+/g, " ").trim();
   if (!t) return null;
