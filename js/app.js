@@ -248,7 +248,7 @@ function vMoney([sub] = []) {
   <h2>Quest: ${yen(mp.goal)} by graduation</h2>
   <div class="panel">
     <div class="row between"><span class="dm big2">${yen(mp.bank)}</span><span class="mono small muted">${Math.round(mp.savePct * 100)}%</span></div>
-    <div class="bar thick"><i style="width:${mp.savePct * 100}%;background:linear-gradient(90deg,var(--ind),var(--mag))"></i></div>
+    <div class="bar thick"><i style="width:${mp.savePct * 100}%;background:linear-gradient(90deg,var(--sys2),var(--sys));box-shadow:0 0 10px var(--sys)"></i></div>
     <div class="row between small muted"><span>${yen(mp.goal - mp.bank)} to go</span><span>save ${yen(mp.saveWeek)} / week</span></div>
   </div>
 
@@ -1018,7 +1018,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.7 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.8 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
