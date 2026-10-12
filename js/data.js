@@ -201,7 +201,9 @@ export const BLOCK_SEED = [
   blk("music", "Music club", "club", [2], "18:00", "20:00"),
   blk("friends", "Friends", "social", [5], "19:00", "23:00"),
 ];
-export const PLAN_SETTINGS = { dayStart: "07:00", dayEnd: "23:30" };
+// buffer: free minutes kept around every block. openPad: a workout opens this early and stays open this late.
+// lockMins: today's block can't be edited from this long before it starts until it ends.
+export const PLAN_SETTINGS = { dayStart: "07:00", dayEnd: "23:30", buffer: 10, openPad: 10, lockMins: 15 };
 export const WIND_DOWN = { on: true, mins: 60, notify: false };
 
 /* ---------- care (schema 4) ---------- */

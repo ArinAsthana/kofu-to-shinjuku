@@ -423,3 +423,19 @@ nav button[aria-current="page"]{box-shadow:inset 0 0 0 1px rgba(111,159,204,.6);
 .cmdex .ic{flex:none;margin-top:2px}
 .cmdline{display:flex;align-items:center;gap:10px;width:100%;margin-top:10px;padding:11px 14px;border:1px solid var(--rule);border-radius:4px;background:rgba(5,13,32,.6);color:var(--soft,#8fa3bd);font:14px var(--mono);text-align:left}
 .cmdline .ic{width:18px;height:18px;color:var(--sys)}
+
+/* v1.11 gates and session drawer */
+.locked-gate{border-color:rgba(111,159,204,.35)}
+.locked-gate .big-lock{width:30px;height:30px;flex:none;color:var(--sys)}
+.slot.dim{opacity:.55}
+.dw-scrim{position:fixed;inset:0;background:rgba(1,4,12,.6);z-index:40;animation:fadein .2s}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(88vw,380px);overflow-y:auto;z-index:41;padding:18px 16px 110px;background:#050d20;border-left:1px solid rgba(111,159,204,.4);box-shadow:-12px 0 30px rgba(0,0,0,.5);animation:slidein .22s ease-out}
+.drawer h2{margin-top:18px}
+.drawer .chips{flex-wrap:wrap}
+.drawer .chip[aria-pressed="true"]{background:rgba(63,111,168,.4);color:#fff;border-color:var(--sys)}
+.dw-slot{padding:10px 0;border-bottom:1px solid var(--rule)}
+.dw-slot.off{opacity:.5}
+.dw-slot .lab{font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--sys)}
+@keyframes slidein{from{transform:translateX(100%)}to{transform:none}}
+@keyframes fadein{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){.drawer,.dw-scrim{animation:none}}

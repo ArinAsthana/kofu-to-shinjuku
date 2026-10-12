@@ -1,5 +1,5 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES } from "./data.js";
+import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES, LIBRARY } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
@@ -74,7 +74,7 @@ function vHome() {
   const a7 = E.avg7(), food = E.dayFood(t), ft = S.settings.food;
   const days = E.daysBetween(t, S.settings.dates.graduation);
   const doneToday = HABITS.filter(h => E.habitDone(h.id, t)).length;
-  const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length;
+  const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length, gate = P.trainGate(started(t));
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
@@ -84,8 +84,8 @@ function vHome() {
   <button class="cmdline" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 
   <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
-  <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="plan">
-    <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div><div class="small muted">until ${P.toHM(nn.now.e)}</div>` : `<div class="now-t">Free time</div>`}
+  <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="${gate.open ? "train" : "plan"}">
+    <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div><div class="small muted">until ${P.toHM(nn.now.e)}${gate.open ? " · tap to enter" : ""}</div>` : `<div class="now-t">Free time</div>`}
       <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
     <span class="chev">${ic("right")}</span></button>
 
@@ -97,11 +97,11 @@ function vHome() {
       <div class="small muted">${esc(careToday().items.filter(c => !careDone(c.id, t)).slice(0, 3).map(c => c.name).join(", ")) || "All done"}</div></div>
     <span class="chev">${ic("right")}</span></button>
 
-  <h2>Today's dungeon</h2>
-  <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="train">
+  ${gate.open ? `<h2>Today's dungeon <span class="n">open now</span></h2>
+  <button class="panel row between dungeon-open" style="width:100%;text-align:left" data-act="nav" data-id="train">
     <div><div class="small muted">${esc(plan.where)}</div><b>${esc(plan.name)}</b>
-      <div class="small muted">${plan.postShift ? "After night shift · " : ""}${done}/${plan.slots.length} exercises${w && E.habitDone("gym", t) ? " · logged" : ""}</div></div>
-    <span class="chev">${ic("right")}</span></button>
+      <div class="small muted">${plan.postShift ? "After night shift · " : ""}${done}/${plan.slots.length + plan.extra.length} exercises${w && E.habitDone("gym", t) ? " · logged" : ""}</div></div>
+    <span class="chev">${ic("right")}</span></button>` : ""}
 
   <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="body/food">
     <div class="grow"><div class="small muted">Body and food today</div>
@@ -544,6 +544,7 @@ function cmdApply() {
   if (p.type === "move") {
     if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
     const b = live("blocks").find(x => x.id === p.block.id); if (!b) return toast("That block is gone");
+    if ((p.date === E.today() || p.scope !== "day") && P.editLock(b)) return toast(`Locked: ${b.title} starts within ${S.settings.plan.lockMins ?? 15} min or is running`);
     keep("blocks", b.id);
     if (p.weekly && p.scope === "day") {
       put("blocks", { ...b, skip: [...new Set([...(b.skip || []), p.date])].filter(d => d >= E.addDays(E.today(), -60)) });
@@ -731,8 +732,11 @@ function vWeek() {
   <h2>Planner window</h2>
   <div class="panel"><div class="grid">
     <label class="f">Plan tasks from<input type="time" data-ch="dayStart" value="${esc(pl.dayStart)}"></label>
-    <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label></div>
-    <p class="tiny muted">Tasks only go inside this window, outside blocks, and before wind-down.</p></div>`;
+    <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label>
+    <label class="f">Padding around blocks (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="buffer" value="${pl.buffer ?? 10}"></label>
+    <label class="f">Workout opens early / closes late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
+    <label class="f">Edit lock before a block (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="lockMins" value="${pl.lockMins ?? 15}"></label></div>
+    <p class="tiny muted">Tasks only go inside this window, outside blocks plus padding, and before wind-down. Today's blocks can't be changed from the lock time until they end.</p></div>`;
 }
 
 // Fires the wind-down as a notification while the app is open or backgrounded. The calendar covers the rest.
@@ -819,6 +823,15 @@ function moneyLines() {
 
 /* ================= TRAIN ================= */
 let draft = null; // stepper values on the log screen
+let drawer = false, drawerDay = null; // session side menu
+const started = date => { const w = E.workoutOn(date); return !!(w && (w.entries || []).some(e => e.sets && e.sets.length)); };
+// Shown instead of the log when no workout block is open.
+function lockedHtml(g) {
+  const nx = g.next;
+  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">[System] Gate closed</div>
+    <b>${nx ? `Opens ${nx.date === E.today() ? "today" : nx.date === E.addDays(E.today(), 1) ? "tomorrow" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No workout block this week"}</b>
+    <div class="small muted">${nx ? esc(nx.b.title) + " block. " : ""}Logging opens ${S.settings.plan.openPad ?? 10} min before a workout block and closes ${S.settings.plan.openPad ?? 10} min after. Once you log a set it stays open for the day.</div></div></div></div>`;
+}
 
 function vTrain([view, a, b]) {
   if (view === "log") return vLog(a, b || E.today());
@@ -826,34 +839,39 @@ function vTrain([view, a, b]) {
   if (view === "pick") return vPick(a);
   if (view === "runs") return vRuns();
   if (view === "new") return vNewExercise();
+  if (view === "edit") return vNewExercise(a);
   return vTrainHome();
 }
 
 function vTrainHome() {
-  const t = E.today(), plan = E.planFor(t), w = E.workoutOn(t);
+  const t = E.today(), plan = E.planFor(t), w = E.workoutOn(t), gate = P.trainGate(started(t));
   const postShift = w ? !!w.postShift : !!plan.postShift;
+  const row = (ex, lab, entry, extraHtml) => {
+    const tg = E.nextTarget(ex, t), st = E.stallInfo(ex.id);
+    const inner = `<span class="done-dot ${entry && entry.sets.length ? "on" : ""}"></span>
+      <span class="grow"><span class="lab">${esc(lab)}</span><br><b>${esc(ex.name)}</b> ${st.stalled ? `<span class="pill warn">Stalled</span>` : ""}
+      <br><span class="small muted">${entry && entry.sets.length ? "Today: " + esc(E.fmtSets(ex, entry.sets)) : tg ? "Target: " + esc(tg.text) : `First session: find a working ${ex.kind === "load" ? "weight" : "level"}`}</span></span>`;
+    return gate.open ? `<button class="slot" data-act="go" data-id="train/log/${ex.id}">${inner}<span class="chev">${ic("right")}</span></button>` : `<div class="slot dim">${inner}</div>`;
+  };
   const slots = plan.slots.map(key => {
     const ex = E.slotExercise(key), sl = SLOTS[key];
     const entry = w && (w.entries || []).find(e => e.exercise === ex.id);
-    const tg = E.nextTarget(ex, t), st = E.stallInfo(ex.id);
-    return `<button class="slot" data-act="go" data-id="train/log/${ex.id}">
-      <span class="done-dot ${entry && entry.sets.length ? "on" : ""}"></span>
-      <span class="grow"><span class="lab">${esc(sl.label)}</span><br><b>${esc(ex.name)}</b> ${st.stalled ? `<span class="pill warn">Stalled</span>` : ""}
-      <br><span class="small muted">${entry && entry.sets.length ? "Today: " + esc(E.fmtSets(ex, entry.sets)) : tg ? "Target: " + esc(tg.text) : `First session: find a working ${ex.kind === "load" ? "weight" : "level"}`}</span></span>
-      <span class="chev">${ic("right")}</span></button>`;
-  }).join("");
-  const extra = w ? (w.entries || []).filter(e => e.sets.length && !plan.slots.some(k => E.slotState(k).current === e.exercise)) : [];
+    return row(ex, sl.label, entry);
+  }).join("") + plan.extra.map(id => { const ex = E.exById(id); return row(ex, "Added", w && (w.entries || []).find(e => e.exercise === id)); }).join("");
+  const extra = w ? (w.entries || []).filter(e => e.sets.length && !plan.slots.some(k => E.slotState(k).current === e.exercise) && !plan.extra.includes(e.exercise)) : [];
   const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const flags = E.painFlags();
   return `<h1>Body</h1>${bodySeg("train")}
+  ${gate.open ? "" : lockedHtml(gate)}
   <div class="panel">
-    <div class="row between"><div><div class="small muted">${E.fmtDate(t)} · ${esc(plan.where)}</div><h3 style="margin:2px 0 0">${esc(plan.name)}</h3></div></div>
+    <div class="row between"><div><div class="small muted">${E.fmtDate(t)} · ${esc(plan.where)}</div><h3 style="margin:2px 0 0">${esc(plan.name)}</h3></div>
+      <button class="rbtn" data-act="drawer" aria-label="Session settings and circle method">${ic("menu")}</button></div>
     ${plan.postShift || postShift ? `<label class="row small" style="margin-top:8px"><input type="checkbox" data-ch="postshift" ${postShift ? "checked" : ""} style="width:22px;height:22px"> After a night shift: keep 1–2 reps in reserve</label>` : ""}
     ${flags.length ? `<div class="flag bad">${flags.map(esc).join(" ")} Deload or swap. Stop on sharp pain.</div>` : ""}
     <div style="margin-top:6px">${slots}</div>
     ${extra.map(e => { const ex = E.exById(e.exercise); return `<button class="slot" data-act="go" data-id="train/log/${ex.id}"><span class="done-dot on"></span><span class="grow"><span class="lab">Extra</span><br><b>${esc(ex.name)}</b><br><span class="small muted">Today: ${esc(E.fmtSets(ex, e.sets))}</span></span><span class="chev">${ic("right")}</span></button>`; }).join("")}
-    <div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>
-  </div>
+    ${gate.open ? `<div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>` : ""}
+  </div>${drawer ? sessionDrawer() : ""}
   <div class="panel row between"><div><b>Runs</b><div class="small muted">Longest ${Math.max(0, ...live("runs").map(r => r.km))} of ${RUN_GOAL_KM} km continuous</div></div><button class="btn sm" data-act="go" data-id="train/runs">Open</button></div>
   <div class="panel row between"><div><b>Exercise library</b><div class="small muted">By area. Add your own.</div></div><button class="btn sm" data-act="go" data-id="train/pick/browse">Open</button></div>
   <h2>Progress</h2>
@@ -908,6 +926,7 @@ function initDraft(ex, date) {
 
 function vLog(exId, date) {
   const ex = E.exById(exId);
+  if (date === E.today()) { const g = P.trainGate(started(date)); if (!g.open) return `<button class="back" data-act="back">${ic("left")} Back</button><h1>${esc(ex.name)}</h1>${lockedHtml(g)}<div class="btns"><button class="btn" data-act="go" data-id="train/ex/${ex.id}">History</button></div>`; }
   if (!draft || draft.ex !== exId) initDraft(ex, date);
   const { e } = getEntry(date, exId, false);
   const last = E.lastSession(exId, date), tg = E.nextTarget(ex, date), st = E.stallInfo(exId);
@@ -960,7 +979,7 @@ function vExercise(exId) {
     <div class="grid"><label class="f">Low<input type="number" inputmode="numeric" data-ch="rangeLo" value="${lo}"></label><label class="f">High<input type="number" inputmode="numeric" data-ch="rangeHi" value="${hi}"></label>
     ${ex.kind === "load" ? `<label class="f">Load step (kg)<input type="number" inputmode="decimal" step="0.5" data-ch="inc" value="${E.inc(ex)}"></label>` : ""}</div>
     <p class="small muted" style="margin-top:6px">Hit the top of the range on every set, then ${ex.kind === "load" ? "add load" : "move up a level"}.</p>
-    <div class="btns"><button class="btn go" data-act="go" data-id="train/log/${ex.id}">Log today</button></div>
+    <div class="btns"><button class="btn go" data-act="go" data-id="train/log/${ex.id}">Log today</button><button class="btn" data-act="go" data-id="train/edit/${ex.id}">Edit</button><button class="btn danger" data-act="delex" data-id="${ex.id}">Delete</button></div>
   </div>
   <h2>History</h2>
   <div class="panel">${h.length ? h.map(x => `<div class="item"><div class="row between"><b>${E.fmtDate(x.date)}</b><span class="small muted">${x.entry.rpe ? "RPE " + x.entry.rpe : ""}${x.entry.pr ? " · PR" : ""}</span></div>
@@ -970,7 +989,7 @@ function vExercise(exId) {
 
 // mode: a slot key (swap), "extra" (log something off-plan) or "browse".
 function vPick(mode) {
-  const slot = SLOTS[mode];
+  const slot = SLOTS[mode], addDay = /^add-\d$/.test(mode) ? +mode.slice(4) : null;
   let list = E.allExercises();
   if (slot) list = E.slotCandidates(mode);
   const cur = slot ? E.slotState(mode).current : null;
@@ -978,26 +997,55 @@ function vPick(mode) {
     const xs = list.filter(e => e.area === a).sort((x, y) => (x.rank || 0) - (y.rank || 0) || x.name.localeCompare(y.name));
     if (!xs.length) return "";
     return `<div class="lib-area"><h3>${label}</h3>${xs.map(e => { const lt = E.lastTrained(e.id), st = E.stallInfo(e.id);
-      return `<button class="pick" data-act="${slot ? "swap" : "open"}" data-id="${e.id}" data-slot="${esc(mode)}"><b>${esc(e.name)}</b>${e.id === cur ? ` <span class="pill ok">Current</span>` : ""}${st.stalled ? ` <span class="pill warn">Stalled</span>` : ""}
+      return `<button class="pick" data-act="${slot ? "swap" : addDay !== null ? "addextra" : mode === "browse" ? "exinfo" : "open"}" data-id="${e.id}" data-slot="${esc(mode)}"><b>${esc(e.name)}</b>${e.id === cur ? ` <span class="pill ok">Current</span>` : ""}${st.stalled ? ` <span class="pill warn">Stalled</span>` : ""}
       <br><span class="small muted">${e.kind === "load" ? "Weighted" : e.kind === "time" ? "Timed" : "Bodyweight"}${lt ? " · last " + E.fmtDate(lt) : " · not trained yet"}</span></button>`; }).join("")}</div>`;
   }).join("");
   return `<button class="back" data-act="back">${ic("left")} Back</button>
-  <h1>${slot ? "Swap " + esc(slot.label.toLowerCase()) : mode === "extra" ? "Add an exercise" : "Exercise library"}</h1>
+  <h1>${slot ? "Swap " + esc(slot.label.toLowerCase()) : mode === "extra" ? "Add an exercise" : addDay !== null ? "Add to " + P.DAY_NAMES[addDay] + " session" : "Exercise library"}</h1>
   ${slot ? `<p class="small muted">The new pick stays in this slot until you swap again. The old one is parked for the next circle.</p>` : ""}
   <div class="panel">${groups}</div>
-  <div class="btns"><button class="btn" data-act="go" data-id="train/new">+ New exercise</button></div>`;
+  <div class="btns"><button class="btn" data-act="go" data-id="train/new">+ New exercise</button></div>
+  ${mode === "browse" && hiddenEx().length ? `<details class="panel"><summary>Deleted exercises (${hiddenEx().length})</summary>${hiddenEx().map(e => `<div class="item row between"><span class="small">${esc(e.name || e.id)}</span><button class="btn sm" data-act="restoreex" data-id="${e.id}">Restore</button></div>`).join("")}</details>` : ""}`;
+}
+const hiddenEx = () => live("exercises").filter(e => e.hidden).map(e => ({ ...(LIBRARY.find(l => l.id === e.id) || {}), ...e }));
+
+function vNewExercise(editId) {
+  const ex = editId ? E.exById(editId) : { area: "push", kind: "load", rank: 2 };
+  const logged = editId && E.history(editId).length > 0; // type can't change once sets exist: old sets would read wrong
+  return `<button class="back" data-act="back">${ic("left")} Back</button><h1>${editId ? "Edit exercise" : "New exercise"}</h1>
+  <div class="panel grid" id="newEx">
+    <label class="f" style="flex-basis:100%">Name<input data-f="name" value="${esc(ex.name || "")}" placeholder="e.g. Ring row"></label>
+    <label class="f">Area<select data-f="area">${AREAS.map(([a, l]) => `<option value="${a}" ${ex.area === a ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label class="f">Type<select data-f="kind" ${logged ? "disabled" : ""}>${[["load", "Weighted (kg × reps)"], ["level", "Bodyweight (level × reps)"], ["time", "Timed hold (level × seconds)"]].map(([k, l]) => `<option value="${k}" ${ex.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label class="f" style="flex-basis:100%">Levels, easiest first (bodyweight and timed only, comma separated)<input data-f="levels" value="${esc((ex.levels || []).join(", "))}" placeholder="e.g. Tuck, Advanced tuck, Straddle"></label>
+    <label class="f">Difficulty in its area (1 easy – 5 hard)<input type="number" data-f="rank" value="${ex.rank || 2}" min="1" max="5"></label>
+  </div>
+  ${logged ? `<p class="tiny muted">Type is fixed because sets are already logged. Add levels at the end so old sets keep their meaning.</p>` : ""}
+  <div class="btns"><button class="btn go" data-act="saveex" ${editId ? `data-id="${esc(editId)}"` : ""}>Save exercise</button></div>`;
 }
 
-function vNewExercise() {
-  return `<button class="back" data-act="back">${ic("left")} Back</button><h1>New exercise</h1>
-  <div class="panel grid" id="newEx">
-    <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Ring row"></label>
-    <label class="f">Area<select data-f="area">${AREAS.map(([a, l]) => `<option value="${a}">${l}</option>`).join("")}</select></label>
-    <label class="f">Type<select data-f="kind"><option value="load">Weighted (kg × reps)</option><option value="level">Bodyweight (level × reps)</option><option value="time">Timed hold (level × seconds)</option></select></label>
-    <label class="f" style="flex-basis:100%">Levels, easiest first (bodyweight and timed only, comma separated)<input data-f="levels" placeholder="e.g. Tuck, Advanced tuck, Straddle"></label>
-    <label class="f">Difficulty in its area (1 easy – 5 hard)<input type="number" data-f="rank" value="2" min="1" max="5"></label>
-  </div>
-  <div class="btns"><button class="btn go" data-act="saveex">Save exercise</button></div>`;
+// Side menu for a day's session: which slots run, added exercises, and each slot's circle-method rotation.
+function sessionDrawer() {
+  const d = drawerDay ?? E.parse(E.today()).getDay(), plan = E.planFor(E.addDays(E.today(), (d - E.parse(E.today()).getDay() + 7) % 7));
+  const slotRow = key => {
+    const sl = SLOTS[key], st = E.slotState(key), ex = E.exById(st.current), si = E.stallInfo(ex.id), on = !plan.off.includes(key);
+    const parked = (st.parked || []).map(id => E.exById(id).name), sug = E.switchSuggestion(key);
+    return `<div class="dw-slot ${on ? "" : "off"}"><div class="row between"><span class="lab">${esc(sl.label)}</span>
+      <label class="row small"><input type="checkbox" data-ch="slotoff" data-id="${key}" ${on ? "checked" : ""} style="width:20px;height:20px"> In session</label></div>
+      <b>${esc(ex.name)}</b> ${si.stalled ? `<span class="pill warn">Stalled</span>` : si.weeks ? `<span class="pill ok">Progressing</span>` : ""}
+      <div class="small muted">${si.weeks ? `${si.weeks} week${si.weeks === 1 ? "" : "s"} logged` : "Not trained yet"}${parked.length ? ` · parked: ${esc(parked.join(", "))}` : ""}</div>
+      <div class="btns" style="margin-top:6px">${sug ? `<button class="btn sm ${si.stalled ? "go" : ""}" data-act="circle" data-id="${key}" data-ex="${sug.id}" data-stay="1">Rotate to ${esc(sug.name)}</button>` : ""}<button class="btn sm" data-act="go" data-id="train/pick/${key}">Swap</button></div></div>`;
+  };
+  return `<div class="dw-scrim" data-act="drawer"></div><aside class="drawer" aria-label="Session settings">
+    <div class="row between"><div><div class="hdr">Session settings</div><h3 style="margin:2px 0 0">${esc(plan.name)}</h3></div><button class="rbtn" data-act="drawer" aria-label="Close">${ic("x")}</button></div>
+    <div class="chips" style="margin-top:8px">${P.WEEK_ORDER.map(x => `<button class="chip" data-act="dwday" data-id="${x}" aria-pressed="${x === d}">${P.DAY_NAMES[x]}</button>`).join("")}</div>
+    <h2>Circle method</h2>
+    <p class="tiny muted">Progress one exercise per slot until it stalls 2 weeks, then rotate to a weaker one in the same area. The old one is parked and comes back next circle.</p>
+    ${plan.allSlots.map(slotRow).join("")}
+    <h2>Added to this session</h2>
+    ${plan.extra.length ? plan.extra.map(id => `<div class="item row between"><span>${esc(E.exById(id).name)}</span><button class="btn sm" data-act="rmextra" data-id="${id}" aria-label="Remove">${ic("x")}</button></div>`).join("") : `<p class="small muted">Nothing extra.</p>`}
+    <div class="btns"><button class="btn" data-act="go" data-id="train/pick/add-${d}">+ Add exercise</button><button class="btn" data-act="go" data-id="train/pick/browse">Library</button></div>
+  </aside>`;
 }
 
 function vRuns() {
@@ -1147,7 +1195,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.10 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.11 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1173,7 +1221,7 @@ document.addEventListener("click", async ev => {
   const a = el.dataset.act, id = el.dataset.id;
   if (a === "habit" || a === "care" || a === "taskdone") popId = id;
   switch (a) {
-    case "nav": return go(id);
+    case "nav": drawer = false; return go(id);
     case "go": return go(id);
     case "back": return history.length > 1 ? history.back() : go("train");
 
@@ -1217,12 +1265,39 @@ document.addEventListener("click", async ev => {
       if (a === "rpe") e.rpe = e.rpe === +id ? null : +id; else e.pain = { ...(e.pain || {}), score: +id };
       put("workouts", w); save(); return render();
     }
-    case "circle": E.setSlot(id, el.dataset.ex, true); save(); toast("Switched. The old exercise is parked for the next circle."); return go("train/log/" + el.dataset.ex);
+    case "circle": E.setSlot(id, el.dataset.ex, true); save(); toast("Rotated. The old exercise is parked for the next circle."); return el.dataset.stay ? render() : go("train/log/" + el.dataset.ex);
+    case "drawer": drawer = !drawer; if (drawer) drawerDay = null; return render();
+    case "dwday": drawerDay = +id; return render();
+    case "addextra": case "rmextra": {
+      const d = a === "addextra" ? +el.dataset.slot.slice(4) : (drawerDay ?? E.parse(E.today()).getDay());
+      const cfg = S.settings.sessions[d] = { off: [], extra: [], ...(S.settings.sessions[d] || {}) };
+      cfg.extra = a === "addextra" ? [...new Set([...cfg.extra, id])] : cfg.extra.filter(x => x !== id);
+      touchSettings(); save();
+      if (a === "addextra") { toast(E.exById(id).name + " added to " + P.DAY_NAMES[d]); drawer = true; drawerDay = d; return go("train"); }
+      return render();
+    }
+    case "exinfo": return go("train/ex/" + id);
+    case "delex": {
+      const ex = E.exById(id), n = E.history(id).length;
+      if (!confirm(`Delete ${ex.name}?${n ? ` Its ${n} logged session${n === 1 ? "" : "s"} stay in your history.` : ""}`)) return;
+      const cur = live("exercises").find(x => x.id === id);
+      put("exercises", { ...(cur || { id }), hidden: true });
+      for (const k of Object.keys(SLOTS)) { const st = E.slotState(k); if (st.current === id) { const nx = E.switchSuggestion(k); put("areaState", { id: k, current: nx ? nx.id : SLOTS[k].def, parked: (st.parked || []).filter(x => x !== id) }); } else if ((st.parked || []).includes(id)) put("areaState", { ...st, parked: st.parked.filter(x => x !== id) }); }
+      for (const cfg of Object.values(S.settings.sessions)) if (cfg.extra) cfg.extra = cfg.extra.filter(x => x !== id);
+      touchSettings(); save(); toast("Deleted. Restore it from the library."); return go("train");
+    }
+    case "restoreex": { const cur = live("exercises").find(x => x.id === id); if (cur) { const { hidden, ...rest } = cur; put("exercises", rest); save(); } return render(); }
     case "swap": E.setSlot(el.dataset.slot, id, true); save(); return go("train");
     case "open": return go("train/log/" + id);
     case "saveex": {
       const f = readForm("#newEx"); if (!f.name) return toast("Add a name");
       const levels = f.levels ? f.levels.split(",").map(s => s.trim()).filter(Boolean) : null;
+      if (id) {
+        const cur = live("exercises").find(x => x.id === id) || { id }, kind = E.history(id).length ? E.exById(id).kind : f.kind;
+        const rec = { ...cur, name: f.name, area: f.area, kind, rank: +f.rank || 2 };
+        if (kind !== "load") rec.levels = levels && levels.length ? levels : E.exById(id).levels || [kind === "time" ? "Hold" : "Standard"];
+        put("exercises", rec); save(); toast("Saved"); return history.back();
+      }
       const rec = { id: "c-" + uid(), name: f.name, area: f.area, kind: f.kind, rank: +f.rank || 2, custom: true };
       if (f.kind !== "load") rec.levels = levels && levels.length ? levels : [f.kind === "time" ? "Hold" : "Standard"];
       put("exercises", rec); save(); toast("Exercise added"); return history.back();
@@ -1414,7 +1489,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const at = a === "pin" ? P.plan().at.get(id) : null;
       put("tasks", { ...k, pin: at ? { date: at.date, start: P.toHM(at.s) } : null }); save(); toast(at ? "Pinned to " + dayLabel(at.date) + " " + P.toHM(at.s) : "Unpinned"); return render();
     }
-    case "blockform": blockForm = id && blockForm !== id ? id : null; render(); if (blockForm) document.querySelector("#blockForm")?.scrollIntoView({ block: "center" }); return;
+    case "blockform": { const lk = id && id !== "new" && blockForm !== id && P.editLock(live("blocks").find(x => x.id === id)); if (lk) return toast(`Locked: starts or runs ${P.toHM(lk.s)}–${P.toHM(lk.e)}. Edit after ${P.toHM(lk.until)}.`); }
+      blockForm = id && blockForm !== id ? id : null; render(); if (blockForm) document.querySelector("#blockForm")?.scrollIntoView({ block: "center" }); return;
     case "bday": el.setAttribute("aria-pressed", el.getAttribute("aria-pressed") !== "true"); return;
     case "saveblock": {
       const f = readForm("#blockForm"), locked = $("#blockForm [data-f=locked]").checked;
@@ -1423,12 +1499,14 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
       if (!days.length && !f.date) return toast("Pick days or a date");
       const old = id ? live("blocks").find(x => x.id === id) : null;
+      if (P.editLock(old)) return toast("Locked until this block ends");
       if (old && old.locked && !confirm(`"${old.title}" is locked. Change it anyway?`)) return;
       put("blocks", { ...(old || {}), title: f.title, kind: f.kind, days: f.date ? [] : days, date: f.date || null, start: f.start, end: f.end, locked });
       blockForm = null; save(); toast("Timetable updated. Tasks re-planned."); return render();
     }
     case "delblock": {
       const b = live("blocks").find(x => x.id === id); if (!b) return;
+      if (P.editLock(b)) return toast("Locked until this block ends");
       if (!confirm(b.locked ? `"${b.title}" is locked. Delete it anyway?` : `Delete "${b.title}"?`)) return;
       remove("blocks", id); blockForm = null; save(); return render();
     }
@@ -1496,6 +1574,12 @@ document.addEventListener("change", async ev => {
   if (k === "criteria") { const list = el.value.split("\n").map(x => x.trim()).filter(Boolean); if (!list.length) return render(); S.settings.social.criteria = [...new Set(list)]; touchSettings(); save(); return render(); }
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
+  if (k === "planmin") { const v = num(el.value); if (v === null || v < 0 || v > 120) return render(); S.settings.plan[el.dataset.id] = Math.round(v); touchSettings(); save(); return render(); }
+  if (k === "slotoff") {
+    const d = drawerDay ?? E.parse(E.today()).getDay(), cfg = S.settings.sessions[d] = { off: [], extra: [], ...(S.settings.sessions[d] || {}) };
+    cfg.off = el.checked ? cfg.off.filter(x => x !== el.dataset.id) : [...new Set([...cfg.off, el.dataset.id])];
+    touchSettings(); save(); return render();
+  }
   if (k === "dayStart" || k === "dayEnd") { if (!el.value) return render(); S.settings.plan[k] = el.value; touchSettings(); save(); return render(); }
   if (k === "kcalTarget" || k === "proteinTarget") { S.settings.food[k] = num(el.value); touchSettings(); save(); return; }
   if (k === "htarget") { S.settings.habitTargets[el.dataset.id] = Math.max(0, Math.min(7, Math.round(num(el.value) || 0))); touchSettings(); save(); return; }
