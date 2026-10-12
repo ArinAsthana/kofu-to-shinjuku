@@ -1,5 +1,5 @@
 // Offline app shell. Bump VERSION on every release so phones pick up the new files.
-const VERSION = "kts-v1.5.0";
+const VERSION = "kts-v1.6.0";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "js/app.js", "js/data.js", "js/store.js", "js/engine.js", "js/sync.js", "js/charts.js", "js/planner.js", "js/firebase-config.js",
@@ -10,9 +10,13 @@ self.addEventListener("install", e => { e.waitUntil(caches.open(VERSION).then(c 
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
-// Same-origin: cache first, then network. Firebase and Google requests go straight to the network.
+// Same-origin: network first so a new release shows on the next open; the cache is the offline fallback.
+// Firebase and Google requests go straight to the network.
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
-  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request)));
+  e.respondWith(fetch(e.request, { cache: "no-cache" }).then(res => {
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
+    return res;
+  }).catch(() => caches.match(e.request, { ignoreSearch: true })));
 });

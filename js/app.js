@@ -28,17 +28,22 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { entering = true; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
 
 // Five tabs. Train, Body and Care share one tab; Money and Skills live under Status.
 const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Body"], ["social", "Social"], ["status", "Status"]];
 const TAB_OF = { home: "home", alerts: "home", more: "home", plan: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
+let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
   const views = { home: vHome, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
+  const app = $("#app");
+  if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
+  else app.classList.remove("enter");
+  if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   hydrate();
 }
 // Async bits after render (photo thumbnails).
@@ -76,7 +81,7 @@ function vHome() {
 
   <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
   <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="plan">
-    <div class="grow">${wd ? `<b>Wind down</b> <span class="small muted">bed at ${P.toHM(wd.bed)}</span>` : nn.now ? `<b>${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</b> <span class="small muted">until ${P.toHM(nn.now.e)}</span>` : `<b>Free time</b>`}
+    <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div><div class="small muted">until ${P.toHM(nn.now.e)}</div>` : `<div class="now-t">Free time</div>`}
       <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
     <span class="chev">›</span></button>
 
@@ -142,8 +147,6 @@ function vStatus() {
     <div class="card g-cyan"><span class="k">Streak</span>
       <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
   </div>
-  <h2>Stats</h2>
-  <div class="panel">${Ch.radar(statList())}<p class="tiny muted">Each stat fills toward its last skill tier. DISC is the share of weekly targets hit over 4 weeks.</p></div>
   <div class="panel">
     <h3>Weekly report</h3>
     <p class="small muted">Markdown summary of this week for Claude.</p>
@@ -197,7 +200,9 @@ function vSkills([sub]) {
         <b>${esc(c.title)}</b><div class="small soft">${esc(c.text)}</div></div>`;
     }).join("")}</div><p class="tiny muted">Locked ideas still work today. They just count once both skills reach tier 2.</p>`;
   }
-  return `<header class="top"><div><div class="hdr">Skill tree</div><h1>Skills</h1></div></header>${statusSeg("skills")}${seg}${body}`;
+  return `<header class="top"><div><div class="hdr">Skill tree</div><h1>Skills</h1></div></header>${statusSeg("skills")}
+  <div class="panel">${Ch.radar(statList())}<p class="tiny muted">Your stats. Each fills toward its last skill tier. DISC is the share of weekly targets hit over 4 weeks.</p></div>
+  <div style="margin-top:14px">${seg}</div>${body}`;
 }
 
 /* ================= MONEY ================= */
@@ -1012,7 +1017,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.5 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.6 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1036,6 +1041,7 @@ function curLog() { const [, view, exId, date] = route(); return view === "log" 
 document.addEventListener("click", async ev => {
   const el = ev.target.closest("[data-act]"); if (!el) return;
   const a = el.dataset.act, id = el.dataset.id;
+  if (a === "habit" || a === "care" || a === "taskdone") popId = id;
   switch (a) {
     case "nav": return go(id);
     case "go": return go(id);
@@ -1362,7 +1368,7 @@ document.addEventListener("change", async ev => {
 /* ---------- boot ---------- */
 (async function boot() {
   await load();
-  render();
+  entering = true; render();
   Sync.init({ render, toast });
   scheduleWindDown(); onSave(scheduleWindDown);
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
@@ -1370,6 +1376,13 @@ document.addEventListener("change", async ev => {
     const busy = document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
     if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0])) render();
   }, 60000);
-  if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    // A new release takes over and reloads the page once, so updates show without a second restart.
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !window.__reloaded) { window.__reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+    }).catch(() => {});
+  }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush().catch(() => {}); });
 })();
