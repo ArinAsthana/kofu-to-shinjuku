@@ -19,9 +19,11 @@ Tools: `get_day`, `log_food`, `log_weight`, `tick_habit`, `tick_care`, `add_task
    - `SA_JSON`: the whole contents of the downloaded `.json` file
    - `UID`: the ID from step 1
    - `PATH_TOKEN`: a long random string you make up (30+ letters and numbers)
-5. **Claude:** claude.ai (or the app) → Settings → Connectors → **Add custom connector**. Name it *Kofu to Shinjuku*. URL:
+5. **Check:** open `https://kts-connector.<your-subdomain>.workers.dev/mcp/<PATH_TOKEN>` in a browser. It should list three OK lines.
+   Any BAD line says what to fix.
+6. **Claude:** claude.ai (or the app) → Settings → Connectors → **Add custom connector**. Name it *Kofu to Shinjuku*. URL:
    `https://kts-connector.<your-subdomain>.workers.dev/mcp/<PATH_TOKEN>`. Leave the auth settings empty.
-6. In a chat, turn the connector on from the tools menu and try "what's on my timetable today?".
+7. In a chat, turn the connector on from the tools menu and try "what's on my timetable today?".
 
 ## Safety
 
