@@ -4,6 +4,7 @@ import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
 import * as P from "./planner.js";
+import { ic } from "./icons.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -64,7 +65,7 @@ function vHome() {
   const quests = HABITS.map(h => {
     const on = !!E.habitDone(h.id, t), wc = E.habitWeekCount(h.id), tg = E.habitTarget(h.id);
     return `<div class="q ${on ? "done" : ""}">
-      <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? "✓" : ""}</button>
+      <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
       <div class="grow"><div class="t">${esc(h.name)}</div><div class="small muted">${esc(h.note)} · ${wc}/${tg} this week</div></div>
       <div class="xp">+${XP.habit}</div></div>`;
   }).join("");
@@ -74,16 +75,16 @@ function vHome() {
   const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length;
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
-    <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">🔔${n ? `<span class="badge">${n}</span>` : ""}</button>
-    <button class="rbtn" data-act="nav" data-id="more" aria-label="Settings and backup">⚙</button></div></header>
+    <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
+    <button class="rbtn" data-act="nav" data-id="more" aria-label="Settings and backup">${ic("settings")}</button></div></header>
   <button class="strip" data-act="nav" data-id="status">
-    <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span>🔥 ${E.streak()}</span><span>${days}d to grad</span><span class="chev">›</span></button>
+    <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${E.streak()}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
 
   <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
   <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="plan">
     <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div><div class="small muted">until ${P.toHM(nn.now.e)}</div>` : `<div class="now-t">Free time</div>`}
       <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
-    <span class="chev">›</span></button>
+    <span class="chev">${ic("right")}</span></button>
 
   <h2>Daily quests <span class="n">${doneToday}/${HABITS.length}</span></h2>
   <div class="list">${quests}</div>
@@ -91,19 +92,19 @@ function vHome() {
   <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="body/care">
     <div class="grow"><div class="small muted">Care: meds, skin, teeth</div><b>${careToday().done}/${careToday().items.length} today</b>
       <div class="small muted">${esc(careToday().items.filter(c => !careDone(c.id, t)).slice(0, 3).map(c => c.name).join(", ")) || "All done"}</div></div>
-    <span class="chev">›</span></button>
+    <span class="chev">${ic("right")}</span></button>
 
   <h2>Today's dungeon</h2>
   <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="train">
     <div><div class="small muted">${esc(plan.where)}</div><b>${esc(plan.name)}</b>
       <div class="small muted">${plan.postShift ? "After night shift · " : ""}${done}/${plan.slots.length} exercises${w && E.habitDone("gym", t) ? " · logged" : ""}</div></div>
-    <span class="chev">›</span></button>
+    <span class="chev">${ic("right")}</span></button>
 
   <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="body/food">
     <div class="grow"><div class="small muted">Body and food today</div>
       <div><b>${a7 ? r1(a7) + " kg" : "No weight yet"}</b> <span class="small muted">${a7 ? "7-day average" : ""}</span></div>
       <div class="small">${food.kcal} kcal${ft.kcalTarget ? " / " + ft.kcalTarget : ""} · ${r1(food.protein)} g protein${ft.proteinTarget ? " / " + ft.proteinTarget : ""}</div></div>
-    <span class="chev">›</span></button>
+    <span class="chev">${ic("right")}</span></button>
 
 `;
 }
@@ -127,7 +128,7 @@ function alertList() {
 }
 function vAlerts() {
   const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
-  return `<button class="back" data-act="nav" data-id="home">‹ System</button><h1>Notifications</h1>
+  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Notifications</h1>
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
 
@@ -189,7 +190,7 @@ function vSkills([sub]) {
   } else if (sub === "unlocks") {
     body = `<div class="list">${UNLOCKS.map(u => {
       const parts = Object.entries(u.need), ok = parts.every(([id, n]) => by[id].tier >= n);
-      return `<div class="unl ${ok ? "" : "lock"}"><div class="lv">${ok ? "✓" : "🔒"}</div><div><b>${esc(u.title)}</b></div>
+      return `<div class="unl ${ok ? "" : "lock"}"><div class="lv">${ok ? ic("check") : ic("lock")}</div><div><b>${esc(u.title)}</b></div>
         <div class="need">${parts.map(([id, n]) => `<span style="color:var(--${by[id].c})">${esc(by[id].name)}</span> T${Math.min(by[id].tier, n)}/${n}`).join(" · ")}</div></div>`;
     }).join("")}</div>`;
   } else {
@@ -228,7 +229,7 @@ function vMoney([sub] = []) {
   const mp = E.moneyPlan(), rs = E.moneyReports().slice().reverse(), last = rs[0], due = E.moneyDue(), mk = E.monthKey();
   const bl = E.bills(), unpaid = bl.filter(b => !(b.paid || {})[mk]);
   const segs = 20, filled = Math.round(mp.paidPct * segs);
-  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div><div class="rbtn" aria-hidden="true">¥</div></header>${statusSeg("money")}
+  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div><div class="rbtn" aria-hidden="true">${ic("wallet")}</div></header>${statusSeg("money")}
   ${due ? sysBox("Weekly money report is due.", "Asked every week. Enter today's numbers.") : ""}
   <div class="card g-ind" style="margin-top:12px">
     <div class="k">${due ? "Report for this week" : "Update this week's report"}</div>
@@ -242,7 +243,7 @@ function vMoney([sub] = []) {
   <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="money/rewards">
     <div class="grow"><div class="small muted">Rewards shop</div><b>${E.xpWallet().toLocaleString("en-US")} XP · ${yen(E.funBudget().left)} fun budget</b>
       <div class="small muted">${(() => { const w = E.xpWallet(), f = E.funBudget().left, r = live("wishlist").filter(x => !x.bought && w >= x.xp && f >= x.price).length; return r ? `${r} wishlist item${r === 1 ? "" : "s"} unlocked` : `${live("wishlist").filter(x => !x.bought).length} on the wishlist`; })()}</div></div>
-    <span class="chev">›</span></button>
+    <span class="chev">${ic("right")}</span></button>
 
   <h2>Quest: ${yen(mp.goal)} by graduation</h2>
   <div class="panel">
@@ -266,10 +267,10 @@ function vMoney([sub] = []) {
   <h2>Bills and insurance <span class="n">${yen(E.billsMonthly())} / month</span></h2>
   <div class="panel">
     ${bl.length ? bl.map(b => { const paid = !!(b.paid || {})[mk]; return `<div class="item row between">
-      <button class="bx sm ${paid ? "on" : ""}" data-act="billpaid" data-id="${b.id}" aria-pressed="${paid}" aria-label="Paid ${esc(b.name)} this month">${paid ? "✓" : ""}</button>
+      <button class="bx sm ${paid ? "on" : ""}" data-act="billpaid" data-id="${b.id}" aria-pressed="${paid}" aria-label="Paid ${esc(b.name)} this month">${paid ? ic("check") : ""}</button>
       <div class="grow"><b>${esc(b.name)}</b><div class="small muted">${b.kind === "insurance" ? "Insurance · " : ""}${b.freq === "year" ? "yearly" : "monthly"}${paid ? " · paid this month" : ""}</div></div>
       <input class="amt" type="number" inputmode="numeric" data-ch="billamt" data-id="${b.id}" value="${b.amount ?? ""}" placeholder="¥ amount" aria-label="${esc(b.name)} amount">
-      <button class="btn sm danger" data-act="delbill" data-id="${b.id}" aria-label="Delete ${esc(b.name)}">✕</button></div>`; }).join("") : `<p class="empty">No bills yet.</p>`}
+      <button class="btn sm danger" data-act="delbill" data-id="${b.id}" aria-label="Delete ${esc(b.name)}">${ic("x")}</button></div>`; }).join("") : `<p class="empty">No bills yet.</p>`}
     ${unpaid.length && bl.length ? `<p class="small muted" style="margin-top:6px">${unpaid.length} not marked paid for ${mk}. Tick a bill when you pay it.</p>` : ""}
     ${billForm ? `<div class="grid" id="billForm" style="margin-top:10px">
         <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Rent"></label>
@@ -281,7 +282,7 @@ function vMoney([sub] = []) {
   </div>
 
   <h2>History</h2>
-  <div class="panel">${rs.map(r => `<div class="item row between"><span>${E.fmtDate(r.date)}</span><span class="mono small">bank ${yen(r.bank)} · debt ${yen(r.debt)}</span><button class="btn sm danger" data-act="delmoney" data-id="${r.id}" aria-label="Delete report">✕</button></div>`).join("") || `<p class="empty">No reports yet.</p>`}</div>
+  <div class="panel">${rs.map(r => `<div class="item row between"><span>${E.fmtDate(r.date)}</span><span class="mono small">bank ${yen(r.bank)} · debt ${yen(r.debt)}</span><button class="btn sm danger" data-act="delmoney" data-id="${r.id}" aria-label="Delete report">${ic("x")}</button></div>`).join("") || `<p class="empty">No reports yet.</p>`}</div>
 
   <details class="panel"><summary>Goal settings</summary>
     <div class="grid" style="margin-top:8px"><label class="f">Savings goal (¥)<input type="number" inputmode="numeric" data-ch="moneygoal" value="${S.settings.money.goal}"></label>
@@ -309,9 +310,9 @@ function vRewards() {
   const ready = w => wallet >= w.xp && fb.left >= w.price;
   const pct = w => Math.min(wallet / (w.xp || 1), fb.left / (w.price || 1), 1);
   open.sort((a, b) => ready(b) - ready(a) || pct(b) - pct(a));
-  const icon = k => k === "trip" ? "✈" : k === "exp" ? "★" : "◆";
+  const icon = k => ic(k === "trip" ? "plane" : k === "exp" ? "star" : "gem", "inl");
   const editing = wishForm && wishForm !== "new" ? all.find(w => w.id === wishForm) : null;
-  return `<button class="back" data-act="nav" data-id="money">‹ Money</button>
+  return `<button class="back" data-act="nav" data-id="money">${ic("left")} Money</button>
   <header class="top"><div><div class="hdr">Shop</div><h1>Rewards</h1></div></header>
   <div class="carousel">
     <div class="card g-mag"><span class="k">XP to spend</span><div><div class="dm big2">${wallet.toLocaleString("en-US")}</div><div class="small soft">${E.xpTotal().toLocaleString("en-US")} earned · ${E.xpSpent().toLocaleString("en-US")} spent · level unaffected</div></div></div>
@@ -326,7 +327,7 @@ function vRewards() {
     return `<div class="panel wish ${ok ? "ready" : ""}" style="margin-top:0">
       <div class="row between"><button class="tbtn grow" data-act="wishform" data-id="${w.id}"><b>${icon(w.kind)} ${esc(w.name)}</b>
         <div class="small muted">${yen(w.price)} · ${w.xp.toLocaleString("en-US")} XP${w.link ? ` · <a href="${esc(w.link)}" target="_blank" rel="noopener">link</a>` : ""}</div></button>
-        ${ok ? `<button class="btn go sm" data-act="buywish" data-id="${w.id}">Buy</button>` : `<span class="rank" style="--c:var(--dim);font-size:16px">🔒</span>`}</div>
+        ${ok ? `<button class="btn go sm" data-act="buywish" data-id="${w.id}">Buy</button>` : `<span class="lockbox">${ic("lock")}</span>`}</div>
       <div class="small muted" style="margin-top:8px">XP ${Math.min(wallet, w.xp).toLocaleString("en-US")}/${w.xp.toLocaleString("en-US")}</div>${bar(wallet / w.xp, "var(--mag)")}
       <div class="small muted">Budget ${yen(Math.max(0, Math.min(fb.left, w.price)))}/${yen(w.price)}</div>${bar(fb.left / w.price, "var(--org)")}
       ${ok ? `<div class="small" style="color:var(--lime)">Unlocked. You earned this.</div>` : `<div class="small muted">${[xpGap ? `${xpGap.toLocaleString("en-US")} XP to go` : "", yenGap ? `${yen(yenGap)} more budget (${wks} month${wks === 1 ? "" : "s"})` : ""].filter(Boolean).join(" · ")}</div>`}
@@ -356,11 +357,11 @@ function vCare() {
   return `<h2>Today <span class="n">${done}/${items.length}</span></h2>
   ${CARE_SLOTS.map(([k, l]) => { const list = items.filter(c => c.slot === k).sort((a, b) => (a.order || 0) - (b.order || 0)); if (!list.length) return "";
     return `<div class="small muted" style="margin:14px 0 6px">${esc(l)}</div><div class="list">${list.map(c => { const on = !!careDone(c.id, t);
-      return `<div class="q ${on ? "done" : ""}"><button class="bx" data-act="care" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)} done">${on ? "✓" : ""}</button>
+      return `<div class="q ${on ? "done" : ""}"><button class="bx" data-act="care" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)} done">${on ? ic("check") : ""}</button>
         <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.note ? esc(c.note) + " · " : ""}${adh(c)} last 7 days</div></div><div></div></div>`; }).join("")}</div>`; }).join("")}
   <details class="panel" style="margin-top:18px" ${careForm ? "open" : ""}><summary>Edit list (${all.length})</summary>
     ${all.sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0)).map(c => `<div class="item row between"><div class="grow"><b>${esc(c.name)}</b><div class="small muted">${esc((CARE_SLOTS.find(x => x[0] === c.slot) || [, ""])[1])} · ${(c.days || []).length ? c.days.map(d => dayNames[d]).join(" ") : "daily"}</div></div>
-      <button class="btn sm danger" data-act="delcare" data-id="${c.id}" aria-label="Delete ${esc(c.name)}">✕</button></div>`).join("")}
+      <button class="btn sm danger" data-act="delcare" data-id="${c.id}" aria-label="Delete ${esc(c.name)}">${ic("x")}</button></div>`).join("")}
     <div class="grid" id="careForm" style="margin-top:10px">
       <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Retinol serum"></label>
       <label class="f">When<select data-f="slot">${CARE_SLOTS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
@@ -393,7 +394,7 @@ function vSocial([sub, id]) {
   sub = sub || "people";
   const seg = `<div class="pills">${[["people", "People"], ["log", "Hangouts"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="social/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
   return `<header class="top"><div><div class="hdr">Hunter registry</div><h1>Social</h1></div>
-    <button class="rbtn" data-act="go" data-id="social/log" aria-label="Log a hangout">+</button></header>${seg}${sub === "log" ? vHangouts() : vPeople()}`;
+    <button class="rbtn" data-act="go" data-id="social/log" aria-label="Log a hangout">${ic("plus")}</button></header>${seg}${sub === "log" ? vHangouts() : vPeople()}`;
 }
 function balance() {
   const t = E.today(), hs = live("hangouts").filter(h => E.daysBetween(h.date, t) < 30), ppl = Object.fromEntries(live("people").map(p => [p.id, p]));
@@ -421,15 +422,15 @@ function vPeople() {
     : `<div class="btns"><button class="btn primary" data-act="personform">+ Person</button></div>`}
   <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="social/p/${p.id}">
       ${badge(rk)}<div class="grow"><div class="t">${esc(p.name)}</div>
-      <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}${st.ev ? ` · every ${st.ev}d` : ""}${st.overdue ? ` · <span class="warn">overdue</span>` : ""}</div></div><span class="chev">›</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
+      <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}${st.ev ? ` · every ${st.ev}d` : ""}${st.overdue ? ` · <span class="warn">overdue</span>` : ""}</div></div><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
   <p class="tiny muted">Rank is the average of your scores: S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. It's your private read, not a verdict on them.</p>`;
 }
 function vPerson(id) {
   const p = live("people").find(x => x.id === id);
-  if (!p) return `<button class="back" data-act="nav" data-id="social">‹ Social</button><p class="empty">Not found.</p>`;
+  if (!p) return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button><p class="empty">Not found.</p>`;
   const rk = rankOf(p), st = personState(p), crit = S.settings.social.criteria;
   const hs = live("hangouts").filter(h => (h.people || []).includes(id)).sort((a, b) => b.date.localeCompare(a.date));
-  return `<button class="back" data-act="nav" data-id="social">‹ Social</button>
+  return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button>
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
   <h2>Assessment</h2>
   <div class="panel">${crit.map(c => { const v = (p.scores || {})[c] || 0; return `<div class="item"><div class="row between"><b>${esc(c)}</b><span class="mono small muted">${v || "–"}/5</span></div>
@@ -461,7 +462,7 @@ function vHangouts() {
     <div class="btns"><button class="btn go" data-act="addhang">Log hangout</button></div></div>
   <h2>History <span class="n">${hs.length}</span></h2>
   <div class="panel">${hs.map(h => `<div class="item row between"><div class="grow small"><b>${E.fmtDate(h.date)}</b> ${esc(h.what || "")}<div class="muted">${(h.people || []).map(id => byId[id] ? esc(byId[id].name) : "?").join(", ")}${h.note ? " · " + esc(h.note) : ""}</div></div>
-    <button class="btn sm danger" data-act="delhang" data-id="${h.id}" aria-label="Delete hangout">✕</button></div>`).join("") || `<p class="empty">No hangouts logged.</p>`}</div>
+    <button class="btn sm danger" data-act="delhang" data-id="${h.id}" aria-label="Delete hangout">${ic("x")}</button></div>`).join("") || `<p class="empty">No hangouts logged.</p>`}</div>
   <details class="panel"><summary>Rating criteria</summary>
     <p class="small muted">One per line. Renaming one drops its old scores.</p>
     <textarea data-ch="criteria" rows="6">${esc(S.settings.social.criteria.join("\n"))}</textarea></details>`;
@@ -478,7 +479,7 @@ function vPlan([sub]) {
   const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
   const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : vDay();
   return `<header class="top"><div><div class="hdr">Timetable · auto-planner</div><h1>Plan</h1></div>
-    <button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">+</button></header>${seg}${body}`;
+    <button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">${ic("plus")}</button></header>${seg}${body}`;
 }
 
 function agendaRows(date, p) {
@@ -492,8 +493,8 @@ function agendaRows(date, p) {
       <div class="grow"><b>${esc(r.k.title)}</b><div class="small muted">${P.dur(r.k.mins)}${r.k.energy === "high" ? " · focus" : ""}${r.k.due ? ` · due ${E.fmtDate(r.k.due)}` : ""}${r.at.late ? ` · <span class="warn">after deadline</span>` : ""}${r.at.pinned ? " · pinned" : ""}</div></div>
       <button class="bx sm" data-act="taskdone" data-id="${r.k.id}" aria-label="Done: ${esc(r.k.title)}"></button></div>`;
     const b = r.b;
-    return pre + `<div class="ag blk k-${esc(b.kind)}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? "→" + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
-      <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span aria-label="locked">🔒</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div></div></div>`;
+    return pre + `<div class="ag blk k-${esc(b.kind)}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
+      <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div></div></div>`;
   });
   if (!marked) rows.push(`<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`);
   return rows.join("") || `<p class="empty">Nothing on this day.</p>`;
@@ -543,7 +544,7 @@ function vTodo() {
       <button class="bx" data-act="taskdone" data-id="${k.id}" aria-label="Done: ${esc(k.title)}"></button>
       <button class="grow tbtn" data-act="taskform" data-id="${k.id}"><div class="t">${esc(k.title)}</div>
         <div class="small muted">${at ? `<span class="${at.late ? "warn" : ""}">${esc(dayLabel(at.date))} ${span(at.s, at.e)}</span>` : `<span class="warn">No slot in 2 weeks</span>`} · ${P.dur(k.mins)}${k.prio === 3 ? " · high" : k.prio === 1 ? " · low" : ""}${k.energy === "high" ? " · focus" : ""}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""}</div></button>
-      ${at ? `<button class="btn sm" data-act="${at.pinned ? "unpin" : "pin"}" data-id="${k.id}" aria-label="${at.pinned ? "Unpin" : "Pin to this slot"}">${at.pinned ? "📌" : "Pin"}</button>` : ""}</div>`;
+      ${at ? `<button class="btn sm" data-act="${at.pinned ? "unpin" : "pin"}" data-id="${k.id}" aria-label="${at.pinned ? "Unpin" : "Pin to this slot"}">${at.pinned ? ic("pin") : "Pin"}</button>` : ""}</div>`;
   }).join("") || `<p class="empty">Nothing open. Add a task above and the System finds it a slot.</p>`}</div>
   <p class="tiny muted">Pin keeps a task in its slot even when new tasks arrive. Unpinned tasks re-plan every time you open this screen.</p>
   ${done.length ? `<details class="panel"><summary>Done (${done.length})</summary>${done.slice(0, 30).map(k => `<div class="item row between"><span class="small">${esc(k.title)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(k.doneAt || Date.now())))}</span></span><button class="btn sm" data-act="taskundo" data-id="${k.id}">Undo</button></div>`).join("")}</details>` : ""}`;
@@ -575,7 +576,7 @@ function vWeek() {
   const editing = blockForm && blockForm !== "new" ? bl.find(b => b.id === blockForm) : null;
   const oneOff = bl.filter(b => b.date && b.date >= E.today()).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const row = b => editing && editing.id === b.id ? blockFormHtml(b) : `<button class="ag blk tbtn" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}">
-      <div class="tm">${esc(b.start)}–${esc(b.end)}</div><div class="grow"><b>${esc(b.title)}</b> ${b.locked ? "🔒" : ""}<div class="small muted">${kindChip(b.kind)}</div></div><span class="chev">›</span></button>`;
+      <div class="tm">${esc(b.start)}–${esc(b.end)}</div><div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}</div></div><span class="chev">${ic("right")}</span></button>`;
   return `${blockForm === "new" ? blockFormHtml() : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="blockform" data-id="new">+ Block</button></div>`}
   ${P.WEEK_ORDER.map(d => { const list = bl.filter(b => !b.date && (b.days || []).includes(d)).sort((a, b) => P.toMin(a.start) - P.toMin(b.start));
     return `<h2>${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d]} <span class="n">${list.length}</span></h2><div class="panel agenda">${list.map(row).join("") || `<p class="empty">Free day.</p>`}</div>`; }).join("")}
@@ -710,7 +711,7 @@ function vTrainHome() {
       <span class="done-dot ${entry && entry.sets.length ? "on" : ""}"></span>
       <span class="grow"><span class="lab">${esc(sl.label)}</span><br><b>${esc(ex.name)}</b> ${st.stalled ? `<span class="pill warn">Stalled</span>` : ""}
       <br><span class="small muted">${entry && entry.sets.length ? "Today: " + esc(E.fmtSets(ex, entry.sets)) : tg ? "Target: " + esc(tg.text) : `First session: find a working ${ex.kind === "load" ? "weight" : "level"}`}</span></span>
-      <span class="chev">›</span></button>`;
+      <span class="chev">${ic("right")}</span></button>`;
   }).join("");
   const extra = w ? (w.entries || []).filter(e => e.sets.length && !plan.slots.some(k => E.slotState(k).current === e.exercise)) : [];
   const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
@@ -721,7 +722,7 @@ function vTrainHome() {
     ${plan.postShift || postShift ? `<label class="row small" style="margin-top:8px"><input type="checkbox" data-ch="postshift" ${postShift ? "checked" : ""} style="width:22px;height:22px"> After a night shift: keep 1–2 reps in reserve</label>` : ""}
     ${flags.length ? `<div class="flag bad">${flags.map(esc).join(" ")} Deload or swap. Stop on sharp pain.</div>` : ""}
     <div style="margin-top:6px">${slots}</div>
-    ${extra.map(e => { const ex = E.exById(e.exercise); return `<button class="slot" data-act="go" data-id="train/log/${ex.id}"><span class="done-dot on"></span><span class="grow"><span class="lab">Extra</span><br><b>${esc(ex.name)}</b><br><span class="small muted">Today: ${esc(E.fmtSets(ex, e.sets))}</span></span><span class="chev">›</span></button>`; }).join("")}
+    ${extra.map(e => { const ex = E.exById(e.exercise); return `<button class="slot" data-act="go" data-id="train/log/${ex.id}"><span class="done-dot on"></span><span class="grow"><span class="lab">Extra</span><br><b>${esc(ex.name)}</b><br><span class="small muted">Today: ${esc(E.fmtSets(ex, e.sets))}</span></span><span class="chev">${ic("right")}</span></button>`; }).join("")}
     <div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>
   </div>
   <div class="panel row between"><div><b>Runs</b><div class="small muted">Longest ${Math.max(0, ...live("runs").map(r => r.km))} of ${RUN_GOAL_KM} km continuous</div></div><button class="btn sm" data-act="go" data-id="train/runs">Open</button></div>
@@ -790,8 +791,8 @@ function vLog(exId, date) {
   const levels = ex.levels && ex.kind !== "load" ? `<div class="small muted" style="margin:10px 0 4px">Level</div><div class="seg">${ex.levels.map((l, i) => `<button data-act="level" data-id="${i}" aria-pressed="${draft.level === i}">${esc(l)}</button>`).join("")}</div>` : "";
   const inputs = ex.kind === "load" ? stepper("Load", "load", E.inc(ex), "kg") + stepper(ex.repLabel ? "Lengths" : "Reps", "reps", 1, E.unit(ex))
     : levels + (ex.kind === "time" ? stepper("Seconds", "secs", 5, "s") : stepper("Reps", "reps", 1, "reps"));
-  const sets = e && e.sets.length ? `<div class="setlist">${e.sets.map((s, i) => `<div class="setrow"><span>Set ${i + 1}: ${esc(E.fmtSet(ex, s))}</span><button data-act="delset" data-id="${i}" aria-label="Delete set ${i + 1}">✕</button></div>`).join("")}</div>` : "";
-  return `<button class="back" data-act="back">‹ Back</button>
+  const sets = e && e.sets.length ? `<div class="setlist">${e.sets.map((s, i) => `<div class="setrow"><span>Set ${i + 1}: ${esc(E.fmtSet(ex, s))}</span><button data-act="delset" data-id="${i}" aria-label="Delete set ${i + 1}">${ic("x")}</button></div>`).join("")}</div>` : "";
+  return `<button class="back" data-act="back">${ic("left")} Back</button>
   <div class="row between"><h1>${esc(ex.name)}</h1><button class="link" data-act="go" data-id="train/ex/${ex.id}">History</button></div>
   <div class="small muted">${isToday ? "Today" : E.fmtDate(date)}${slot ? " · " + esc(SLOTS[slot].label) + ` · <button class="link small" data-act="go" data-id="train/pick/${slot}">Swap</button>` : ""}</div>
   <div class="panel">
@@ -822,7 +823,7 @@ function vLog(exId, date) {
 function vExercise(exId) {
   const ex = E.exById(exId), h = E.history(exId).slice().reverse(), st = E.stallInfo(exId);
   const [lo, hi] = E.range(ex);
-  return `<button class="back" data-act="back">‹ Back</button>
+  return `<button class="back" data-act="back">${ic("left")} Back</button>
   <h1>${esc(ex.name)}</h1>
   <div class="small muted">${esc(AREAS.find(a => a[0] === ex.area)?.[1] || ex.area)} · ${ex.kind === "load" ? "weighted" : ex.kind === "time" ? "timed hold" : "bodyweight"}${st.stalled ? ` · <span class="pill warn">Stalled</span>` : ""}</div>
   <div class="panel">
@@ -851,7 +852,7 @@ function vPick(mode) {
       return `<button class="pick" data-act="${slot ? "swap" : "open"}" data-id="${e.id}" data-slot="${esc(mode)}"><b>${esc(e.name)}</b>${e.id === cur ? ` <span class="pill ok">Current</span>` : ""}${st.stalled ? ` <span class="pill warn">Stalled</span>` : ""}
       <br><span class="small muted">${e.kind === "load" ? "Weighted" : e.kind === "time" ? "Timed" : "Bodyweight"}${lt ? " · last " + E.fmtDate(lt) : " · not trained yet"}</span></button>`; }).join("")}</div>`;
   }).join("");
-  return `<button class="back" data-act="back">‹ Back</button>
+  return `<button class="back" data-act="back">${ic("left")} Back</button>
   <h1>${slot ? "Swap " + esc(slot.label.toLowerCase()) : mode === "extra" ? "Add an exercise" : "Exercise library"}</h1>
   ${slot ? `<p class="small muted">The new pick stays in this slot until you swap again. The old one is parked for the next circle.</p>` : ""}
   <div class="panel">${groups}</div>
@@ -859,7 +860,7 @@ function vPick(mode) {
 }
 
 function vNewExercise() {
-  return `<button class="back" data-act="back">‹ Back</button><h1>New exercise</h1>
+  return `<button class="back" data-act="back">${ic("left")} Back</button><h1>New exercise</h1>
   <div class="panel grid" id="newEx">
     <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Ring row"></label>
     <label class="f">Area<select data-f="area">${AREAS.map(([a, l]) => `<option value="${a}">${l}</option>`).join("")}</select></label>
@@ -873,7 +874,7 @@ function vNewExercise() {
 function vRuns() {
   const runs = live("runs").sort((a, b) => b.date.localeCompare(a.date));
   const longest = Math.max(0, ...runs.map(r => r.km));
-  return `<button class="back" data-act="back">‹ Back</button><h1>Runs</h1>
+  return `<button class="back" data-act="back">${ic("left")} Back</button><h1>Runs</h1>
   <div class="panel"><div class="row between"><b>Toward ${RUN_GOAL_KM} km continuous</b><span class="count">${longest} km</span></div>${bar(longest / RUN_GOAL_KM, "var(--train)")}</div>
   <div class="panel grid" id="runForm">
     <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
@@ -884,7 +885,7 @@ function vRuns() {
   </div>
   <div class="btns"><button class="btn go block" data-act="saverun">Save run</button></div>
   <h2>History</h2>
-  <div class="panel">${runs.length ? runs.map(r => `<div class="item row between"><div><b>${r.km} km</b> in ${E.fmtTime(r.sec)} <span class="small muted">· ${E.fmtTime(E.pace(r))}/km · feel ${r.feel}/5${r.pr ? " · PR" : ""}</span><div class="small muted">${E.fmtDate(r.date)}${r.note ? " · " + esc(r.note) : ""}</div></div><button class="btn sm danger" data-act="delrun" data-id="${r.id}" aria-label="Delete run">✕</button></div>`).join("") : `<p class="empty">No runs yet.</p>`}</div>`;
+  <div class="panel">${runs.length ? runs.map(r => `<div class="item row between"><div><b>${r.km} km</b> in ${E.fmtTime(r.sec)} <span class="small muted">· ${E.fmtTime(E.pace(r))}/km · feel ${r.feel}/5${r.pr ? " · PR" : ""}</span><div class="small muted">${E.fmtDate(r.date)}${r.note ? " · " + esc(r.note) : ""}</div></div><button class="btn sm danger" data-act="delrun" data-id="${r.id}" aria-label="Delete run">${ic("x")}</button></div>`).join("") : `<p class="empty">No runs yet.</p>`}</div>`;
 }
 
 /* ================= BODY ================= */
@@ -926,14 +927,14 @@ function vWeight() {
     <div class="stepper" style="margin-top:6px"><button data-act="kg" data-step="-0.1" aria-label="Less">−</button><output>${draft.kg.toFixed(1)}<span class="u">kg</span></output><button data-act="kg" data-step="0.1" aria-label="More">+</button></div>
     <div class="btns"><button class="btn go block" data-act="savekg">${todays ? "Update" : "Save"} today's weight</button></div>
   </div>
-  <div class="panel">${all.slice(0, 14).map(e => `<div class="item row between"><span>${E.fmtDate(e.date)}</span><span><b>${e.kg.toFixed(1)}</b> kg <button class="btn sm danger" data-act="delkg" data-id="${e.id}" aria-label="Delete">✕</button></span></div>`).join("") || `<p class="empty">No entries yet. Weigh in each morning, same conditions.</p>`}</div>`;
+  <div class="panel">${all.slice(0, 14).map(e => `<div class="item row between"><span>${E.fmtDate(e.date)}</span><span><b>${e.kg.toFixed(1)}</b> kg <button class="btn sm danger" data-act="delkg" data-id="${e.id}" aria-label="Delete">${ic("x")}</button></span></div>`).join("") || `<p class="empty">No entries yet. Weigh in each morning, same conditions.</p>`}</div>`;
 }
 
 function vFood() {
   const d = foodDate || E.today(), f = E.dayFood(d), ft = S.settings.food, saved = live("savedMeals");
   const low = d < E.today() && f.meals.length && f.kcal > 0 && f.kcal < 1500;
   return `<div class="panel">
-    <div class="row between"><button class="btn sm" data-act="fday" data-step="-1" aria-label="Previous day">‹</button><b>${d === E.today() ? "Today" : E.fmtDate(d)}</b><button class="btn sm" data-act="fday" data-step="1" aria-label="Next day" ${d >= E.today() ? "disabled" : ""}>›</button></div>
+    <div class="row between"><button class="btn sm" data-act="fday" data-step="-1" aria-label="Previous day">${ic("left")}</button><b>${d === E.today() ? "Today" : E.fmtDate(d)}</b><button class="btn sm" data-act="fday" data-step="1" aria-label="Next day" ${d >= E.today() ? "disabled" : ""}>${ic("right")}</button></div>
     <div class="row between" style="margin-top:10px"><span>Calories</span><b>${Math.round(f.kcal)}${ft.kcalTarget ? " / " + ft.kcalTarget : ""}</b></div>${ft.kcalTarget ? bar(f.kcal / ft.kcalTarget, "var(--chuo)") : ""}
     <div class="row between" style="margin-top:6px"><span>Protein</span><b>${r1(f.protein)} g${ft.proteinTarget ? " / " + ft.proteinTarget : ""}</b></div>${ft.proteinTarget ? bar(f.protein / ft.proteinTarget, "var(--train)") : ""}
     ${!ft.kcalTarget || !ft.proteinTarget ? `<p class="small muted" style="margin-top:6px">Set daily targets in More.</p>` : ""}
@@ -944,7 +945,7 @@ function vFood() {
     const kc = items.reduce((a, i) => a + (+i.kcal || 0), 0), pr = items.reduce((a, i) => a + (+i.protein || 0), 0);
     const open = foodForm === k;
     return `<div class="panel meal"><h3><span>${label}</span><span class="small muted">${Math.round(kc)} kcal · ${r1(pr)} g</span></h3>
-      ${items.map((it, i) => `<div class="food-item"><span class="grow">${esc(it.name)}</span><span class="small muted">${it.kcal} kcal · ${it.protein} g</span><button class="btn sm danger" data-act="delitem" data-id="${k}" data-i="${i}" aria-label="Remove">✕</button></div>`).join("")}
+      ${items.map((it, i) => `<div class="food-item"><span class="grow">${esc(it.name)}</span><span class="small muted">${it.kcal} kcal · ${it.protein} g</span><button class="btn sm danger" data-act="delitem" data-id="${k}" data-i="${i}" aria-label="Remove">${ic("x")}</button></div>`).join("")}
       ${open ? `<div class="grid" id="itemForm" style="margin-top:8px"><label class="f" style="flex-basis:100%">Item<input data-f="name" placeholder="e.g. Salad chicken" autofocus></label>
         <label class="f">kcal<input type="number" inputmode="decimal" data-f="kcal"></label><label class="f">Protein (g)<input type="number" inputmode="decimal" data-f="protein"></label></div>
         <div class="btns"><button class="btn go" data-act="additem" data-id="${k}">Add</button><button class="btn" data-act="foodform" data-id="">Cancel</button></div>`
@@ -974,7 +975,7 @@ function vCheck() {
     <div class="btns"><button class="btn go block" data-act="savecheck">Save weekly check</button></div>
   </div>
   <h2>Past checks</h2>
-  <div class="panel">${checks.length ? checks.map(c => `<div class="item"><div class="row between"><b>${E.fmtDate(c.date)}</b><button class="btn sm danger" data-act="delcheck" data-id="${c.id}" aria-label="Delete">✕</button></div>
+  <div class="panel">${checks.length ? checks.map(c => `<div class="item"><div class="row between"><b>${E.fmtDate(c.date)}</b><button class="btn sm danger" data-act="delcheck" data-id="${c.id}" aria-label="Delete">${ic("x")}</button></div>
     <div class="small">${[c.kg && c.kg + " kg", c.waist && "waist " + c.waist, c.chest && "chest " + c.chest, c.arms && "arms " + c.arms].filter(Boolean).join(" · ")}</div>
     ${c.note ? `<div class="small muted">${esc(c.note)}</div>` : ""}
     ${(c.photoIds || []).length ? `<div class="thumbs">${c.photoIds.map(p => `<img data-photo="${p}" alt="Check photo ${E.fmtDate(c.date)}">`).join("")}</div>` : ""}</div>`).join("") : `<p class="empty">No checks yet.</p>`}</div>`;
@@ -993,7 +994,7 @@ async function shrink(file) {
 /* ================= MORE ================= */
 function vMore() {
   const st = S.settings, rh = live("rewardHistory").sort((a, b) => b.ts - a.ts);
-  return `<button class="back" data-act="nav" data-id="home">‹ System</button><h1>More</h1>
+  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>More</h1>
   <div class="panel"><h3>Sync and backup</h3>${Sync.panelHtml(esc)}</div>
   <div class="panel"><h3>Export</h3>
     <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Photos are not included.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
@@ -1017,7 +1018,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.6 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.7 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
