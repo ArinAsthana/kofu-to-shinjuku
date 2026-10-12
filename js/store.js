@@ -31,6 +31,7 @@ function freshSettings() {
     lastExportAt: null,
     money: { ...MONEY },
     plan: { ...PLAN_SETTINGS },
+    sessions: {}, // per weekday: { off: [slot keys], extra: [exercise ids] }
     windDown: { ...WIND_DOWN },
     social: { criteria: SOCIAL.criteria.slice() },
     fun: { ...FUN, start: localIso(new Date()).slice(0, 7) },
@@ -151,6 +152,7 @@ export function migrate(s) {
   s.settings.dates = Object.assign(base.settings.dates, s.settings.dates || {});
   s.settings.money = Object.assign(base.settings.money, s.settings.money || {});
   s.settings.plan = Object.assign(base.settings.plan, s.settings.plan || {});
+  s.settings.sessions = s.settings.sessions || {};
   s.settings.windDown = Object.assign(base.settings.windDown, s.settings.windDown || {});
   s.settings.social = Object.assign(base.settings.social, s.settings.social || {});
   s.settings.fun = Object.assign(base.settings.fun, s.settings.fun || {});

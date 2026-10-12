@@ -33,6 +33,33 @@ export function segments(date) {
   return out.sort((x, y) => x.s - y.s || x.e - y.e);
 }
 
+/* ---------- block gates ---------- */
+// Workout blocks open the workout log. Matched by title so renamed or added gym blocks still count.
+export const isWorkout = b => /lift|calisth|gym|workout|train|run\b/i.test(b.title || "");
+// Today's occurrences of a block (a one-day moved copy counts for its original).
+const occToday = b => segments(E.today()).filter(g => !g.tail && (g.b.id === b.id || g.b.from === b.id || (b.from && g.b.id === b.from)));
+// A block can't be changed from lockMins before today's start until it ends, so the schedule can't dodge a session.
+export function editLock(b) {
+  if (!b || !b.id) return null;
+  const st = S.settings.plan || {}, n = nowMin(), lock = st.lockMins ?? 15;
+  const g = occToday(b).find(g => n >= g.s - lock && n < g.e);
+  return g ? { s: g.s, e: g.e, until: g.e } : null;
+}
+// Is the workout log open right now? Open from openPad before a workout block to openPad after it,
+// and stays open all day once a set is logged.
+export function trainGate(started) {
+  const t = E.today(), n = nowMin(), pad = (S.settings.plan || {}).openPad ?? 10;
+  const segs = segments(t).filter(g => isWorkout(g.b) && !g.tail);
+  const cur = segs.find(g => n >= g.s - pad && n < g.e + pad);
+  if (cur) return { open: true, block: cur.b, s: cur.s, e: cur.e };
+  if (started) return { open: true, started: true };
+  for (let i = 0; i < 8; i++) {
+    const d = E.addDays(t, i), nx = segments(d).filter(g => isWorkout(g.b) && !g.tail && (i > 0 || g.s - pad > n)).sort((a, b) => a.s - b.s)[0];
+    if (nx) return { open: false, next: { date: d, s: nx.s - pad, b: nx.b } };
+  }
+  return { open: false };
+}
+
 /* ---------- wind-down ---------- */
 // One hour (setting) before each sleep block that starts on or after this date's evening.
 // Skipped when that time falls inside work, e.g. the 06:30 sleep after a night shift.
@@ -68,7 +95,7 @@ export function windDownNow() {
 // Free time on a date: the waking window minus every block, wind-down and pinned task.
 function freeOn(date, taken, from) {
   const st = S.settings.plan || {}, lo = Math.max(toMin(st.dayStart || "07:00"), from || 0), hi = toMin(st.dayEnd || "23:30");
-  const busy = segments(date).map(g => [g.s, g.e]).concat(taken[date] || []);
+  const pad = st.buffer ?? 10, busy = segments(date).map(g => [g.s - pad, g.e + pad]).concat(taken[date] || []);
   const w = windDownOn(date); if (w && w.date === date) busy.push([w.at, 1440]);
   busy.sort((a, b) => a[0] - b[0]);
   const free = []; let cur = lo;

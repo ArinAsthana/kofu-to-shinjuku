@@ -181,7 +181,11 @@ export function setSlot(key, exId, parkCurrent) {
   put("areaState", { id: key, current: exId, parked });
 }
 
-export function planFor(dateStr) { return SPLIT[parse(dateStr).getDay()]; }
+// The day's session: the default split minus slots switched off, plus exercises added (Settings → session menu).
+export function planFor(dateStr) {
+  const d = parse(dateStr).getDay(), base = SPLIT[d], cfg = (S.settings.sessions || {})[d] || {};
+  return { ...base, dow: d, slots: base.slots.filter(k => !(cfg.off || []).includes(k)), allSlots: base.slots, off: cfg.off || [], extra: (cfg.extra || []).filter(id => allExercises().some(e => e.id === id)) };
+}
 export const workoutOn = date => live("workouts").find(w => w.date === date);
 
 /* ---------- pain ---------- */
