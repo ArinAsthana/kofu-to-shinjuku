@@ -217,7 +217,8 @@ function homeSettings() {
     <p class="small muted">Uses the back camera so the app looks see-through. It turns itself off after the time below, when the battery drops under 20%, or when you leave the app. The camera runs only on this phone; nothing is recorded.</p>
     <div class="grid"><label class="f">Turn off after (min)<input type="number" inputmode="numeric" min="1" max="60" data-ch="glassmins" value="${c.mins}"></label></div>
     <label class="row small" style="margin-top:10px"><input type="checkbox" data-ch="glassfull" style="width:auto" ${c.full ? "checked" : ""}> Full screen (hides the status and navigation bars)</label>
-    <div class="btns"><button class="btn sm ${G.live() ? "" : "primary"}" data-act="glass">${G.live() ? `Turn off (${G.minsLeft()} min left)` : "Turn on"}</button></div>
+    <div class="btns"><button class="btn sm ${G.live() ? "" : "primary"}" data-act="glass">${G.live() ? `Turn off (${G.minsLeft()} min left)` : "Turn on"}</button>${G.live() && G.lens().n > 1 ? `<button class="btn sm" data-act="glasslens">Next lens (${G.lens().i + 1} of ${G.lens().n})</button>` : ""}</div>
+    ${G.live() && G.lens().n > 1 ? `<p class="small muted">Tap Next lens until the picture is the widest one (your 0.6×). It's remembered.</p>` : ""}
     <h3 style="margin-top:14px">Line it up</h3>
     <p class="small muted">Turn Glass mode on, hold the phone where you normally do, and drag until the picture matches what's behind it. Also applies to the photo.</p>
     <div class="tune">${[["blur", "Blur", 0, 20, 1, "px"], ["dim", "Brightness", 0.15, 1, 0.05, ""], ["zoom", "Zoom", 1, 1.8, 0.02, "×"], ["y", "Crop height", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
@@ -1392,7 +1393,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.13.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.13.2 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1671,6 +1672,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const err = await G.startGlass(why => { if (why) toast(why); render(); });
       toast(err || `Glass mode on for ${G.cfg().mins} min`); return render();
     }
+    case "glasslens": await G.nextLens(); return render();
     case "bgclear": await G.clearPhoto(); return render();
     case "glassreset": { const d = G.DEFAULTS; G.setCfg({ blur: d.blur, dim: d.dim, zoom: d.zoom, y: d.y }); return render(); }
 
