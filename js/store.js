@@ -12,6 +12,7 @@ export const RECORD_STORES = [
   "care", "careLog", "people", "hangouts", // schema 4: care items {name, slot, order, days, note}; careLog {item, date}; people {name, type, scores:{criterion:1-5}, every, where, note}; hangouts {date, people:[ids], what, note}
   "wishlist", // schema 5: {name, price ¥, xp cost, kind item|trip, link, note, bought: null|{date, xp, yen}}
   "blockLog", "penalties", // schema 6: blockLog {date, block, subj, topic, gain %, poms, done}; penalties {date, block, title, xp, task} (id "pen-<date>-<block>")
+  "jlptItems", "jlptExams", // schema 8: JLPT results, see jlpt.js (questions themselves are static files in data/jlpt)
   "cards", "reviewDays", // schema 7: flashcards (see cards.js); reviewDays one record a day {id "rv-<date>", date, n, ok}. Card media stays in the photos store.
 ];
 
@@ -40,6 +41,7 @@ function freshSettings() {
     // from: only quest blocks ending after this (ms) can earn a penalty. topics: edited topic lists, null = built-in.
     study: { ...STUDY, from: Date.now(), topics: null },
     cards: { newPerDay: 15 }, // new flashcards introduced per day
+    jlpt: { level: "N5", unlocked: ["N5"], placed: false }, // ladder position; levels unlock by placement or Boss Raid
   };
 }
 
@@ -134,6 +136,8 @@ const MIGRATIONS = {
   5: s => { s.blockLog = s.blockLog || []; s.penalties = s.penalties || []; return s; },
   // 6 -> 7: flashcards. Two new empty stores; nothing existing changes.
   6: s => { s.cards = s.cards || []; s.reviewDays = s.reviewDays || []; return s; },
+  // 7 -> 8: JLPT ladder results. Two new empty stores; nothing existing changes.
+  7: s => { s.jlptItems = s.jlptItems || []; s.jlptExams = s.jlptExams || []; return s; },
 };
 function seedCare(s) {
   const d = new Date(), since = localIso(d).slice(0, 10); // adherence counts from the day tracking starts
@@ -167,6 +171,7 @@ export function migrate(s) {
   s.settings.fun = Object.assign(base.settings.fun, s.settings.fun || {});
   s.settings.study = Object.assign(base.settings.study, s.settings.study || {});
   s.settings.cards = Object.assign(base.settings.cards, s.settings.cards || {});
+  s.settings.jlpt = Object.assign(base.settings.jlpt, s.settings.jlpt || {});
   s.app = APP_ID;
   return s;
 }
