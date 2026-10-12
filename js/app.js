@@ -30,12 +30,14 @@ const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIC
 const go = h => { location.hash = h; };
 window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
 
-const TABS = [["home", "System"], ["plan", "Plan"], ["social", "Social"], ["train", "Train"], ["body", "Body"], ["money", "Money"], ["skills", "Skills"]];
+// Five tabs. Train, Body and Care share one tab; Money and Skills live under Status.
+const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Body"], ["social", "Social"], ["status", "Status"]];
+const TAB_OF = { home: "home", alerts: "home", more: "home", plan: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
-  $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${tab === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
+  $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
   hydrate();
 }
@@ -52,9 +54,8 @@ const yen = n => "¥" + Math.round(n || 0).toLocaleString("en-US");
 const sysBox = (body, sub, act) => `<div class="sys"><b>[SYSTEM]</b> ${body}${sub ? `<div class="x">${sub}</div>` : ""}${act || ""}</div>`;
 
 function vHome() {
-  const t = E.today(), xp = E.xpTotal(), plan = E.planFor(t), w = E.workoutOn(t);
+  const t = E.today(), plan = E.planFor(t), w = E.workoutOn(t);
   const done = w ? (w.entries || []).filter(e => e.sets && e.sets.length).length : 0;
-  const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
   const quests = HABITS.map(h => {
     const on = !!E.habitDone(h.id, t), wc = E.habitWeekCount(h.id), tg = E.habitTarget(h.id);
     return `<div class="q ${on ? "done" : ""}">
@@ -63,41 +64,19 @@ function vHome() {
       <div class="xp">+${XP.habit}</div></div>`;
   }).join("");
   const a7 = E.avg7(), food = E.dayFood(t), ft = S.settings.food;
-  const flags = E.painFlags();
-  const hasData = live("workouts").length + live("bodyweight").length + live("meals").length + live("habitLog").length > 0;
-  const lastExp = S.settings.lastExportAt;
-  const expDays = lastExp ? E.daysBetween(lastExp.slice(0, 10), t) : null;
-  const days = E.daysBetween(t, S.settings.dates.graduation), mp = E.moneyPlan();
+  const days = E.daysBetween(t, S.settings.dates.graduation);
   const doneToday = HABITS.filter(h => E.habitDone(h.id, t)).length;
-  const wd = P.windDownNow(), nn = P.nowNext();
-  const alerts = [
-    wd ? sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.") : "",
-    overduePeople().length ? sysBox(`${overduePeople().length} ${overduePeople().length === 1 ? "person is" : "people are"} overdue for a catch-up.`, overduePeople().slice(0, 3).map(p => esc(p.name)).join(", "), `<div class="btns"><button class="btn sm" data-act="nav" data-id="social">Open Social</button></div>`) : "",
-    E.moneyDue() ? sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", `<div class="btns"><button class="btn sm" data-act="nav" data-id="money">Report now</button></div>`) : "",
-    flags.length ? sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.") : "",
-    hasData && (expDays === null || expDays >= 7) ? sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", `<div class="btns"><button class="btn sm" data-act="nav" data-id="more">Export now</button></div>`) : "",
-  ].filter(Boolean);
-  if (!alerts.length) alerts.push(sysBox(doneToday === HABITS.length ? "All daily quests cleared." : "Daily quests have arrived.", doneToday === HABITS.length ? "Rest is part of training." : `${HABITS.length - doneToday} left today.`));
-  const stats = statList();
+  const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length;
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
-    <button class="rbtn" data-act="nav" data-id="more" aria-label="Settings and backup">⚙</button></header>
-  <div class="stack">${alerts.join("")}</div>
-  <div class="carousel">
-    <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
-      <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "#fff")}
-      <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} to spend${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
-    <div class="card g-ind"><span class="k">Days to graduation</span>
-      <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
-    <button class="card g-org" data-act="nav" data-id="money"><span class="k">Treasury</span>
-      <div><div class="dm big2">${Math.round(mp.savePct * 100)}%</div><div class="small soft">${yen(mp.bank)} of ${yen(mp.goal)} · debt ${yen(mp.debt)}</div></div></button>
-    <div class="card g-cyan"><span class="k">Streak</span>
-      <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
-  </div>
+    <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">🔔${n ? `<span class="badge">${n}</span>` : ""}</button>
+    <button class="rbtn" data-act="nav" data-id="more" aria-label="Settings and backup">⚙</button></div></header>
+  <button class="strip" data-act="nav" data-id="status">
+    <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span>🔥 ${E.streak()}</span><span>${days}d to grad</span><span class="chev">›</span></button>
 
   <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
-  <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="plan">
-    <div class="grow">${nn.now ? `<b>${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</b> <span class="small muted">until ${P.toHM(nn.now.e)}</span>` : `<b>Free time</b>`}
+  <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="plan">
+    <div class="grow">${wd ? `<b>Wind down</b> <span class="small muted">bed at ${P.toHM(wd.bed)}</span>` : nn.now ? `<b>${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</b> <span class="small muted">until ${P.toHM(nn.now.e)}</span>` : `<b>Free time</b>`}
       <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
     <span class="chev">›</span></button>
 
@@ -115,23 +94,65 @@ function vHome() {
       <div class="small muted">${plan.postShift ? "After night shift · " : ""}${done}/${plan.slots.length} exercises${w && E.habitDone("gym", t) ? " · logged" : ""}</div></div>
     <span class="chev">›</span></button>
 
-  <h2>Stats</h2>
-  <div class="panel">${Ch.radar(stats)}<p class="tiny muted">Each stat fills toward its last skill tier. DISC is the share of weekly targets hit over 4 weeks.</p></div>
-
   <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="body/food">
     <div class="grow"><div class="small muted">Body and food today</div>
       <div><b>${a7 ? r1(a7) + " kg" : "No weight yet"}</b> <span class="small muted">${a7 ? "7-day average" : ""}</span></div>
       <div class="small">${food.kcal} kcal${ft.kcalTarget ? " / " + ft.kcalTarget : ""} · ${r1(food.protein)} g protein${ft.proteinTarget ? " / " + ft.proteinTarget : ""}</div></div>
     <span class="chev">›</span></button>
 
+`;
+}
+
+
+// Everything the System wants from you. Shown behind the bell on Home.
+function alertList() {
+  const t = E.today(), flags = E.painFlags(), od = overduePeople(), wd = P.windDownNow();
+  const hasData = live("workouts").length + live("bodyweight").length + live("meals").length + live("habitLog").length > 0;
+  const lastExp = S.settings.lastExportAt, expDays = lastExp ? E.daysBetween(lastExp.slice(0, 10), t) : null;
+  const unplaced = P.plan().unplaced.length;
+  const btn = (id, l) => `<div class="btns"><button class="btn sm" data-act="go" data-id="${id}">${l}</button></div>`;
+  return [
+    wd && sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done."),
+    od.length && sysBox(`${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.`, od.slice(0, 3).map(p => esc(p.name)).join(", "), btn("social", "Open Social")),
+    E.moneyDue() && sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now")),
+    flags.length && sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio."),
+    unplaced && sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan/todo", "Open to-do")),
+    hasData && (expDays === null || expDays >= 7) && sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("more", "Export now")),
+  ].filter(Boolean);
+}
+function vAlerts() {
+  const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
+  return `<button class="back" data-act="nav" data-id="home">‹ System</button><h1>Notifications</h1>
+  <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
+}
+
+const statusSeg = cur => `<div class="pills">${[["status", "Overview"], ["money", "Money"], ["skills", "Skills"]].map(([k, l]) => `<button class="pill" data-act="nav" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
+function vStatus() {
+  const t = E.today(), xp = E.xpTotal(), mp = E.moneyPlan(), days = E.daysBetween(t, S.settings.dates.graduation);
+  const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
+  return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div></header>${statusSeg("status")}
+  <div class="carousel">
+    <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
+      <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "#fff")}
+      <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} to spend${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
+    <div class="card g-ind"><span class="k">Days to graduation</span>
+      <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
+    <button class="card g-org" data-act="nav" data-id="money"><span class="k">Treasury</span>
+      <div><div class="dm big2">${Math.round(mp.savePct * 100)}%</div><div class="small soft">${yen(mp.bank)} of ${yen(mp.goal)} · debt ${yen(mp.debt)}</div></div></button>
+    <div class="card g-cyan"><span class="k">Streak</span>
+      <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
+  </div>
+  <h2>Stats</h2>
+  <div class="panel">${Ch.radar(statList())}<p class="tiny muted">Each stat fills toward its last skill tier. DISC is the share of weekly targets hit over 4 weeks.</p></div>
   <div class="panel">
     <h3>Weekly report</h3>
-    <p class="small muted">Markdown summary of this week for Claude. Readiness sections arrive in v2.</p>
+    <p class="small muted">Markdown summary of this week for Claude.</p>
     <div class="btns"><button class="btn primary" data-act="report">Copy weekly report</button></div>
     <div id="reportBox"></div>
   </div>
   <p class="tiny muted" style="text-align:right;margin-top:8px">${esc(Sync.statusText())}</p>`;
 }
+const bodySeg = cur => `<div class="pills">${[["train", "Train"], ["body/weight", "Weight"], ["body/food", "Food"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
 
 function statList() {
   const sk = Object.fromEntries(SKILLS.map(x => [x.id, E.skillInfo(x)]));
@@ -176,7 +197,7 @@ function vSkills([sub]) {
         <b>${esc(c.title)}</b><div class="small soft">${esc(c.text)}</div></div>`;
     }).join("")}</div><p class="tiny muted">Locked ideas still work today. They just count once both skills reach tier 2.</p>`;
   }
-  return `<header class="top"><div><div class="hdr">Skill tree</div><h1>Skills</h1></div></header>${seg}${body}`;
+  return `<header class="top"><div><div class="hdr">Skill tree</div><h1>Skills</h1></div></header>${statusSeg("skills")}${seg}${body}`;
 }
 
 /* ================= MONEY ================= */
@@ -202,7 +223,7 @@ function vMoney([sub] = []) {
   const mp = E.moneyPlan(), rs = E.moneyReports().slice().reverse(), last = rs[0], due = E.moneyDue(), mk = E.monthKey();
   const bl = E.bills(), unpaid = bl.filter(b => !(b.paid || {})[mk]);
   const segs = 20, filled = Math.round(mp.paidPct * segs);
-  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div><div class="rbtn" aria-hidden="true">¥</div></header>
+  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div><div class="rbtn" aria-hidden="true">¥</div></header>${statusSeg("money")}
   ${due ? sysBox("Weekly money report is due.", "Asked every week. Enter today's numbers.") : ""}
   <div class="card g-ind" style="margin-top:12px">
     <div class="k">${due ? "Report for this week" : "Update this week's report"}</div>
@@ -689,7 +710,7 @@ function vTrainHome() {
   const extra = w ? (w.entries || []).filter(e => e.sets.length && !plan.slots.some(k => E.slotState(k).current === e.exercise)) : [];
   const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const flags = E.painFlags();
-  return `<h1>Train</h1>
+  return `<h1>Body</h1>${bodySeg("train")}
   <div class="panel">
     <div class="row between"><div><div class="small muted">${E.fmtDate(t)} · ${esc(plan.where)}</div><h3 style="margin:2px 0 0">${esc(plan.name)}</h3></div></div>
     ${plan.postShift || postShift ? `<label class="row small" style="margin-top:8px"><input type="checkbox" data-ch="postshift" ${postShift ? "checked" : ""} style="width:22px;height:22px"> After a night shift: keep 1–2 reps in reserve</label>` : ""}
@@ -865,8 +886,7 @@ function vRuns() {
 let foodDate = null, foodForm = null;
 function vBody([sub]) {
   sub = sub || "weight";
-  const seg = `<div class="seg">${[["weight", "Weight"], ["food", "Food"], ["care", "Care"], ["check", "Weekly check"]].map(([k, l]) => `<button data-act="go" data-id="body/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
-  return `<h1>Body</h1>${seg}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
+  return `<h1>Body</h1>${bodySeg("body/" + sub)}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
 }
 
 function weightChart() {
@@ -992,7 +1012,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.4 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.5 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
