@@ -466,3 +466,17 @@ body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150p
 .stages .st.on{background:var(--acc);color:var(--acc-ink);border-color:transparent;font-weight:600}
 .stages .st b{background:var(--acc);color:var(--acc-ink);border-radius:99px;padding:0 7px;font-size:12px}
 .stages .st.off{color:var(--soft)}.stages .st i{font-style:normal;font-size:11px}
+
+/* v2.4 JLPT */
+.ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 12px}
+.rung{border:1px solid var(--rule);background:var(--raise);border-radius:var(--r-btn);min-height:44px;font-weight:700;font-size:15px;color:var(--fg);display:flex;align-items:center;justify-content:center;gap:4px}
+.rung.cur{background:var(--fg);color:var(--bg);border-color:transparent}
+.rung.off{color:var(--soft);background:transparent}
+.rankbig{font-size:44px;font-weight:700;line-height:1;color:var(--acc);letter-spacing:-.02em}
+.passage .ptext{font-size:16px;line-height:1.75;white-space:normal}
+.jq{font-size:19px;line-height:1.6}
+.jq u,.ptext u,.opt u,.item u{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;text-decoration-color:var(--acc)}
+.opt .on{display:inline-block;min-width:20px;color:var(--soft);font-weight:600}
+.opt.sel{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 14%,var(--panel-solid))}
+.sys.ex{margin-top:10px}
+.ptab{overflow-x:auto;margin:6px 0}.ptab table{border-collapse:collapse;font-size:12px;min-width:100%}.ptab th,.ptab td{border:1px solid var(--rule);padding:4px 6px;text-align:left;vertical-align:top}.ptab th{color:var(--dim);font-weight:600}

@@ -10,6 +10,7 @@ import * as St from "./study.js";
 import * as G from "./glass.js";
 import * as K from "./cards.js";
 import { STARTER } from "./decks.js";
+import * as J from "./jlpt.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -44,16 +45,16 @@ document.addEventListener("touchend", e => {
   if (d < el.dataset.min || d > el.dataset.max) return;
   planDate = d === E.today() ? null : d; entering = true; render();
 }, { passive: true });
-window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeon: "home", focus: "home", cards: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -316,7 +317,7 @@ function vFocus() {
       <p class="tiny muted">${g.ended ? `Report by ${P.toHM(g.closes)}.` : "Report when the block ends."} No work done by then counts as skipped: −${pen} XP and a make-up penalty quest. The shop locks until it's cleared.</p></div>`;
   }
   const due = K.queue().length;
-  const stages = `<div class="stages"><span class="st on">1 · Topic</span><button class="st" data-act="nav" data-id="cards/review">2 · Flashcards${due ? ` <b>${due}</b>` : ` ${ic("check", "inl")}`}</button><span class="st off">3 · JLPT <i>soon</i></span></div>`;
+  const stages = `<div class="stages"><span class="st on">1 · Topic</span><button class="st" data-act="nav" data-id="cards/review">2 · Flashcards${due ? ` <b>${due}</b>` : ` ${ic("check", "inl")}`}</button><button class="st" data-act="nav" data-id="jlpt/q">3 · JLPT</button></div>`;
   return `${back}<header class="top"><div><div class="hdr">System · Quest · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>
   ${stages}${timer}${topicHtml}${rep}`;
 }
@@ -348,7 +349,7 @@ function runAssess() {
 
 // Everything the System wants from you. Shown behind the bell on Home.
 function alertList() {
-  const t = E.today(), flags = E.painFlags(), od = overduePeople(), wd = P.windDownNow();
+  const t = E.today(), flags = E.painFlags(), wd = P.windDownNow();
   const hasData = live("workouts").length + live("bodyweight").length + live("meals").length + live("habitLog").length > 0;
   const lastExp = S.settings.lastExportAt, expDays = lastExp ? E.daysBetween(lastExp.slice(0, 10), t) : null;
   const unplaced = P.plan().unplaced.length;
@@ -358,7 +359,6 @@ function alertList() {
     pens.length && penaltyBox(),
     fg.open && fg.ended && reportDueBox(fg),
     wd && sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done."),
-    od.length && sysBox(`${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.`, od.slice(0, 3).map(p => esc(p.name)).join(", "), btn("social", "Open people")),
     E.moneyDue() && sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now")),
     flags.length && sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio."),
     unplaced && sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan")),
@@ -605,12 +605,11 @@ function vSelf() {
   <h2>Assessment</h2><div class="panel">${S.settings.social.criteria.map(c => critRow(c, sc[c] || 0, "me")).join("")}</div>`;
 }
 const lastSeen = id => live("hangouts").filter(h => (h.people || []).includes(id)).reduce((a, h) => h.date > a ? h.date : a, "");
-const every = p => p.every === undefined || p.every === null || p.every === "" ? ptype(p.type)[2] : +p.every || null;
+// v2.4: no more "overdue for a catch-up" reminders (Arin's call). p.every stays in the data, unused.
 function personState(p) {
-  const ls = lastSeen(p.id), ev = every(p), since = ls ? E.daysBetween(ls, E.today()) : null;
-  return { ls, since, ev, overdue: !!ev && (since === null || since > ev) };
+  const ls = lastSeen(p.id), since = ls ? E.daysBetween(ls, E.today()) : null;
+  return { ls, since };
 }
-const overduePeople = () => live("people").filter(p => personState(p).overdue);
 const badge = (rk, big) => `<span class="rank ${big ? "big" : ""}" style="--c:var(--${rk.c})">${rk.r}</span>`;
 let personForm = false, hangSel = null;
 
@@ -635,10 +634,10 @@ function personFormHtml() {
 }
 function vPeople() {
   const ppl = live("people").map(p => ({ p, st: personState(p), rk: rankOf(p) }));
-  ppl.sort((a, b) => (b.st.overdue - a.st.overdue) || ("SABCDE?".indexOf(a.rk.r) - "SABCDE?".indexOf(b.rk.r)) || a.p.name.localeCompare(b.p.name));
-  const od = ppl.filter(x => x.st.overdue), bl = balance();
+  ppl.sort((a, b) => ("SABCDE?".indexOf(a.rk.r) - "SABCDE?".indexOf(b.rk.r)) || a.p.name.localeCompare(b.p.name));
+  const bl = balance();
   const counts = RANKS.map(([r, , c]) => [r, c, ppl.filter(x => x.rk.r === r).length]);
-  return `${od.length ? sysBox(`<span class="warn">${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.</span>`, od.slice(0, 4).map(x => esc(x.p.name)).join(", ") + (od.length > 4 ? "…" : "") + ". One message counts as a start.") : ""}
+  return `
   ${rivalBox()}
   <div class="panel">
     <div class="row between"><span class="k">Last 30 days</span><span class="mono small muted">${bl.total} hangouts</span></div>
@@ -649,7 +648,7 @@ function vPeople() {
   </div>
   <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="social/p/${p.id}">
       ${badge(rk)}<div class="grow"><div class="t">${esc(p.name)}</div>
-      <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}${st.ev ? ` · every ${st.ev}d` : ""}${st.overdue ? ` · <span class="warn">overdue</span>` : ""}</div></div><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
+      <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}</div></div><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
   ${tip("people-rank", "Rank is the average of your scores (? left out): S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. Each score has a Key on the person's page. It's your private read, not a verdict on them.")}`;
 }
 function vPerson(id) {
@@ -661,11 +660,10 @@ function vPerson(id) {
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
   <h2>Assessment</h2>
   <div class="panel">${crit.map(c => critRow(c, (p.scores || {})[c] || 0, p.id)).join("")}</div>
-  <h2>Keep in touch</h2>
+  <h2>Hangouts</h2>
   <div class="panel"><div class="grid">
-    <label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-    <label class="f">See every (days)<input type="number" inputmode="numeric" min="0" data-ch="pevery" data-id="${p.id}" value="${p.every ?? ""}" placeholder="${ptype(p.type)[2] ?? "no reminder"}"></label></div>
-    <p class="small muted" style="margin-top:8px">${st.since === null ? "No hangouts logged yet." : `Last seen ${E.fmtDate(st.ls)} (${st.since}d ago).`}${st.overdue ? ` <span class="warn">Overdue.</span>` : ""}</p>
+    <label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+    <p class="small muted" style="margin-top:8px">${st.since === null ? "No hangouts logged yet." : `Last seen ${E.fmtDate(st.ls)} (${st.since}d ago).`}</p>
     <div class="btns"><button class="btn go" data-act="hangwith" data-id="${p.id}">Log a hangout with ${esc(p.name)}</button></div></div>
   <h2>Notes</h2>
   <div class="panel"><label class="f">Where you met<input data-ch="pwhere" data-id="${p.id}" value="${esc(p.where || "")}"></label>
@@ -883,7 +881,7 @@ function vDungeon() {
   ${pens.length ? penaltyBox() : ""}
   ${gateCard("body", bg)}${gateCard("study", sg)}
   ${tip("dungeon", `Each dungeon opens ${S.settings.plan.openPad ?? 10} min before its quest block. Do the work inside the block, or it counts as skipped: −${S.settings.study.penaltyXp ?? 30} XP and a make-up quest.`)}
-  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
+  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="jlpt">JLPT ladder</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
 }
 
 let topicEdit = null; // subject whose topic list is open for editing
@@ -996,8 +994,8 @@ function vReview() {
   let c = rv && live("cards").find(x => x.id === rv.id);
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), opts: K.mode(c) === "mcq" ? K.options(c) : null, flip: false, pick: null } : null; }
   const head = `${back}<header class="top"><div><div class="hdr">Study dungeon · Stage 2 · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
-  if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Stage 3, JLPT practice, arrives in the next update.`,
-    `<div class="btns"><button class="btn sm" data-act="nav" data-id="focus">Back to the block</button><button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
+  if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
+    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="nav" data-id="focus">Back to the block</button><button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
   const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
     const answered = rv.pick != null, right = c.back.trim();
@@ -1025,6 +1023,92 @@ async function recStart() {
     };
     mr.start(); recorder = mr; render();
   } catch (e) { toast("Microphone not allowed"); }
+}
+
+/* ================= JLPT ================= */
+let jq = null, exam = null; // practice question on screen; exam in progress {kind, lvl, qs, i, ans, res}
+const RANK_ORDER = "EDCBAS";
+const stem = s => esc(s).replace(/__(.+?)__/g, "<u>$1</u>").replace(/\n/g, "<br>");
+function jlptNeed(lvls) { const miss = lvls.filter(l => !J.bank(l)); miss.forEach(l => J.load(l, render)); return miss.length ? `<p class="empty">Loading questions…</p>` : ""; }
+// Passage text; runs of lines with ｜ (notices, timetables) become a table, the first row as its header.
+const ptext = s => String(s || "").split("\n").reduce((acc, l) => {
+  const last = acc[acc.length - 1];
+  if (l.includes("｜")) { if (Array.isArray(last)) last.push(l); else acc.push([l]); } else acc.push(l);
+  return acc;
+}, []).map(x => Array.isArray(x) ? `<div class="ptab"><table>${x.map((r, i) => `<tr>${r.split("｜").map(c => i ? `<td>${stem(c.trim())}</td>` : `<th>${stem(c.trim())}</th>`).join("")}</tr>`).join("")}</table></div>` : stem(x) + "<br>").join("").replace(/(<br>)+$/, "");
+function passageHtml(lvl, it) {
+  const p = it.p && J.passage(lvl, it.p); if (!p) return "";
+  return `<div class="panel passage ja">${p.title ? `<div class="k">${esc(p.title)}</div>` : ""}<div class="ptext">${ptext(p.text)}</div></div>`;
+}
+function qHtml(lvl, it, pick, reveal, act) {
+  const right = it.a;
+  return `${passageHtml(lvl, it)}<div class="panel fc"><div class="k">${lvl} · ${esc(J.TYPES[it.type] || it.type)}${it.genki ? " · Genki L" + it.genki : ""}</div>
+    ${J.PROMPT[it.type] ? `<div class="small muted" style="margin-bottom:8px">${J.PROMPT[it.type]}</div>` : ""}<div class="jq ja">${stem(it.q)}</div></div>
+    <div class="opts">${it.opts.map((o, i) => `<button class="opt ja ${reveal ? (i === right ? "right" : i === pick ? "wrong" : "dim") : pick === i ? "sel" : ""}" data-act="${act}" data-id="${i}" ${reveal ? "disabled" : ""}><span class="on">${i + 1}</span> ${stem(o)}</button>`).join("")}</div>
+    ${reveal && it.ex ? `<div class="sys ex"><b>${pick === right ? "Correct" : "Not quite"}</b> · ${esc(it.ex)}</div>` : ""}`;
+}
+function vJlpt([sub, a]) {
+  if (sub === "q") return vJlptQ(a);
+  if (sub === "exam") return vExam(a);
+  const lvl = J.level(), wait = jlptNeed([lvl]);
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><div class="hdr">Study dungeon · Stage 3</div><h1>JLPT ladder</h1></div>${gear("dungeon")}</header>`;
+  const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
+    return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
+  if (wait) return head + ladder + wait;
+  const st = J.stats(lvl), g = St.focusGate(), nl = J.nextLock(lvl), tl = J.titles();
+  const exams = live("jlptExams").sort((x, y) => y.date.localeCompare(x.date) || (y.u || 0) - (x.u || 0));
+  const lastMock = exams.find(x => x.kind === "mock" && x.lvl === lvl), mockOpen = RANK_ORDER.indexOf(st.rank) >= RANK_ORDER.indexOf(J.MOCK_AT);
+  const secBars = J.SECS.map(([k, l]) => { const s = st.by[k]; return s.n ? `<div class="row between small" style="margin-top:8px"><span>${l}</span><span class="muted">${s.right}/${s.n}</span></div>${bar(s.right / s.n, "var(--sys)")}` : ""; }).join("");
+  const gateNote = g.open ? "" : `<p class="small muted">${ic("lock", "inl")} Practice opens in your next study block${g.next ? ": " + esc(dayLabel(g.next.date)) + " " + P.toHM(g.next.s) : ""}.</p>`;
+  return `${head}${ladder}
+  ${tip("jlpt", "Original questions in the real JLPT formats. Right answers rank you up; wrong ones become flashcards in the JLPT mistakes deck. Reach Rank " + J.MOCK_AT + " to open the Boss Raid, a mock exam that unlocks the next level.")}
+  <div class="panel"><div class="row between"><div><span class="k">${lvl} rank</span><div class="rankbig">${st.rank}</div></div><div style="text-align:right"><div class="dm big2">${st.right}/${st.open}</div><div class="small muted">mastered</div></div></div>
+    ${bar(st.frac, "var(--sys)")}${secBars}
+    ${nl ? `<p class="tiny muted" style="margin-top:10px">${ic("lock", "inl")} ${nl.n} question${nl.n === 1 ? " unlocks" : "s unlock"} when Genki II lesson ${nl.lesson} is at 100% in Study topics.</p>` : ""}</div>
+  ${gateNote}
+  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="nav" data-id="jlpt/q" ${g.open ? "" : "disabled"}>Practice</button>${J.SECS.map(([k, l]) => `<button class="btn sm" data-act="nav" data-id="jlpt/q/${k}" ${g.open ? "" : "disabled"}>${l}</button>`).join("")}</div>
+  <div class="panel dgate ${mockOpen && g.open ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Boss Raid · ${lvl} mock exam</span><h3 style="margin:2px 0 4px">${J.TITLES[lvl]}</h3>
+    <div class="small muted">${mockOpen ? `Pass at 70% with no section under 35%.${lastMock ? ` Last: ${Math.round(lastMock.pct * 100)}% ${lastMock.pass ? "cleared" : "failed"}.` : ""}` : `Opens at Rank ${J.MOCK_AT}.`}</div></div>
+    <button class="btn ${mockOpen && g.open ? "go" : ""}" data-act="exam" data-id="mock" ${mockOpen && g.open ? "" : "disabled"}>Enter</button></div></div>
+  ${!S.settings.jlpt.placed ? `<div class="panel"><h3>Placement test</h3><p class="small muted">30 questions from N5, N4 and N3. Score 80% on a level and you skip it. You're on Genki II, so this likely saves you N5.</p>
+    <div class="btns"><button class="btn sm" data-act="exam" data-id="place" ${g.open ? "" : "disabled"}>Take it</button></div></div>` : ""}
+  ${tl.length ? `<h2>Titles</h2><div class="chips">${tl.map(t => `<span class="chip">${ic("star", "inl")} ${esc(t)}</span>`).join("")}</div>` : ""}
+  ${exams.length ? fold("jlpt-exams", `<b class="grow">Exam history</b><span class="small muted">${exams.length}</span>`, exams.slice(0, 20).map(x => `<div class="item row between small"><span class="grow">${x.kind === "place" ? "Placement" : x.lvl + " Boss Raid"} · ${esc(dayLabel(x.date))}</span><span class="${x.pass ? "" : "muted"}">${Math.round(x.pct * 100)}% ${x.pass ? ic("check", "inl") : ""}</span></div>`).join("")) : ""}`;
+}
+function vJlptQ(sec) {
+  const lvl = J.level(), back = `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} JLPT ladder</button>`;
+  const g = St.focusGate(); if (!g.open) return `${back}<h1>JLPT practice</h1>${gateClosedHtml(g, "JLPT practice")}`;
+  const wait = jlptNeed([lvl]); if (wait) return back + wait;
+  if (!jq || jq.lvl !== lvl || jq.sec !== (sec || null) || !J.bank(lvl).byId[jq.id]) {
+    const it = J.pick(lvl, sec, jq && jq.lvl === lvl ? jq : null);
+    if (!it) return `${back}<h1>JLPT practice</h1><p class="empty">No open questions in this section yet.</p>`;
+    jq = { lvl, sec: sec || null, id: it.id, pick: null, p: it.p || null, done: jq && jq.p === it.p ? jq.done : [], n: jq ? jq.n : 0, ok: jq ? jq.ok : 0 };
+  }
+  const it = J.bank(lvl).byId[jq.id], st = J.stats(lvl);
+  return `${back}<header class="top"><div><div class="hdr">Stage 3 · ${lvl} · Rank ${st.rank}${sec ? " · " + J.SECS.find(x => x[0] === sec)[1] : ""}</div><h1>JLPT practice</h1></div><span class="small muted">${jq.ok}/${jq.n} this round</span></header>
+  ${qHtml(lvl, it, jq.pick, jq.pick != null, "jqpick")}
+  ${jq.pick != null ? `<div class="btns"><button class="btn primary block" data-act="jqnext">Next</button></div>` : ""}`;
+}
+function vExam(kind) {
+  const back = `<button class="back" data-act="examquit">${ic("left")} ${exam && !exam.res ? "Quit" : "JLPT ladder"}</button>`;
+  if (!exam || exam.kind !== kind) return `${back}<p class="empty">No exam running.</p>`;
+  const title = kind === "place" ? "Placement test" : `Boss Raid · ${exam.lvl}`;
+  if (exam.res) {
+    const { g, gains } = exam.res, rows = Object.entries(g.sec).map(([k, [o, n]]) => `<div class="row between small" style="margin-top:8px"><span>${J.SECS.find(x => x[0] === k)[1]}</span><span>${o}/${n} · ${Math.round(o / n * 100)}%</span></div>${bar(o / n, o / n >= 0.35 ? "var(--sys)" : "var(--bad)")}`).join("");
+    const verdict = kind === "place" ? (g.clears.length ? `Skipped ${g.clears.join(", ")}. You start at ${J.level()}.` : "Start at N5. Every level unlocks from its Boss Raid.")
+      : g.pass ? `Cleared. Title earned: ${J.TITLES[exam.lvl]}.${J.LEVELS[J.LEVELS.indexOf(exam.lvl) + 1] ? " " + J.LEVELS[J.LEVELS.indexOf(exam.lvl) + 1] + " is open." : ""}` : `Not yet. ${g.floorOk ? "Pass mark is 70%." : "A section fell under 35%."} Your misses are now flashcards.`;
+    const miss = exam.qs.map((q, i) => ({ q, i, it: J.bank(q.lvl).byId[q.id] })).filter(x => exam.ans[x.i] !== x.it.a);
+    return `${back}<header class="top"><div><div class="hdr">${title}</div><h1>${Math.round(g.pct * 100)}%</h1></div></header>
+      ${sysBox(esc(verdict), gains.length ? esc(gains.map(x => "+" + x.xp + " XP · " + x.label).join(", ")) : "")}
+      <div class="panel">${rows}${kind === "place" ? Object.entries(g.per).map(([l, [o, n]]) => `<div class="row between small" style="margin-top:8px"><span>${l}</span><span>${o}/${n}</span></div>`).join("") : ""}</div>
+      ${miss.length ? fold("exam-miss", `<b class="grow">Review mistakes</b><span class="small muted">${miss.length}</span>`, miss.map(x => `<div class="item small"><div class="ja">${stem(x.it.q)}</div><div><b class="ja">${stem(x.it.opts[x.it.a])}</b>${exam.ans[x.i] != null ? ` <span class="muted">· you chose ${stem(x.it.opts[exam.ans[x.i]])}</span>` : ""}</div><div class="muted">${esc(x.it.ex || "")}</div></div>`).join(""), true) : ""}
+      <div class="btns"><button class="btn primary" data-act="examquit">Done</button></div>`;
+  }
+  const q = exam.qs[exam.i], it = J.bank(q.lvl).byId[q.id], answered = exam.ans.filter(x => x != null).length;
+  return `${back}<header class="top"><div><div class="hdr">${title} · ${exam.i + 1} of ${exam.qs.length}</div><h1>${J.SECS.find(x => x[0] === it.sec)[1]}</h1></div><span class="small muted">${answered} answered</span></header>
+    ${bar((exam.i + 1) / exam.qs.length, "var(--sys)")}
+    ${qHtml(q.lvl, it, exam.ans[exam.i], false, "exampick")}
+    <div class="btns"><button class="btn" data-act="exammove" data-id="-1" ${exam.i ? "" : "disabled"}>Back</button>${exam.i < exam.qs.length - 1 ? `<button class="btn primary" data-act="exammove" data-id="1">Next</button>` : `<button class="btn go" data-act="examsubmit">Submit</button>`}</div>`;
 }
 
 function taskFormHtml(k) {
@@ -1458,7 +1542,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.3.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.4 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1841,6 +1925,34 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "rvgrade": {
       const c = rv && live("cards").find(x => x.id === rv.id); if (!c) return;
       announce(K.answerFlip(c, +id)); rv = null; save(); return render();
+    }
+
+    // jlpt
+    case "jlptlvl": S.settings.jlpt.level = id; touchSettings(); save(); jq = null; return render();
+    case "jqpick": {
+      if (!jq || jq.pick != null) return; const it = J.bank(jq.lvl).byId[jq.id];
+      jq.pick = +id; jq.n++; const r = J.answer(jq.lvl, it, +id); if (r.ok) jq.ok++; jq.done = [...(jq.done || []), it.id];
+      if (!r.ok) toast("Added to JLPT mistakes"); save(); return render();
+    }
+    case "jqnext": { const sec = jq && jq.sec; if (jq) { const nx = J.pick(jq.lvl, sec, jq); if (nx) { jq = { ...jq, id: nx.id, pick: null, p: nx.p || null, done: nx.p && nx.p === jq.p ? jq.done : [] }; } } render(); return window.scrollTo(0, 0); }
+    case "exam": {
+      if (!St.focusGate().open) return toast("Exams run inside a study block");
+      const lvls = id === "place" ? ["N5", "N4", "N3"] : [J.level()], miss = lvls.filter(l => !J.bank(l));
+      if (miss.length) { miss.forEach(l => J.load(l, () => toast("Questions loaded. Tap again"))); return toast("Loading questions…"); }
+      const qs = id === "place" ? J.buildPlacement() : J.buildMock(J.level());
+      exam = { kind: id, lvl: id === "place" ? "place" : J.level(), qs, i: 0, ans: Array(qs.length).fill(null), res: null };
+      return go("jlpt/exam/" + id);
+    }
+    case "exampick": if (exam && !exam.res) { exam.ans[exam.i] = +id; render(); } return;
+    case "exammove": if (exam) { exam.i = Math.max(0, Math.min(exam.qs.length - 1, exam.i + +id)); render(); window.scrollTo(0, 0); } return;
+    case "examsubmit": {
+      if (!exam) return; const left = exam.ans.filter(x => x == null).length;
+      if (left && !confirm(`${left} unanswered. They count as wrong. Submit?`)) return;
+      exam.res = J.finish(exam.kind, exam.lvl, exam.qs, exam.ans); touchSettings(); save(); render(); return window.scrollTo(0, 0);
+    }
+    case "examquit": {
+      if (exam && !exam.res && !confirm("Quit this exam? Nothing is saved.")) return;
+      exam = null; return go("jlpt");
     }
 
     // more
