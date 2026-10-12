@@ -570,6 +570,25 @@ function blockFormHtml(b) {
   </div>`;
 }
 
+// Week as a time grid: Mon–Sun columns, 24 hours tall. Blocks sit at their real times; planned tasks are dashed.
+function weekGrid() {
+  const H = 26, t = E.today(), days = E.weekDays(t), p = P.plan(), n = new Date(), nm = n.getHours() * 60 + n.getMinutes();
+  const px = m => (m / 60 * H).toFixed(1);
+  const col = d => {
+    const blocks = P.segments(d).map(g => { const K = P.KINDS[g.b.kind] || P.KINDS.other, h = (g.e - g.s) / 60 * H;
+      return `<button class="wg-b k-${esc(g.b.kind)}" style="top:${px(g.s)}px;height:${Math.max(12, h - 1).toFixed(1)}px;--c:var(--${K.c})" data-act="blockform" data-id="${g.b.id}" aria-label="${esc(g.b.title)} ${P.toHM(g.s)} to ${P.toHM(g.e)}">${h >= 18 ? `<span>${esc(g.b.title)}</span>` : ""}${h >= 34 ? `<i>${P.toHM(g.tail ? 0 : g.s)}</i>` : ""}</button>`; }).join("");
+    const tasks = live("tasks").filter(k => !k.done).map(k => ({ k, at: p.at.get(k.id) })).filter(x => x.at && x.at.date === d)
+      .map(({ k, at }) => `<button class="wg-b wg-task" style="top:${px(at.s)}px;height:${Math.max(12, (at.e - at.s) / 60 * H - 1).toFixed(1)}px" data-act="go" data-id="plan/todo" aria-label="Task ${esc(k.title)}"><span>${esc(k.title)}</span></button>`).join("");
+    return `<div class="wg-col ${d === t ? "today" : ""}">${blocks}${tasks}${d === t ? `<div class="wg-now" style="top:${px(nm)}px"></div>` : ""}</div>`;
+  };
+  return `<div class="wgrid panel">
+    <div class="wg-head"><span></span>${days.map(d => `<span class="${d === t ? "today" : ""}">${P.DAY_NAMES[E.parse(d).getDay()]}<b>${E.parse(d).getDate()}</b></span>`).join("")}</div>
+    <div class="wg-body" style="height:${24 * H}px;--h:${H}px">
+      <div class="wg-times">${[...Array(24)].map((_, h) => `<span style="top:${h * H}px">${h % 3 === 0 ? E.pad(h) : ""}</span>`).join("")}</div>
+      ${days.map(col).join("")}
+    </div></div>`;
+}
+
 function vWeek() {
   const bl = live("blocks"), wd = S.settings.windDown, pl = S.settings.plan;
   const perm = typeof Notification === "undefined" ? "unsupported" : Notification.permission;
@@ -577,9 +596,9 @@ function vWeek() {
   const oneOff = bl.filter(b => b.date && b.date >= E.today()).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const row = b => editing && editing.id === b.id ? blockFormHtml(b) : `<button class="ag blk tbtn" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}">
       <div class="tm">${esc(b.start)}–${esc(b.end)}</div><div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}</div></div><span class="chev">${ic("right")}</span></button>`;
-  return `${blockForm === "new" ? blockFormHtml() : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="blockform" data-id="new">+ Block</button></div>`}
-  ${P.WEEK_ORDER.map(d => { const list = bl.filter(b => !b.date && (b.days || []).includes(d)).sort((a, b) => P.toMin(a.start) - P.toMin(b.start));
-    return `<h2>${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d]} <span class="n">${list.length}</span></h2><div class="panel agenda">${list.map(row).join("") || `<p class="empty">Free day.</p>`}</div>`; }).join("")}
+  return `${blockForm === "new" ? blockFormHtml() : editing && !editing.date ? blockFormHtml(editing) : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="blockform" data-id="new">+ Block</button></div>`}
+  <h2>This week <span class="n">tap a block to edit</span></h2>
+  ${weekGrid()}
   ${oneOff.length ? `<h2>One-off</h2><div class="panel agenda">${oneOff.map(b => row(b).replace(`<b>`, `<span class="small muted">${E.fmtDate(b.date)}</span> <b>`)).join("")}</div>` : ""}
 
   <h2>Wind-down</h2>
@@ -1018,7 +1037,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.8 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.9 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
