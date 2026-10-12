@@ -489,3 +489,4 @@ body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150p
 .qsec.trial{color:var(--ind)}
 .panel.trials{border-color:color-mix(in srgb,var(--ind) 30%,transparent)}
 .act.trial .ic{color:var(--ind)}
+[data-act=wishmove] .ic{transform:rotate(-90deg)}

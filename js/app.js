@@ -208,9 +208,9 @@ function moneySettings() {
   return `<h3>Goals</h3><div class="grid"><label class="f">Savings goal (¥)<input type="number" inputmode="numeric" data-ch="moneygoal" value="${S.settings.money.goal}"></label>
     <label class="f">Starting debt (¥)<input type="number" inputmode="numeric" data-ch="debtstart" value="${S.settings.money.debtStart}"></label></div>
     <p class="tiny muted">Starting debt is the 100% mark for the debt bar. Deadline is graduation, ${E.fmtDate(S.settings.dates.graduation)}.</p>
-    <h3 style="margin-top:14px">Fun budget</h3><div class="grid"><label class="f">Per month (¥)<input type="number" inputmode="numeric" data-ch="funmonthly" value="${E.funBudget().monthly}"></label>
+    <h3 style="margin-top:14px">Store fund</h3><div class="grid"><label class="f">Per on-pace month (¥)<input type="number" inputmode="numeric" data-ch="funmonthly" value="${E.funBudget().monthly}"></label>
     <label class="f">Yen per 1 XP (new items)<input type="number" inputmode="numeric" data-ch="funrate" value="${S.settings.fun.yenPerXp}"></label></div>
-    <p class="tiny muted">Started ${esc(S.settings.fun.start)}. Every month adds the budget; anything unspent carries over.</p>`;
+    <p class="tiny muted">Started ${esc(S.settings.fun.start)}. A month adds this only if your savings and debt are on pace for the goals above. Unspent yen carries over.</p>`;
 }
 /* ---------- settings sheet ---------- */
 // One gear per tab opens its settings from the bottom, so daily screens stay clean.
@@ -486,8 +486,8 @@ function vMoney([sub] = []) {
   </div>
 
   <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="money/rewards">
-    <div class="grow"><div class="small muted">Rewards shop</div><b>${E.xpWallet().toLocaleString("en-US")} XP · ${yen(E.funBudget().left)} fun budget</b>
-      <div class="small muted">${(() => { const w = E.xpWallet(), f = E.funBudget().left, r = live("wishlist").filter(x => !x.bought && w >= E.xpPrice(x) && f >= x.price).length; return r ? `${r} wishlist item${r === 1 ? "" : "s"} unlocked` : `${live("wishlist").filter(x => !x.bought).length} on the wishlist`; })()} · purchasing power ×${E.xpPower().toFixed(2)}</div></div>
+    <div class="grow"><div class="small muted">Store items</div><b>${E.xpWallet().toLocaleString("en-US")} XP · ${yen(E.funBudget().left)} store fund${E.funBudget().now && !E.funBudget().now.ok ? " · paused" : ""}</b>
+      <div class="small muted">${(() => { const w = E.xpWallet(), f = E.funBudget().left, r = E.storeQueue().filter(x => w >= E.xpPrice(x.w) && x.alloc >= x.w.price).length; return r ? `${r} wishlist item${r === 1 ? "" : "s"} unlocked` : `${live("wishlist").filter(x => !x.bought).length} on the wishlist`; })()} · purchasing power ×${E.xpPower().toFixed(2)}</div></div>
     <span class="chev">${ic("right")}</span></button>
 
   ${due ? "" : fold("money-update", `<b class="grow">Update this week's numbers</b>`, form)}
@@ -528,37 +528,41 @@ function wishFormHtml(w) {
 function vRewards() {
   const wallet = E.xpWallet(), fb = E.funBudget(), all = live("wishlist");
   const open = all.filter(w => !w.bought), got = all.filter(w => w.bought).sort((a, b) => b.bought.date.localeCompare(a.bought.date));
-  const locked = St.openPenalties().length > 0, ready = w => !locked && wallet >= E.xpPrice(w) && fb.left >= w.price;
-  const pct = w => Math.min(wallet / (E.xpPrice(w) || 1), fb.left / (w.price || 1), 1);
-  open.sort((a, b) => ready(b) - ready(a) || pct(b) - pct(a));
+  // v2.6: the fund fills items one at a time in your priority order; an item is ready when it's fully funded and you have the XP.
+  const q = E.storeQueue(), alloc = Object.fromEntries(q.map(x => [x.w.id, x.alloc]));
+  open.sort((a, b) => q.findIndex(x => x.w.id === a.id) - q.findIndex(x => x.w.id === b.id));
+  const locked = St.openPenalties().length > 0, ready = w => !locked && wallet >= E.xpPrice(w) && alloc[w.id] >= w.price;
+  const nowM = fb.now;
   const icon = k => ic(k === "trip" ? "plane" : k === "exp" ? "star" : "gem", "inl");
   const editing = wishForm && wishForm !== "new" ? all.find(w => w.id === wishForm) : null;
   return `<button class="back" data-act="nav" data-id="money">${ic("left")} Store</button>
-  <header class="top"><div><div class="hdr">Shop</div><h1>Rewards</h1></div></header>
+  <header class="top"><div><div class="hdr">Store</div><h1>Items</h1></div></header>
+  ${tip("store", `The fund gets ${yen(fb.monthly)} a month, but only while you're on pace for ${yen(S.settings.money.goal)} saved and debt-free by graduation. It fills your items one at a time, top first. Each item also costs XP from quests.`)}
   <div class="carousel">
     <div class="card g-mag"><span class="k">XP to spend</span><div><div class="dm big2">${wallet.toLocaleString("en-US")}</div><div class="small soft">${E.xpTotal().toLocaleString("en-US")} earned · ${E.xpSpent().toLocaleString("en-US")} spent · level unaffected</div></div></div>
     <div class="card g-cyan"><span class="k">Purchasing power</span><div><div class="dm big2">×${E.xpPower().toFixed(2)}</div><div class="small soft">LV ${E.level()}: every item costs ${Math.round((1 - 1 / E.xpPower()) * 100)}% less XP. +1% per level, up to ×2.</div></div></div>
-    <div class="card g-org"><span class="k">Fun budget</span><div><div class="dm big2">${yen(fb.left)}</div><div class="small soft">${yen(fb.monthly)} / month, rolls over · ${yen(fb.spent)} spent</div></div></div>
+    <div class="card g-org"><span class="k">Store fund</span><div><div class="dm big2">${yen(fb.left)}</div><div class="small soft">${nowM && nowM.ok ? `+${yen(fb.monthly)} this month` : `Paused this month: ${yen(nowM ? nowM.behind : 0)} behind your savings and debt pace`} · ${yen(fb.spent)} spent</div></div></div>
   </div>
   ${penaltyBox()}
   ${wishForm === "new" ? wishFormHtml() : `<div class="btns"><button class="btn primary" data-act="wishform" data-id="new">+ Wishlist item</button></div>`}
   <h2>Wishlist <span class="n">${open.filter(ready).length} ready</span></h2>
   <div class="list">${open.map(w => {
     if (editing && editing.id === w.id) return wishFormHtml(w);
-    const ok = ready(w), xpGap = Math.max(0, E.xpPrice(w) - wallet), yenGap = Math.max(0, w.price - fb.left);
-    const wks = yenGap && fb.monthly ? Math.ceil(yenGap / fb.monthly) : 0;
+    const ok = ready(w), xpGap = Math.max(0, E.xpPrice(w) - wallet), have = alloc[w.id] || 0, yenGap = Math.max(0, w.price - have);
+    const wks = yenGap && fb.monthly ? Math.ceil(yenGap / fb.monthly) : 0, i = open.indexOf(w);
     return `<div class="panel wish ${ok ? "ready" : ""}" style="margin-top:0">
       <div class="row between"><button class="tbtn grow" data-act="wishform" data-id="${w.id}"><b>${icon(w.kind)} ${esc(w.name)}</b>
         <div class="small muted">${yen(w.price)} · ${E.xpPrice(w).toLocaleString("en-US")} XP${E.xpPrice(w) < w.xp ? ` <s>${w.xp.toLocaleString("en-US")}</s>` : ""}${w.link ? ` · <a href="${esc(w.link)}" target="_blank" rel="noopener">link</a>` : ""}</div></button>
-        ${ok ? `<button class="btn go sm" data-act="buywish" data-id="${w.id}">Buy</button>` : `<span class="lockbox">${ic("lock")}</span>`}</div>
+        <div class="row" style="gap:4px;flex:none">${i > 0 ? `<button class="rbtn" data-act="wishmove" data-id="${w.id}" data-step="-1" aria-label="Move up">${ic("arrow")}</button>` : ""}
+        ${ok ? `<button class="btn go sm" data-act="buywish" data-id="${w.id}">Buy</button>` : `<span class="lockbox">${ic("lock")}</span>`}</div></div>
       <div class="small muted" style="margin-top:8px">XP ${Math.min(wallet, E.xpPrice(w)).toLocaleString("en-US")}/${E.xpPrice(w).toLocaleString("en-US")}</div>${bar(wallet / E.xpPrice(w), "var(--mag)")}
-      <div class="small muted">Budget ${yen(Math.max(0, Math.min(fb.left, w.price)))}/${yen(w.price)}</div>${bar(fb.left / w.price, "var(--org)")}
-      ${ok ? `<div class="small" style="color:var(--lime)">Unlocked. You earned this.</div>` : `<div class="small muted">${[xpGap ? `${xpGap.toLocaleString("en-US")} XP to go` : "", yenGap ? `${yen(yenGap)} more budget (${wks} month${wks === 1 ? "" : "s"})` : ""].filter(Boolean).join(" · ")}</div>`}
+      <div class="small muted">Funded ${yen(have)}/${yen(w.price)}</div>${bar(have / w.price, "var(--org)")}
+      ${ok ? `<div class="small" style="color:var(--lime)">Unlocked. You earned this.</div>` : `<div class="small muted">${[xpGap ? `${xpGap.toLocaleString("en-US")} XP to go` : "", yenGap ? `${yen(yenGap)} to fund (about ${wks} on-pace month${wks === 1 ? "" : "s"})` : ""].filter(Boolean).join(" · ")}</div>`}
     </div>`;
   }).join("") || `<p class="empty">Nothing on the wishlist. Add the things and trips you want, with real prices.</p>`}</div>
   ${got.length ? `<h2>Claimed <span class="n">${got.length}</span></h2><div class="panel">${got.map(w => `<div class="item row between"><div class="grow small"><b>${icon(w.kind)} ${esc(w.name)}</b><div class="muted">${E.fmtDate(w.bought.date)} · ${yen(w.bought.yen)} · ${w.bought.xp.toLocaleString("en-US")} XP</div></div>
     <button class="btn sm" data-act="unbuy" data-id="${w.id}">Undo</button></div>`).join("")}</div>` : ""}
-  <p class="tiny muted">Budget settings: the gear on the Money screen.</p>`;
+  <p class="tiny muted">Fund settings: the gear on the Store screen.</p>`;
 }
 
 /* ================= SOCIAL ================= */
@@ -1680,7 +1684,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.5 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.6 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1856,11 +1860,12 @@ document.addEventListener("click", async ev => {
       if (St.openPenalties().length) return toast("Shop locked: clear your penalty quest first");
       const wallet = E.xpWallet(), fb = E.funBudget();
       const cost = E.xpPrice(w);
-      if (wallet < cost || fb.left < w.price) return toast("Not unlocked yet");
+      const al = (E.storeQueue().find(x => x.w.id === id) || {}).alloc || 0;
+      if (wallet < cost || al < w.price) return toast("Not unlocked yet");
       const mp = E.moneyPlan(), after = Math.max(0, mp.goal - (mp.bank - w.price)) / mp.weeks;
       if (!confirm(`Buy ${w.name} for ${yen(w.price)}?
 
-Spends ${cost} XP (${(wallet - cost).toLocaleString("en-US")} left) and ${yen(w.price)} of fun budget.
+Spends ${cost} XP (${(wallet - cost).toLocaleString("en-US")} left) and ${yen(w.price)} of the store fund.
 Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.`)) return;
       put("wishlist", { ...w, bought: { date: E.today(), xp: cost, yen: w.price } }); save();
       toast(`Claimed: ${w.name}. Enjoy it, you earned it.`, true); return render();
@@ -2102,6 +2107,12 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       put("appraisals", { date: E.today(), by: f.by || null, scores: sc });
       const k = apForm.trial && live("tasks").find(x => x.id === apForm.trial); const gains = k && !k.done ? Soc.logBattle(k, { appraisal: true }) : [];
       apForm = null; save(); announce(gains); toast("Appraisal saved"); if (location.hash !== "#social/appraise") return go("social/appraise"); render(); return window.scrollTo(0, 0);
+    }
+
+    case "wishmove": {
+      const ids = E.storeQueue().map(x => x.w.id), i = ids.indexOf(id), j = i + +el.dataset.step; if (i < 0 || j < 0 || j >= ids.length) return;
+      [ids[i], ids[j]] = [ids[j], ids[i]]; ids.forEach((wid, n) => { const w = live("wishlist").find(x => x.id === wid); if (w && w.order !== n) put("wishlist", { ...w, order: n }); });
+      save(); return render();
     }
 
     // jlpt
