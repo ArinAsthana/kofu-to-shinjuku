@@ -266,12 +266,36 @@ export const xpWallet = () => xpTotal() - xpSpent() - xpPenalty();
 // Wishlist items keep their base XP; what you pay is base ÷ power. Prices don't fall; your XP is worth more.
 export const xpPower = (lv = level()) => Math.min(2, 1 + 0.01 * (lv - 1));
 export const xpPrice = w => Math.max(5, Math.round((w.xp || 0) / xpPower() / 5) * 5);
-// Fun budget accrues every month from the start month (inclusive); unspent yen rolls over.
+// Store fund (was the fun budget). Fixed goals come first: a month adds the monthly amount only if, by its last
+// money report, savings gained + debt paid are on the straight-line pace to ¥goal saved and debt-free by graduation.
+// The current month counts while its latest report (or last month's) is on pace. Unspent yen rolls over.
+export function paceAt(r) {
+  const m = S.settings.money, first = moneyReports()[0]; if (!first || !r) return { ok: true, behind: 0 };
+  const total = daysBetween(first.date, S.settings.dates.graduation) || 1, frac = Math.max(0, Math.min(1, daysBetween(first.date, r.date) / total));
+  const need = (m.goal - first.bank) + first.debt, made = (r.bank - first.bank) + (first.debt - r.debt), want = need * frac;
+  return { ok: made >= want * 0.95, behind: Math.max(0, Math.round(want - made)) };
+}
+export function storeMonths() {
+  const f = S.settings.fun, start = f.start || monthKey(), now = monthKey(), reps = moneyReports(), out = [];
+  let [y, mo] = start.split("-").map(Number), prevOk = true;
+  for (let i = 0; i < 120; i++) {
+    const k = y + "-" + pad(mo), inM = reps.filter(r => monthKey(r.date) === k), last = inM[inM.length - 1];
+    const ok = last ? paceAt(last).ok : k === now ? prevOk : prevOk && !reps.length;
+    out.push({ month: k, ok, behind: last ? paceAt(last).behind : 0 }); prevOk = ok;
+    if (k === now) break; mo++; if (mo > 12) { mo = 1; y++; }
+  }
+  return out;
+}
 export function funBudget() {
-  const f = S.settings.fun, start = f.start || monthKey(), now = monthKey();
-  const months = Math.max(1, (+now.slice(0, 4) - +start.slice(0, 4)) * 12 + (+now.slice(5) - +start.slice(5)) + 1);
+  const f = S.settings.fun, ms = storeMonths(), paid = ms.filter(m => m.ok).length;
   const spent = live("wishlist").filter(w => w.bought).reduce((a, w) => a + (w.bought.yen || 0), 0);
-  return { accrued: months * (f.monthly || 0), spent, left: months * (f.monthly || 0) - spent, monthly: f.monthly || 0 };
+  return { accrued: paid * (f.monthly || 0), spent, left: paid * (f.monthly || 0) - spent, monthly: f.monthly || 0, months: ms, now: ms[ms.length - 1] };
+}
+// Store items in priority order; the fund fills them one at a time, top first.
+export function storeQueue() {
+  let left = Math.max(0, funBudget().left);
+  return live("wishlist").filter(w => !w.bought).sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9) || (a.u || 0) - (b.u || 0))
+    .map(w => { const alloc = Math.min(w.price || 0, left); left -= alloc; return { w, alloc }; });
 }
 export const suggestXp = yen => Math.max(10, Math.round((yen || 0) / (S.settings.fun.yenPerXp || 20) / 10) * 10);
 
