@@ -1,0 +1,9 @@
+// Cloudflare Workers build config for the Claude connector (connector/worker.js).
+// The kts-connector Worker is connected to this repo, so every push to main redeploys it.
+// Secrets (SA_JSON, UID, PATH_TOKEN) live in Cloudflare and survive redeploys. The PWA itself stays on GitHub Pages.
+{
+  "name": "kts-connector",
+  "main": "connector/worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true
+}

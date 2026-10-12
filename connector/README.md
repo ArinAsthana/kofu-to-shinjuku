@@ -13,8 +13,10 @@ Tools: `get_day`, `log_food`, `log_weight`, `tick_habit`, `tick_care`, `add_task
    Open "Claude connector ID" and copy the ID.
 2. **Firebase key:** [Firebase console](https://console.firebase.google.com/) → project *kofu-to-shinjuku* → gear icon → Project settings →
    Service accounts → **Generate new private key**. A `.json` file downloads. Treat it like a password.
-3. **Cloudflare:** sign up free at [dash.cloudflare.com](https://dash.cloudflare.com/) → Workers & Pages → Create → Create Worker →
-   name it `kts-connector` → Deploy → **Edit code**. Replace everything with the contents of `worker.js` → Deploy.
+3. **Cloudflare:** sign up free at [dash.cloudflare.com](https://dash.cloudflare.com/) → Workers & Pages → Create →
+   **Import a repository** → `ArinAsthana/kofu-to-shinjuku`, Worker name `kts-connector`. The repo's `wrangler.jsonc` makes it
+   deploy `connector/worker.js`, and every push to main redeploys it. (No code to paste. The dashboard editor is hidden for
+   Git-connected Workers; that's normal.)
 4. **Secrets:** in the worker, Settings → Variables and secrets → add three, each as type **Secret**:
    - `SA_JSON`: the whole contents of the downloaded `.json` file
    - `UID`: the ID from step 1
