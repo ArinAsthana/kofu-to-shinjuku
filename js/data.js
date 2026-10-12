@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -237,3 +237,67 @@ export const SOCIAL = { criteria: ["Communication", "Style", "Charisma", "Reliab
 /* ---------- wishlist rewards (schema 5) ---------- */
 // Buy wishlist items by spending XP (a wallet separate from level) out of a monthly fun budget that rolls over.
 export const FUN = { monthly: 5000, yenPerXp: 20, start: null };
+
+/* ---------- study blocks and penalties (schema 6) ---------- */
+// focus/brk/long: pomodoro minutes, a long break after every `every` focus rounds.
+// grace: minutes after a quest block ends to report it before the penalty lands. penaltyXp comes off the XP wallet.
+export const STUDY = { focus: 25, brk: 5, long: 15, every: 4, grace: 60, penaltyXp: 30 };
+
+// Each study block works through its subject's list in order: the first topic under 100% is the one you do.
+// Finance topics are Arin's own plan from the old readiness planner (same ids), in phase order with the tools
+// slotted in where they're needed. Edit the lists in Plan → Study.
+// `do` is the method for the block, `out` what you end with, `src` where to study it.
+const FIN_DO = "Read a chunk from the sources, compress it into a mind map in Obsidian, then close it and answer 5 interview-style questions aloud. Reread only the gaps.";
+const FIN_OUT = "A 2-minute explanation recorded on your phone, as if to an interviewer.";
+const fin = (id, t, src) => ({ id, t, do: FIN_DO, out: FIN_OUT, src });
+const genki = n => ({ id: "genki" + n, t: "Genki II lesson " + n, do: "Grammar points with every example sentence, the vocab into Anki, then the workbook pages for the lesson.", out: "Workbook done and 10 sentences of your own using the new grammar, said aloud.", src: [] });
+export const SUBJECTS = {
+  fin: { name: "Finance", habit: "fin", match: "financ|valuation|modell?ing|accounting", topics: [
+    fin("a1", "How the 3 statements link", [["Damodaran accounting primer", "http://people.stern.nyu.edu/adamodar/New_Home_Page/AccPrimer/accstate.htm"], ["AccountingCoach", "https://www.accountingcoach.com"]]),
+    fin("a2", "Accruals, revenue recognition, matching", [["AccountingCoach", "https://www.accountingcoach.com"], ["Khan Academy finance", "https://www.khanacademy.org/economics-finance-domain"]]),
+    fin("a3", "Working capital and the cash conversion cycle", [["CFI free courses and guides", "https://corporatefinanceinstitute.com"], ["AccountingCoach", "https://www.accountingcoach.com"]]),
+    fin("a4", "Depreciation flow-through across all 3 statements", [["Mergers & Inquisitions", "https://mergersandinquisitions.com"], ["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"]]),
+    fin("a5", "Ratios: margins, ROE and ROIC, leverage, liquidity", [["CFI free courses and guides", "https://corporatefinanceinstitute.com"], ["Damodaran accounting primer", "http://people.stern.nyu.edu/adamodar/New_Home_Page/AccPrimer/accstate.htm"]]),
+    fin("a6", "Read a 決算短信 and a 有価証券報告書", [["EDINET (有価証券報告書)", "https://disclosure2.edinet-fsa.go.jp"], ["TDnet (決算短信)", "https://www.release.tdnet.info"]]),
+    fin("a7", "J-GAAP vs IFRS: the differences that come up", [["RSM: IFRS vs J-GAAP", "https://www.rsm.global/japan/shiodome/en/node/541"], ["PwC: IFRS vs JP GAAP (PDF)", "https://www.pwc.com/jp/ja/knowledge/ifrs/publication/assets/pdf/similarities-and-differences-2020-en.pdf"]]),
+    fin("a8", "Excel: shortcuts, lookups, a basic 3-statement model", [["Exceljet", "https://exceljet.net"], ["CFI free courses and guides", "https://corporatefinanceinstitute.com"]]),
+    fin("a9", "Percentages, growth rates and CAGR by hand", [["Zetamac mental math", "https://arithmetic.zetamac.com"], ["Khan Academy finance", "https://www.khanacademy.org/economics-finance-domain"]]),
+    fin("a10", "What SAP S/4HANA FI/CO does inside a finance team", [["SAP: Overview of Financials in S/4HANA", "https://learning.sap.com/learning-journeys/overview-of-financials-in-sap-s-4hana"], ["SAP: Financial Accounting overview", "https://learning.sap.com/learning-journeys/outlining-the-financial-accounting-overview"]]),
+    fin("t1", "Excel: keyboard-only navigation and the shortcuts that matter", [["Exceljet", "https://exceljet.net"], ["CFI free courses and guides", "https://corporatefinanceinstitute.com"]]),
+    fin("t2", "Excel: pivot tables, XLOOKUP and INDEX-MATCH, clean charts", [["Exceljet", "https://exceljet.net"]]),
+    fin("b1", "Time value of money, NPV, IRR", [["Damodaran PV primer", "http://people.stern.nyu.edu/adamodar/New_Home_Page/PVPrimer/pvprimer.htm"], ["MIT OCW 15.401 Finance Theory", "https://ocw.mit.edu/courses/15-401-finance-theory-i-fall-2008/"]]),
+    fin("b2", "Cost of capital and WACC", [["Damodaran Online (free classes)", "https://pages.stern.nyu.edu/~adamodar/New%5FHome%5FPage/home.htm"], ["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"]]),
+    fin("b3", "DCF end to end", [["Damodaran Online (free classes)", "https://pages.stern.nyu.edu/~adamodar/New%5FHome%5FPage/home.htm"], ["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"]]),
+    fin("b4", "Comparable companies and precedent transactions", [["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"], ["Mergers & Inquisitions", "https://mergersandinquisitions.com"]]),
+    fin("b5", "Enterprise value to equity value bridge", [["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"], ["Mergers & Inquisitions", "https://mergersandinquisitions.com"]]),
+    fin("b6", "M&A: synergies, accretion and dilution", [["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"], ["Mergers & Inquisitions", "https://mergersandinquisitions.com"]]),
+    fin("b7", "Paper LBO", [["WSP paper LBO tutorial", "https://www.wallstreetprep.com/knowledge/the-paper-lbo-practice-exercises-to-ace-the-private-equity-interview/"]]),
+    fin("b8", "Budgeting, forecasting, variance analysis", [["CFI free courses and guides", "https://corporatefinanceinstitute.com"]]),
+    fin("b9", "Macro refresh: BoJ, rates, yen, inflation", [["Bank of Japan (English)", "https://www.boj.or.jp/en/"], ["Yale: Shiller Financial Markets", "https://oyc.yale.edu/economics/econ-252"]]),
+    fin("b10", "Micro for cases: pricing, elasticity, market structure", [["Khan Academy micro and macro", "https://www.khanacademy.org/economics-finance-domain"]]),
+    fin("b11", "Case frameworks: profitability, market entry, M&A, pricing", [["McKinsey interview prep and cases", "https://www.mckinsey.com/careers/interviewing"], ["Free cases by firm (incl. Deloitte, Bain)", "https://igotanoffer.com/blogs/mckinsey-case-interview-blog/case-interview-examples"]]),
+    fin("b12", "Market sizing", [["Free cases by firm (incl. Deloitte, Bain)", "https://igotanoffer.com/blogs/mckinsey-case-interview-blog/case-interview-examples"]]),
+    fin("b13", "How SAP implementation projects run", [["SAP Activate methodology", "https://learning.sap.com/learning-journeys/discovering-sap-activate-implementation-tools-and-methodology"]]),
+    fin("t3", "Excel: sensitivity tables and scenario switches", [["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"]]),
+    fin("t4", "PowerPoint: action titles, Pyramid Principle, ghost decks", [["Pyramid Principle for slides", "https://pptproductivity.com/blog/how-to-create-effective-consulting-slides-using-minto-principles"]]),
+    fin("t5", "PowerPoint: rebuild 3 slides from a real company IR deck", [["TDnet (IR decks, 決算短信)", "https://www.release.tdnet.info"]]),
+    fin("c1", "50 accounting technical questions, answered aloud", [["Mergers & Inquisitions", "https://mergersandinquisitions.com"], ["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"]]),
+    fin("c2", "50 valuation technical questions, answered aloud", [["Mergers & Inquisitions", "https://mergersandinquisitions.com"], ["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"]]),
+    fin("c3", "8 STAR stories from your own experience", [["McKinsey interview prep and cases", "https://www.mckinsey.com/careers/interviewing"]]),
+    fin("c4", "Why finance, why Japan, why this firm, in English and Japanese", [["Mergers & Inquisitions", "https://mergersandinquisitions.com"]]),
+    fin("c5", "Follow one Japanese company and 3 deals every week", [["TDnet (決算短信)", "https://www.release.tdnet.info"], ["EDINET (有価証券報告書)", "https://disclosure2.edinet-fsa.go.jp"]]),
+    fin("c6", "20 timed cases", [["McKinsey interview prep and cases", "https://www.mckinsey.com/careers/interviewing"], ["Free cases by firm (incl. Deloitte, Bain)", "https://igotanoffer.com/blogs/mckinsey-case-interview-blog/case-interview-examples"]]),
+    fin("c7", "Timed Excel modeling test", [["Wall Street Prep knowledge base", "https://www.wallstreetprep.com/knowledge/"], ["Exceljet", "https://exceljet.net"]]),
+    fin("c8", "10 mock interviews", [["McKinsey interview prep and cases", "https://www.mckinsey.com/careers/interviewing"], ["Mergers & Inquisitions", "https://mergersandinquisitions.com"]]),
+    fin("c9", "SAP certification: decide and register, or skip", [["SAP: Overview of Financials in S/4HANA", "https://learning.sap.com/learning-journeys/overview-of-financials-in-sap-s-4hana"]]),
+    fin("t6", "SQL basics: SELECT, JOIN, GROUP BY", [["Harvard CS50 SQL", "https://cs50.harvard.edu/sql/"]]),
+    fin("t7", "Python with pandas on real financial data", [["Kaggle Learn: Python, Pandas", "https://www.kaggle.com/learn"]]),
+    fin("t8", "AI: prompting fundamentals and checking AI output", [["Anthropic Academy (free)", "https://anthropic.skilljar.com"], ["Prompting guide", "https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview"]]),
+    fin("t9", "AI: summarise a 決算短信 with AI, verify every number against the source", [["TDnet (IR decks, 決算短信)", "https://www.release.tdnet.info"], ["Anthropic Academy (free)", "https://anthropic.skilljar.com"]]),
+    fin("t10", "AI portfolio: write up your Cowork app and case-prep site as CV projects", []),
+  ] },
+  jp: { name: "Japanese", habit: "jp", match: "japan|日本語|jlpt|nihongo|genki|kanji", topics: [
+    ...[13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].map(genki),
+    { id: "j-n4", t: "Official N4 sample test", do: "Take the official JLPT N4 sample test, timed.", out: "Score logged; every miss written down by section.", src: [["JLPT sample questions", "https://www.jlpt.jp/e/samples/forlearners.html"]] },
+  ] },
+};

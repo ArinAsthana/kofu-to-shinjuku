@@ -439,3 +439,16 @@ nav button[aria-current="page"]{box-shadow:inset 0 0 0 1px rgba(111,159,204,.6);
 @keyframes slidein{from{transform:translateX(100%)}to{transform:none}}
 @keyframes fadein{from{opacity:0}}
 @media (prefers-reduced-motion:reduce){.drawer,.dw-scrim{animation:none}}
+
+/* v1.12 study blocks, pomodoro, penalties */
+.topic-l{color:var(--sys);margin-top:2px}
+.pomo-t{font-size:64px;line-height:1;text-align:center;margin:10px 0 12px;text-shadow:0 0 18px rgba(79,182,255,.55)}
+.pomo.ph-brk .pomo-t,.pomo.ph-long .pomo-t{color:var(--lime);text-shadow:none}
+.pomo .bar i{transition:width 1s linear}
+.srcs{display:flex;flex-wrap:wrap;gap:6px 14px}
+.srcs a{color:var(--sys)}
+.panel.report-due{border-color:var(--warn);box-shadow:0 0 14px rgba(245,185,66,.25)}
+.sys.pen{border-color:var(--bad);background:linear-gradient(180deg,rgba(110,14,30,.65),rgba(36,5,12,.92));box-shadow:inset 0 0 28px rgba(255,94,108,.2),0 0 18px rgba(255,94,108,.2);color:#ffe3e6}
+.sys.pen b{color:var(--bad);text-shadow:0 0 10px rgba(255,94,108,.6)}
+.bad-t{color:var(--bad)}
+.item.cur{color:var(--sys)}

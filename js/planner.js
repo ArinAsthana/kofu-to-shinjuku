@@ -42,8 +42,10 @@ const occToday = b => segments(E.today()).filter(g => !g.tail && (g.b.id === b.i
 export function editLock(b) {
   if (!b || !b.id) return null;
   const st = S.settings.plan || {}, n = nowMin(), lock = st.lockMins ?? 15;
-  const g = occToday(b).find(g => n >= g.s - lock && n < g.e);
-  return g ? { s: g.s, e: g.e, until: g.e } : null;
+  // Quest blocks stay locked through the report window too, so a skipped block can't be deleted to dodge its penalty.
+  const after = b.kind === "quest" ? (S.settings.study?.grace ?? 60) : 0;
+  const g = occToday(b).find(g => n >= g.s - lock && n < g.e + after);
+  return g ? { s: g.s, e: g.e, until: g.e + after } : null;
 }
 // Is the workout log open right now? Open from openPad before a workout block to openPad after it,
 // and stays open all day once a set is logged.

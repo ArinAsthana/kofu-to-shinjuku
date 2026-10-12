@@ -1,11 +1,12 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES, LIBRARY } from "./data.js";
+import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
 import * as P from "./planner.js";
 import { ic } from "./icons.js";
 import * as C from "./command.js";
+import * as St from "./study.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -30,15 +31,15 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { entering = true; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { entering = true; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; render(); window.scrollTo(0, 0); });
 
 // Five tabs. Train, Body and Care share one tab; Money and Skills live under Status.
 const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Body"], ["social", "Social"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", plan: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", plan: "plan", focus: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, focus: vFocus, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -74,7 +75,8 @@ function vHome() {
   const a7 = E.avg7(), food = E.dayFood(t), ft = S.settings.food;
   const days = E.daysBetween(t, S.settings.dates.graduation);
   const doneToday = HABITS.filter(h => E.habitDone(h.id, t)).length;
-  const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length, gate = P.trainGate(started(t));
+  const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length, gate = P.trainGate(started(t)), fg = St.focusGate();
+  const into = gate.open ? "train" : fg.open && !fg.ended ? "focus" : "plan";
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
@@ -82,10 +84,11 @@ function vHome() {
   <button class="strip" data-act="nav" data-id="status">
     <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${E.streak()}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
   <button class="cmdline" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
+  ${penaltyBox()}${reportDueBox(fg)}
 
   <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
-  <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="${gate.open ? "train" : "plan"}">
-    <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div><div class="small muted">until ${P.toHM(nn.now.e)}${gate.open ? " · tap to enter" : ""}</div>` : `<div class="now-t">Free time</div>`}
+  <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="${into}">
+    <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div>${topicLine(nn.now.b)}<div class="small muted">until ${P.toHM(nn.now.e)}${into !== "plan" ? " · tap to enter" : ""}</div>` : `<div class="now-t">Free time</div>`}
       <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
     <span class="chev">${ic("right")}</span></button>
 
@@ -113,6 +116,90 @@ function vHome() {
 }
 
 
+/* ---------- study blocks and penalties ---------- */
+const mmss = ms => { const x = Math.ceil(ms / 1000); return E.pad(Math.floor(x / 60)) + ":" + E.pad(x % 60); };
+// "Topic: …" under a study block wherever it shows, so the block says what to do, not just "Finance".
+function topicLine(b, cls = "small") {
+  const subj = b && St.subjectOf(b); if (!subj) return "";
+  const top = St.current(subj);
+  return `<div class="${cls} topic-l">${ic("target", "inl")} ${top ? esc(top.t) : "All topics done. Add more in Plan → Study"}</div>`;
+}
+function penaltyBox() {
+  const pens = St.openPenalties(); if (!pens.length) return "";
+  const xp = pens.reduce((a, p) => a + (p.xp || 0), 0), at = P.plan().at;
+  const lines = pens.map(p => { const k = live("tasks").find(x => x.id === p.task), w = k && at.get(k.id);
+    return `<div class="x">Missed ${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}. Penalty quest: ${k ? P.dur(k.mins) + " make-up" : "make-up"}${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`; }).join("");
+  return `<div class="sys pen"><b>[PENALTY]</b> ${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
+    ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan/todo">Open penalty quests</button></div></div>`;
+}
+function reportDueBox(fg) {
+  if (!fg || !fg.open || !fg.ended) return "";
+  const subj = St.subjectOf(fg.o.b), top = subj && St.current(subj);
+  return sysBox(`<span class="warn">${esc(fg.o.b.title)} is over. Report it.</span>`, `${top ? "How much of " + esc(top.t) + " did you get through? " : ""}Report by ${P.toHM(fg.closes)} or it counts as skipped.`,
+    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="focus">Report now</button></div>`);
+}
+function vFocus() {
+  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="plan">${ic("left")} Plan</button>`;
+  if (!g.open) {
+    const nx = g.next;
+    return `${back}<h1>Study</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">[System] Gate closed</div>
+      <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
+      ${nx ? `<div class="small muted">${esc(nx.b.title)}</div>${topicLine(nx.b)}` : ""}
+      <div class="small muted">A quest block opens ${S.settings.plan.openPad ?? 10} min before it starts. The report stays open ${S.settings.study.grace ?? 60} min after it ends.</div></div></div></div>`;
+  }
+  const o = g.o, key = St.occKey(o), subj = St.subjectOf(o.b), top = subj && St.current(subj), pr = top ? St.progress(subj, top.id) : 0;
+  const p = St.pomo(key), fin = St.logsFor(o).find(r => r.final), sst = S.settings.study, pen = sst.penaltyXp ?? 30;
+  const left = St.pomoLeft(p), phase = p.phase === "focus" ? "Focus" : p.phase === "long" ? "Long break" : "Break";
+  const topicHtml = !subj ? "" : !top ? sysBox("Every topic in this list is done.", "Add the next ones in Plan → Study.") :
+    `<div class="panel"><div class="row between"><span class="hdr">${esc(SUBJECTS[subj].name)} · topic ${St.topics(subj).indexOf(top) + 1} of ${St.topics(subj).length}</span><span class="small">${pr}% done</span></div>${bar(pr / 100, "var(--sys)")}
+      <h3>Do this</h3><p class="small">${esc(top.do)}</p>
+      ${top.out ? `<h3>End with</h3><p class="small">${esc(top.out)}</p>` : ""}
+      ${(top.src || []).length ? `<h3>Sources</h3><div class="small srcs">${top.src.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join("")}</div>` : ""}
+      ${!g.ended && !fin ? `<div class="btns"><button class="btn sm" data-act="topicdone">Finished this topic early: start the next</button></div>` : ""}</div>`;
+  const timer = g.ended || fin ? "" : `<div class="panel pomo ph-${p.phase}"><div class="row between"><span class="hdr">${phase}${p.phase === "focus" ? " · round " + (p.n + 1) : ""}</span><span class="small muted">${p.n} round${p.n === 1 ? "" : "s"} done</span></div>
+      <div class="dm pomo-t" id="pomoT">${mmss(left)}</div><div class="bar" style="--c:var(--sys)"><i id="pomoBar" style="width:${(1 - left / St.pomoLen(p)) * 100}%"></i></div>
+      <div class="btns"><button class="btn ${p.run ? "" : "primary"}" data-act="pomo" data-id="${p.run ? "pause" : "start"}">${p.run ? "Pause" : "Start"}</button><button class="btn" data-act="pomo" data-id="skip">Skip</button><button class="btn" data-act="pomo" data-id="reset">Reset</button></div>
+      <p class="tiny muted">${sst.focus} min focus, ${sst.brk} min break, ${sst.long} min after every ${sst.every}. It buzzes while the app is open; with the screen off it keeps time but can't ring until the Android app.</p></div>`;
+  let rep;
+  if (fin) rep = sysBox(fin.done ? "Block done." : fin.gain || fin.poms ? `Reported: +${fin.gain}% of the topic, ${fin.poms} round${fin.poms === 1 ? "" : "s"}.` : `<span class="warn">Reported as not done.</span>`,
+    top ? `Next study block: ${esc(top.t)} (${pr}% done).` : "");
+  else {
+    const opts = !subj || !top ? [["done", "Done"], ["0", "Didn't do it"]]
+      : [["0", "None"], ...[10, 25, 50, 75].filter(x => pr + x < 100).map(x => [String(x), "+" + x + "%"]), ["rest", "Finished it"]];
+    rep = `<div class="panel ${g.ended ? "report-due" : ""}"><h3>${g.ended ? "Block over. Report it" : "End-of-block report"}</h3>
+      <p class="small">${top ? `How much of <b>${esc(top.t)}</b> did you get through in this block? Count it as a share of the whole topic.` : "Did you do this block?"}</p>
+      <div class="chips">${opts.map(([v, l]) => `<button class="chip" data-act="blockreport" data-id="${v}">${l}</button>`).join("")}</div>
+      <p class="tiny muted">${g.ended ? `Report by ${P.toHM(g.closes)}.` : "Report when the block ends."} No work done by then counts as skipped: −${pen} XP and a make-up penalty quest. The shop locks until it's cleared.</p></div>`;
+  }
+  return `${back}<header class="top"><div><div class="hdr">[System] Quest · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>
+  ${timer}${topicHtml}${rep}`;
+}
+// Phase change: buzz, beep, and a notification if the app is in the background.
+function chime(p) {
+  try { navigator.vibrate && navigator.vibrate([300, 120, 300]); } catch (e) {}
+  try {
+    const ac = chime.ac || (chime.ac = new (window.AudioContext || window.webkitAudioContext)()), o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = p.phase === "focus" ? 660 : 880; g.gain.setValueAtTime(0.2, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.8);
+    o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.8);
+  } catch (e) {}
+  const msg = p.phase === "focus" ? "Break's over. Back to focus." : "Focus round done. Take a break.";
+  toast(msg);
+  try { if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("Kofu to Shinjuku", { body: msg }); } catch (e) {}
+}
+function tickPomo() {
+  if (route()[0] !== "focus") return;
+  const g = St.focusGate(); if (!g.open) return;
+  const p = St.pomo(St.occKey(g.o));
+  if (p.fired) { St.pomoSave(p); chime(p); return render(); }
+  const el = $("#pomoT"), b = $("#pomoBar"), left = St.pomoLeft(p);
+  if (el) el.textContent = mmss(left);
+  if (b) b.style.width = (1 - left / St.pomoLen(p)) * 100 + "%";
+}
+function runAssess() {
+  const fresh = St.assess();
+  if (fresh.length) { save(); toast(`[PENALTY] ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
+}
+
 // Everything the System wants from you. Shown behind the bell on Home.
 function alertList() {
   const t = E.today(), flags = E.painFlags(), od = overduePeople(), wd = P.windDownNow();
@@ -120,7 +207,10 @@ function alertList() {
   const lastExp = S.settings.lastExportAt, expDays = lastExp ? E.daysBetween(lastExp.slice(0, 10), t) : null;
   const unplaced = P.plan().unplaced.length;
   const btn = (id, l) => `<div class="btns"><button class="btn sm" data-act="go" data-id="${id}">${l}</button></div>`;
+  const pens = St.openPenalties(), fg = St.focusGate();
   return [
+    pens.length && penaltyBox(),
+    fg.open && fg.ended && reportDueBox(fg),
     wd && sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done."),
     od.length && sysBox(`${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.`, od.slice(0, 3).map(p => esc(p.name)).join(", "), btn("social", "Open Social")),
     E.moneyDue() && sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now")),
@@ -310,7 +400,7 @@ function wishFormHtml(w) {
 function vRewards() {
   const wallet = E.xpWallet(), fb = E.funBudget(), all = live("wishlist");
   const open = all.filter(w => !w.bought), got = all.filter(w => w.bought).sort((a, b) => b.bought.date.localeCompare(a.bought.date));
-  const ready = w => wallet >= w.xp && fb.left >= w.price;
+  const locked = St.openPenalties().length > 0, ready = w => !locked && wallet >= w.xp && fb.left >= w.price;
   const pct = w => Math.min(wallet / (w.xp || 1), fb.left / (w.price || 1), 1);
   open.sort((a, b) => ready(b) - ready(a) || pct(b) - pct(a));
   const icon = k => ic(k === "trip" ? "plane" : k === "exp" ? "star" : "gem", "inl");
@@ -321,6 +411,7 @@ function vRewards() {
     <div class="card g-mag"><span class="k">XP to spend</span><div><div class="dm big2">${wallet.toLocaleString("en-US")}</div><div class="small soft">${E.xpTotal().toLocaleString("en-US")} earned · ${E.xpSpent().toLocaleString("en-US")} spent · level unaffected</div></div></div>
     <div class="card g-org"><span class="k">Fun budget</span><div><div class="dm big2">${yen(fb.left)}</div><div class="small soft">${yen(fb.monthly)} / month, rolls over · ${yen(fb.spent)} spent</div></div></div>
   </div>
+  ${penaltyBox()}
   ${wishForm === "new" ? wishFormHtml() : `<div class="btns"><button class="btn primary" data-act="wishform" data-id="new">+ Wishlist item</button></div>`}
   <h2>Wishlist <span class="n">${open.filter(ready).length} ready</span></h2>
   <div class="list">${open.map(w => {
@@ -587,8 +678,8 @@ const dayLabel = d => d === E.today() ? "Today" : d === E.addDays(E.today(), 1) 
 
 function vPlan([sub]) {
   sub = sub || "day";
-  const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
-  const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : vDay();
+  const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"], ["study", "Study"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
+  const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : sub === "study" ? vStudy() : vDay();
   return `<header class="top"><div><div class="hdr">Timetable · auto-planner</div><h1>Plan</h1></div>
     <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button><button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">${ic("plus")}</button></div></header>${seg}${body}`;
 }
@@ -605,7 +696,7 @@ function agendaRows(date, p) {
       <button class="bx sm" data-act="taskdone" data-id="${r.k.id}" aria-label="Done: ${esc(r.k.title)}"></button></div>`;
     const b = r.b;
     return pre + `<div class="ag blk k-${esc(b.kind)}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
-      <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div></div></div>`;
+      <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div>${r.tail ? "" : topicLine(b)}</div></div>`;
   });
   if (!marked) rows.push(`<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`);
   return rows.join("") || `<p class="empty">Nothing on this day.</p>`;
@@ -623,6 +714,34 @@ function vDay() {
   <div class="panel agenda">${agendaRows(d, p)}</div>
   ${p.unplaced.length ? sysBox(`<span class="warn">${p.unplaced.length} task${p.unplaced.length === 1 ? "" : "s"} didn't fit in the next 2 weeks.</span>`, "Shorten them, split them, or move a block.", `<div class="btns"><button class="btn sm" data-act="go" data-id="plan/todo">Open to-do</button></div>`) : ""}
   <p class="tiny muted">Tasks fill free gaps by deadline, then priority. Focus tasks stay out of the 8 hours after a night shift and finish by 22:00. Nothing is placed after wind-down.</p>`;
+}
+
+let topicEdit = null; // subject whose topic list is open for editing
+function vStudy() {
+  const sst = S.settings.study, fg = St.focusGate();
+  const subj = Object.keys(SUBJECTS).map(k => {
+    const L = St.topics(k), cur = St.current(k), done = L.filter(t => St.progress(k, t.id) >= 100).length;
+    if (topicEdit === k) return `<div class="panel"><h3>${esc(SUBJECTS[k].name)} topics</h3>
+      <p class="tiny muted">One per line, in the order you'll do them: Title | what to do | what you end with. Keep a title the same and its progress stays.</p>
+      <textarea data-f="topics" rows="14" style="font-size:13px">${esc(St.topicsText(k))}</textarea>
+      <div class="btns"><button class="btn go" data-act="savetopics" data-id="${k}">Save</button><button class="btn" data-act="topicedit">Cancel</button>${sst.topics && sst.topics[k] ? `<button class="btn danger" data-act="resettopics" data-id="${k}">Back to the built-in list</button>` : ""}</div></div>`;
+    return `<div class="panel"><div class="row between"><h3>${esc(SUBJECTS[k].name)}</h3><span class="small muted">${done}/${L.length} done</span></div>${bar(done / (L.length || 1), "var(--sys)")}
+      <div class="small" style="margin-top:8px">${cur ? `Now: <b>${esc(cur.t)}</b> · ${St.progress(k, cur.id)}%` : "All done."}</div>
+      <details style="margin-top:8px"><summary class="small">All topics</summary>${L.map((t, i) => { const pr = St.progress(k, t.id);
+        return `<div class="item row between small ${t === cur ? "cur" : ""}"><span class="grow">${i + 1}. ${esc(t.t)}</span><span class="${pr >= 100 ? "" : "muted"}">${pr >= 100 ? ic("check", "inl") : pr + "%"}</span></div>`; }).join("")}</details>
+      <div class="btns"><button class="btn sm" data-act="topicedit" data-id="${k}">Edit list</button></div>
+      <p class="tiny muted">Blocks named like "${esc(SUBJECTS[k].match.split("|")[0])}…" use this list.</p></div>`;
+  }).join("");
+  const logs = live("blockLog").filter(r => r.final).sort((a, b) => b.at - a.at).slice(0, 15);
+  const pens = live("penalties").sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15), open = new Set(St.openPenalties().map(p => p.id));
+  return `${fg.open ? `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="nav" data-id="focus">${fg.ended ? "Report " : "Enter "}${esc(fg.o.b.title)}</button></div>` : ""}
+  <h2>Topics <span class="n">one per study block</span></h2>${subj}
+  <h2>Reports</h2><div class="panel">${logs.map(r => `<div class="item row between"><div class="grow small"><b>${esc(r.title)}</b> · ${esc(dayLabel(r.date))}<div class="muted">${r.done ? "Done" : r.gain || r.poms ? `+${r.gain}% · ${r.poms} round${r.poms === 1 ? "" : "s"}` : "Not done"}${r.topic && r.subj ? " · " + esc((St.topics(r.subj).find(t => t.id === r.topic) || {}).t || "") : ""}</div></div>
+    <button class="btn sm" data-act="delreport" data-id="${r.id}">Delete</button></div>`).join("") || `<p class="empty">No reports yet. They show up after each study block.</p>`}</div>
+  <h2>Penalties <span class="n">${open.size} open</span></h2><div class="panel">${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}</div>
+  <details class="panel"><summary>Pomodoro and penalty settings</summary><div class="grid" style="margin-top:8px">
+    ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
+    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round. Moving or skipping a block before its edit lock is allowed and isn't penalised.</p></details>`;
 }
 
 function taskFormHtml(k) {
@@ -1195,7 +1314,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.11 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.12 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1406,6 +1525,7 @@ document.addEventListener("click", async ev => {
     case "delwish": if (confirm("Delete this wishlist item?")) { remove("wishlist", id); wishForm = null; save(); render(); } return;
     case "buywish": {
       const w = live("wishlist").find(x => x.id === id); if (!w) return;
+      if (St.openPenalties().length) return toast("Shop locked: clear your penalty quest first");
       const wallet = E.xpWallet(), fb = E.funBudget();
       if (wallet < w.xp || fb.left < w.price) return toast("Not unlocked yet");
       const mp = E.moneyPlan(), after = Math.max(0, mp.goal - (mp.bank - w.price)) / mp.weeks;
@@ -1463,11 +1583,44 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "delhang": if (confirm("Delete this hangout?")) { E.revokeXP("hang:" + id); remove("hangouts", id); save(); render(); } return;
 
+    // study blocks
+    case "pomo": {
+      const g = St.focusGate(); if (!g.open) return render();
+      if (id === "start" && typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+      St.pomoAct(St.occKey(g.o), id); return render();
+    }
+    case "blockreport": case "topicdone": {
+      const g = St.focusGate(); if (!g.open) return render();
+      const o = g.o, subj = St.subjectOf(o.b), top = subj && St.current(subj), p = St.pomo(St.occKey(o));
+      const rest = top ? 100 - St.progress(subj, top.id) : 0;
+      if (a === "topicdone") {
+        if (!top || !confirm(`Mark ${top.t} as finished and move to the next topic?`)) return;
+        const r = St.report(o, { subj, topic: top.id, gain: rest, final: false }); save(); announce(r.gains); return render();
+      }
+      const done = id === "done", gain = id === "rest" ? rest : done ? 0 : +id;
+      if (!done && !gain && !p.n && !confirm("Report this block as not done? It counts as skipped: penalty.")) return;
+      const r = St.report(o, { subj, topic: top ? top.id : null, gain, poms: p.n, done });
+      save(); announce(r.gains); if (!r.gains.filter(Boolean).length) toast("Reported"); return render();
+    }
+    case "delreport": if (confirm("Delete this report? If the block is still within the last week, it'll count as skipped.")) { remove("blockLog", id); save(); render(); } return;
+    case "topicedit": topicEdit = id || null; return render();
+    case "savetopics": {
+      const L = St.parseTopics(id, $("[data-f=topics]").value);
+      if (!L.length) return toast("Add at least one topic");
+      S.settings.study.topics = { ...(S.settings.study.topics || {}), [id]: L }; topicEdit = null; touchSettings(); save(); toast("Topics saved"); return render();
+    }
+    case "resettopics": {
+      if (!confirm("Go back to the built-in topic list? Progress on topics with the same name is kept.")) return;
+      const t = { ...(S.settings.study.topics || {}) }; delete t[id]; S.settings.study.topics = Object.keys(t).length ? t : null;
+      topicEdit = null; touchSettings(); save(); return render();
+    }
+
     // plan
     case "pday": planDate = id === E.today() ? null : id; return render();
     case "taskdone": {
       const k = live("tasks").find(x => x.id === id); if (!k) return;
       put("tasks", { ...k, done: true, doneAt: Date.now() });
+      if (k.penalty) { save(); toast(St.openPenalties().length ? "Penalty quest cleared" : "Penalty cleared. Shop unlocked."); return render(); }
       const ref = "task:" + id, gains = live("xpEvents").some(e => e.ref === ref) ? [] : [E.gainXP("task", ref, k.title)];
       save(); announce(gains); if (!gains.length) toast("Done"); return render();
     }
@@ -1483,7 +1636,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       toast(at ? `Planned: ${dayLabel(at.date)} ${P.toHM(at.s)}${at.late ? " (after deadline)" : ""}` : "No free slot in the next 2 weeks");
       return render();
     }
-    case "deltask": if (confirm("Delete this task?")) { remove("tasks", id); taskForm = null; save(); render(); } return;
+    case "deltask": if (live("tasks").find(x => x.id === id)?.penalty) return toast("Penalty quests can't be deleted. Do it to clear it.");
+      if (confirm("Delete this task?")) { remove("tasks", id); taskForm = null; save(); render(); } return;
     case "pin": case "unpin": {
       const k = live("tasks").find(x => x.id === id); if (!k) return;
       const at = a === "pin" ? P.plan().at.get(id) : null;
@@ -1574,6 +1728,7 @@ document.addEventListener("change", async ev => {
   if (k === "criteria") { const list = el.value.split("\n").map(x => x.trim()).filter(Boolean); if (!list.length) return render(); S.settings.social.criteria = [...new Set(list)]; touchSettings(); save(); return render(); }
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
+  if (k === "studynum") { const v = num(el.value), id = el.dataset.id; if (v === null || v < (id === "penaltyXp" || id === "grace" ? 0 : 1) || v > 500) return render(); S.settings.study[id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "planmin") { const v = num(el.value); if (v === null || v < 0 || v > 120) return render(); S.settings.plan[el.dataset.id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "slotoff") {
     const d = drawerDay ?? E.parse(E.today()).getDay(), cfg = S.settings.sessions[d] = { off: [], extra: [], ...(S.settings.sessions[d] || {}) };
@@ -1598,11 +1753,15 @@ document.addEventListener("change", async ev => {
   await load();
   entering = true; render();
   Sync.init({ render, toast });
+  // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
+  setTimeout(() => { runAssess(); render(); }, 6000);
+  setInterval(tickPomo, 1000);
   scheduleWindDown(); onSave(scheduleWindDown);
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
   setInterval(() => {
+    runAssess();
     const busy = document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
-    if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0])) render();
+    if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0]) && !topicEdit) render();
   }, 60000);
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     // A new release takes over and reloads the page once, so updates show without a second restart.

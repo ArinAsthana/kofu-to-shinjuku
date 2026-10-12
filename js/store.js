@@ -2,7 +2,7 @@
 // Every record has an id and `u` (last-updated ms). Deletes are tombstones ({del:true})
 // so sync between devices never resurrects or loses records.
 
-import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED, BLOCK_SEED, PLAN_SETTINGS, WIND_DOWN, CARE_SEED, SOCIAL, FUN } from "./data.js";
+import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED, BLOCK_SEED, PLAN_SETTINGS, WIND_DOWN, CARE_SEED, SOCIAL, FUN, STUDY } from "./data.js";
 
 export const RECORD_STORES = [
   "habitLog", "xpEvents", "rewardHistory", "exercises", "areaState",
@@ -11,6 +11,7 @@ export const RECORD_STORES = [
   "blocks", "tasks", // schema 3: timetable {title, kind, days:[0-6], date|null, start, end "HH:MM", locked}; tasks {title, mins, prio 1-3, due, energy, done, doneAt, pin:{date,start}|null}
   "care", "careLog", "people", "hangouts", // schema 4: care items {name, slot, order, days, note}; careLog {item, date}; people {name, type, scores:{criterion:1-5}, every, where, note}; hangouts {date, people:[ids], what, note}
   "wishlist", // schema 5: {name, price ¥, xp cost, kind item|trip, link, note, bought: null|{date, xp, yen}}
+  "blockLog", "penalties", // schema 6: blockLog {date, block, subj, topic, gain %, poms, done}; penalties {date, block, title, xp, task} (id "pen-<date>-<block>")
 ];
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -35,6 +36,8 @@ function freshSettings() {
     windDown: { ...WIND_DOWN },
     social: { criteria: SOCIAL.criteria.slice() },
     fun: { ...FUN, start: localIso(new Date()).slice(0, 7) },
+    // from: only quest blocks ending after this (ms) can earn a penalty. topics: edited topic lists, null = built-in.
+    study: { ...STUDY, from: Date.now(), topics: null },
   };
 }
 
@@ -125,6 +128,8 @@ const MIGRATIONS = {
   },
   // 4 -> 5: wishlist rewards. New empty store; the fun budget starts accruing this month.
   4: s => { s.wishlist = s.wishlist || []; s.settings = s.settings || {}; s.settings.fun = { ...FUN, start: localIso(new Date()).slice(0, 7), ...(s.settings.fun || {}) }; return s; },
+  // 5 -> 6: study blocks and penalties. Two new empty stores; penalties only count from the upgrade onwards.
+  5: s => { s.blockLog = s.blockLog || []; s.penalties = s.penalties || []; return s; },
 };
 function seedCare(s) {
   const d = new Date(), since = localIso(d).slice(0, 10); // adherence counts from the day tracking starts
@@ -156,6 +161,7 @@ export function migrate(s) {
   s.settings.windDown = Object.assign(base.settings.windDown, s.settings.windDown || {});
   s.settings.social = Object.assign(base.settings.social, s.settings.social || {});
   s.settings.fun = Object.assign(base.settings.fun, s.settings.fun || {});
+  s.settings.study = Object.assign(base.settings.study, s.settings.study || {});
   s.app = APP_ID;
   return s;
 }
