@@ -8,6 +8,8 @@ import { ic } from "./icons.js";
 import * as C from "./command.js";
 import * as St from "./study.js";
 import * as G from "./glass.js";
+import * as K from "./cards.js";
+import { STARTER } from "./decks.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -42,16 +44,16 @@ document.addEventListener("touchend", e => {
   if (d < el.dataset.min || d > el.dataset.max) return;
   planDate = d === E.today() ? null : d; entering = true; render();
 }, { passive: true });
-window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeon: "home", focus: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeon: "home", focus: "home", cards: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -67,7 +69,7 @@ function render() {
 }
 // Async bits after render (photo thumbnails).
 function hydrate() {
-  document.querySelectorAll("img[data-photo]").forEach(async img => {
+  document.querySelectorAll("img[data-photo],audio[data-photo]").forEach(async img => {
     const b = await photos.get(img.dataset.photo).catch(() => null);
     if (b) img.src = URL.createObjectURL(b);
   });
@@ -192,7 +194,9 @@ function dungeonSettings() {
   const sst = S.settings.study;
   return `<h3>Pomodoro and penalties</h3><div class="grid">
     ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
-    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p>`;
+    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p>
+    <h3>Flashcards</h3><div class="grid"><label class="f">New cards per day<input type="number" inputmode="numeric" data-ch="cardsnew" value="${S.settings.cards.newPerDay ?? 15}"></label></div>
+    <p class="tiny muted">How many unseen cards join the review pile each day. Reviews of cards you've seen are never capped.</p>`;
 }
 function bodySettings() {
   const st = S.settings;
@@ -321,8 +325,10 @@ function vFocus() {
       <div class="chips">${opts.map(([v, l]) => `<button class="chip" data-act="blockreport" data-id="${v}">${l}</button>`).join("")}</div>
       <p class="tiny muted">${g.ended ? `Report by ${P.toHM(g.closes)}.` : "Report when the block ends."} No work done by then counts as skipped: −${pen} XP and a make-up penalty quest. The shop locks until it's cleared.</p></div>`;
   }
+  const due = K.queue().length;
+  const stages = `<div class="stages"><span class="st on">1 · Topic</span><button class="st" data-act="nav" data-id="cards/review">2 · Flashcards${due ? ` <b>${due}</b>` : ` ${ic("check", "inl")}`}</button><span class="st off">3 · JLPT <i>soon</i></span></div>`;
   return `${back}<header class="top"><div><div class="hdr">System · Quest · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>
-  ${timer}${topicHtml}${rep}`;
+  ${stages}${timer}${topicHtml}${rep}`;
 }
 // Phase change: buzz, beep, and a notification if the app is in the background.
 function chime(p) {
@@ -764,6 +770,11 @@ function cmdCard(p) {
       <label class="f">Energy<select data-f="energy"><option value="high" ${p.energy === "high" ? "selected" : ""}>Focus</option><option value="low" ${p.energy === "low" ? "selected" : ""}>Light</option></select></label>
       <label class="f">Due (optional)<input type="date" data-f="due" value="${esc(p.due || "")}"></label></div>
       <div class="small muted" style="margin-top:8px">The planner picks the slot.</div>`;
+  } else if (p.type === "card") {
+    title = "Add flashcard";
+    body = `<div class="grid"><label class="f" style="flex-basis:100%">Front<input data-f="front" value="${esc(p.front)}"></label>
+      <label class="f" style="flex-basis:100%">Back<input data-f="back" value="${esc(p.back)}"></label>
+      <label class="f" style="flex-basis:100%">Deck<input data-f="deck" list="dl-cmd" value="${esc(lastDeck())}"></label>${deckList("dl-cmd")}</div>`;
   } else if (p.type === "wish") {
     title = "Add to wishlist";
     body = `<div class="grid"><label class="f" style="flex-basis:100%">What<input data-f="name" value="${esc(p.name)}"></label>
@@ -788,7 +799,7 @@ function vCmd() {
   ${cmdCard(cmd.prop)}
   <h2>Things it understands</h2>
   <div class="list">${C.EXAMPLES.map(x => `<button class="panel tbtn small cmdex" style="margin:0;text-align:left;width:100%" data-act="cmdex" data-id="${esc(x)}">${ic("cmd", "inl")}<span>${esc(x)}</span></button>`).join("")}</div>
-  <p class="tiny muted">Works offline with set phrasings: move, push, add, add task, add … to my wishlist. Add “every week” to change a weekly block for good; otherwise only that day moves.</p>`;
+  <p class="tiny muted">Works offline with set phrasings: move, push, add, add task, add … to my wishlist, card front | back. Add “every week” to change a weekly block for good; otherwise only that day moves.</p>`;
 }
 function cmdRun(text) {
   cmd.text = text; cmd.prop = C.parse(text); cmd.done = null; render();
@@ -819,6 +830,11 @@ function cmdApply() {
     const k = add("tasks", { title: f.title, mins: +f.mins, prio: f.due ? 3 : 2, energy: f.energy, due: f.due || null, done: false, created: Date.now(), pin: null });
     const at = P.plan().at.get(k.id);
     msg = `${f.title}: ${at ? `planned ${dayName(at.date)} ${P.toHM(at.s)}${at.late ? " (after deadline)" : ""}` : "no free slot in the next 2 weeks"}.`;
+  } else if (p.type === "card") {
+    if (!f.front || !f.back) return toast("Fill in both sides"); const deck = f.deck || lastDeck();
+    if (K.inDeck(deck).some(c => c.front.trim() === f.front)) return toast("Already in " + deck);
+    add("cards", K.newCard({ deck, front: f.front, back: f.back })); setLastDeck(deck);
+    msg = `Card added to ${deck}.`;
   } else if (p.type === "wish") {
     const price = num(f.price); if (!f.name) return toast("Name it"); if (price === null || price < 0) return toast("Add the price");
     const xp = E.suggestXp(price);
@@ -909,7 +925,7 @@ function vDungeon() {
   ${pens.length ? penaltyBox() : ""}
   ${gateCard("body", bg)}${gateCard("study", sg)}
   ${tip("dungeon", `Each dungeon opens ${S.settings.plan.openPad ?? 10} min before its quest block. Do the work inside the block, or it counts as skipped: −${S.settings.study.penaltyXp ?? 30} XP and a make-up quest.`)}
-  <div class="quiet-links"><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
+  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
 }
 
 let topicEdit = null; // subject whose topic list is open for editing
@@ -938,6 +954,119 @@ function vStudy() {
   ${fold("study-reports", `<b class="grow">Reports</b><span class="small muted">${logs.length}</span>`, `${logs.map(r => `<div class="item row between"><div class="grow small"><b>${esc(r.title)}</b> · ${esc(dayLabel(r.date))}<div class="muted">${r.done ? "Done" : r.gain || r.poms ? `+${r.gain}% · ${r.poms} round${r.poms === 1 ? "" : "s"}` : "Not done"}${r.topic && r.subj ? " · " + esc((St.topics(r.subj).find(t => t.id === r.topic) || {}).t || "") : ""}</div></div>
     <button class="btn sm" data-act="delreport" data-id="${r.id}">Delete</button></div>`).join("") || `<p class="empty">No reports yet. They show up after each study block.</p>`}`)}
   ${fold("study-pens", `<b class="grow">Penalties</b><span class="small ${open.size ? "bad-t" : "muted"}">${open.size} open</span>`, `${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}`, open.size > 0)}`;
+}
+
+/* ================= FLASHCARDS ================= */
+let cardForm = null, rv = null, bulkOpen = false, recorder = null, newDeck = null; // editor, current review card, bulk paste open, live MediaRecorder, deck for the next new card
+const lastDeck = () => { try { return localStorage.getItem("kts-deck") || "My cards"; } catch (e) { return "My cards"; } };
+const setLastDeck = d => { try { localStorage.setItem("kts-deck", d); } catch (e) {} };
+const deckList = id => `<datalist id="${id}">${K.deckNames().map(d => `<option value="${esc(d)}">`).join("")}</datalist>`;
+const starterIds = lesson => STARTER[lesson].map((_, i) => "st-" + lesson.replace(/\W/g, "") + "-" + i);
+function gateClosedHtml(g, what) {
+  const nx = g.next;
+  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
+    <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
+    <div class="small muted">${what} run inside study blocks.${nx ? " Next: " + esc(nx.b.title) + "." : ""}</div></div></div></div>`;
+}
+function vCards([sub, a]) {
+  if (sub === "review") return vReview();
+  if (sub === "edit") return vCardEdit(a);
+  if (sub === "deck") return vDeck(a);
+  const back = `<button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button>`;
+  const q = K.queue(), g = St.focusGate(), decks = K.deckNames(), done = K.reviewedToday();
+  const head = `${back}<header class="top"><div><div class="hdr">Study dungeon</div><h1>Flashcards</h1></div>${gear("dungeon")}</header>`;
+  const rev = `<div class="panel dgate ${g.open && q.length ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Due now</span><h3 style="margin:2px 0 4px">${q.length} card${q.length === 1 ? "" : "s"}</h3>
+    <div class="small muted">${done.n ? `${done.n} reviewed today, ${Math.round(done.ok / done.n * 100)}% right` : "None reviewed today"}</div></div>
+    ${g.open ? `<button class="btn ${q.length ? "go" : ""}" data-act="nav" data-id="cards/review" ${q.length ? "" : "disabled"}>Review</button>` : `<span class="small muted">${ic("lock", "inl")} ${g.next ? P.toHM(g.next.s) : "Closed"}</span>`}</div></div>`;
+  const deckRows = decks.map(d => { const all = K.inDeck(d), due = K.dueCount(d);
+    return `<button class="panel tbtn row between" style="width:100%;margin:0 0 8px" data-act="go" data-id="cards/deck/${encodeURIComponent(d)}"><span class="grow" style="text-align:left"><b>${esc(d)}</b><div class="small muted">${all.length} card${all.length === 1 ? "" : "s"}${K.flipOnly(d) ? " · flip only until it has 4" : ""}</div></span><span class="small ${due ? "" : "muted"}">${due} due</span></button>`; }).join("");
+  const bulk = bulkOpen ? `<div class="panel" id="bulkForm"><h3>Bulk paste</h3><p class="tiny muted">One card per line: front | back. A tab works too, so you can paste two spreadsheet columns.</p>
+    <textarea data-f="bulk" rows="8" placeholder="泳ぐ | to swim&#10;先輩 | senior"></textarea>
+    <label class="f" style="margin-top:8px">Deck<input data-f="deck" list="dl-bulk" value="${esc(lastDeck())}"></label>${deckList("dl-bulk")}
+    <div class="btns"><button class="btn go" data-act="bulkadd">Add cards</button><button class="btn" data-act="bulk">Cancel</button></div></div>` : "";
+  const starters = Object.keys(STARTER).map(l => { const n = K.inDeck(l).length;
+    return `<div class="item row between"><span class="grow">${esc(l)} <span class="small muted">· ${STARTER[l].length} cards</span></span>${n ? `<span class="small muted">${ic("check", "inl")} ${n} in decks</span>` : `<button class="btn sm" data-act="starter" data-id="${esc(l)}">Add</button>`}</div>`; }).join("");
+  return `${head}${rev}
+  ${tip("cards", "New cards are multiple choice. Get one right 3 times over 2 different days and it becomes a flip card you grade yourself. Miss a flip card twice in a row and it goes back to choices.")}
+  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="cards/edit/new">${ic("plus")} New card</button><button class="btn" data-act="bulk">Bulk paste</button></div>
+  ${bulk}
+  <h2>Decks <span class="n">${cardsCount()}</span></h2>${deckRows || `<p class="empty">No cards yet. Add one, paste a list, or start with a Genki deck below.</p>`}
+  ${fold("cards-starter", `<b class="grow">Starter decks · Genki II</b><span class="small muted">L13–23</span>`, `<p class="tiny muted">Each lesson's grammar points with short example sentences, plus a few words. A starting point: edit them and add your own.</p>${starters}`, !decks.length)}`;
+}
+const cardsCount = () => K.cards().length;
+// Keeps what's typed in the card editor when it re-renders (image added, recording done).
+function keepCardForm() { if (cardForm && $("#cardForm")) Object.assign(cardForm, readForm("#cardForm")); }
+function vDeck(name) {
+  const list = K.inDeck(name).sort((a, b) => (a.created || 0) - (b.created || 0));
+  return `<button class="back" data-act="nav" data-id="cards">${ic("left")} Flashcards</button>
+  <header class="top"><div><div class="hdr">Deck · ${list.length} cards</div><h1>${esc(name)}</h1></div></header>
+  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="newcardin" data-id="${esc(name)}">${ic("plus")} New card</button></div>
+  ${list.map(c => `<button class="panel tbtn row between" style="width:100%;margin:0 0 8px;text-align:left" data-act="go" data-id="cards/edit/${c.id}"><span class="grow"><b class="${K.JA_RE.test(c.front) ? "ja" : ""}">${esc(c.front)}</b><div class="small muted">${esc(c.back)}</div></span>
+    <span class="tiny muted" style="flex:none;text-align:right">${c.img ? ic("image", "inl") : ""}${c.aud ? ic("mic", "inl") : ""}<br>${esc(K.stageLabel(c))}</span></button>`).join("") || `<p class="empty">Empty deck.</p>`}`;
+}
+function vCardEdit(id) {
+  const c = id === "new" ? null : live("cards").find(x => x.id === id);
+  if (id !== "new" && !c) return `<button class="back" data-act="nav" data-id="cards">${ic("left")} Flashcards</button><p class="empty">That card is gone.</p>`;
+  if (c) { if (!cardForm || cardForm.id !== c.id) cardForm = { id: c.id, img: c.img, aud: c.aud, front: c.front, back: c.back, deck: c.deck }; }
+  else if (!cardForm || !cardForm.isNew) { cardForm = { id: uid(), isNew: true, img: null, aud: null, front: "", back: "", deck: newDeck || lastDeck() }; newDeck = null; }
+  const f = cardForm, canRec = !!(window.MediaRecorder && navigator.mediaDevices);
+  return `<button class="back" data-act="cardcancel">${ic("left")} ${c ? esc(c.deck) : "Flashcards"}</button>
+  <header class="top"><div><div class="hdr">${c ? esc(K.stageLabel(c)) : "New card"}</div><h1>${c ? "Edit card" : "New card"}</h1></div></header>
+  <div class="panel" id="cardForm">
+    <label class="f">Front<textarea data-f="front" rows="2" placeholder="泳ぐ">${esc(f.front)}</textarea></label>
+    <label class="f" style="margin-top:8px">Back<textarea data-f="back" rows="2" placeholder="to swim">${esc(f.back)}</textarea></label>
+    <label class="f" style="margin-top:8px">Deck<input data-f="deck" list="dl-card" value="${esc(f.deck)}"></label>${deckList("dl-card")}
+    <p class="tiny muted">Japanese on either side gets a Listen button.</p>
+    <h3>Image</h3>${f.img ? `<img class="fc-img" data-photo="${f.img}" alt="Card image"><div class="btns"><button class="btn sm danger" data-act="cardimgdel">Remove image</button></div>`
+      : `<label class="btn sm" style="display:inline-flex;gap:6px;align-items:center">${ic("image")} Camera or gallery<input type="file" accept="image/*" data-ch="cardimg" hidden></label>`}
+    <h3>Your voice</h3>${recorder ? `<button class="btn danger" data-act="recstop">${ic("stop")} Stop recording</button>`
+      : `${f.aud ? `<audio controls data-photo="${f.aud}"></audio><div class="btns"><button class="btn sm" data-act="recstart">Record again</button><button class="btn sm danger" data-act="cardauddel">Remove</button></div>` : canRec ? `<button class="btn sm" data-act="recstart">${ic("mic")} Record</button>` : `<p class="small muted">Recording isn't supported in this browser.</p>`}`}
+    <p class="tiny muted">Images and recordings stay on this phone. Export them with the backup file in More.</p>
+    <div class="btns"><button class="btn go" data-act="cardsave">Save</button><button class="btn" data-act="cardcancel">Cancel</button>${c ? `<button class="btn danger" data-act="carddel">Delete</button>` : ""}</div></div>`;
+}
+function fcFace(c, showBack) {
+  const ja = K.jaText(c);
+  return `${c.img ? `<img class="fc-img" data-photo="${c.img}" alt="">` : ""}<div class="fc-front ${K.JA_RE.test(c.front) ? "ja" : ""}">${esc(c.front)}</div>
+    ${showBack ? `<div class="fc-back ${K.JA_RE.test(c.back) ? "ja" : ""}">${esc(c.back)}</div>` : ""}
+    <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">${ja ? `<button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button>` : ""}${c.aud && (showBack || !ja) ? `<audio controls data-photo="${c.aud}"></audio>` : ""}</div>`;
+}
+function vReview() {
+  const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Study dungeon" : "Flashcards"}</button>`;
+  const g = St.focusGate();
+  if (!g.open) return `${back}<h1>Flashcards</h1>${gateClosedHtml(g, "Reviews")}`;
+  const q = K.queue(), done = K.reviewedToday();
+  let c = rv && live("cards").find(x => x.id === rv.id);
+  if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), opts: K.mode(c) === "mcq" ? K.options(c) : null, flip: false, pick: null } : null; }
+  const head = `${back}<header class="top"><div><div class="hdr">Study dungeon · Stage 2 · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
+  if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Stage 3, JLPT practice, arrives in the next update.`,
+    `<div class="btns"><button class="btn sm" data-act="nav" data-id="focus">Back to the block</button><button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
+  const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3` : c.s ? "Flip" : "Flip · new"}</div>`;
+  if (rv.mode === "mcq") {
+    const answered = rv.pick != null, right = c.back.trim();
+    return `${head}<div class="panel fc">${tag}${fcFace(c, false)}</div>
+      <div class="opts">${rv.opts.map((o, i) => `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
+      ${answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}`;
+  }
+  if (!rv.flip) return `${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="btns"><button class="btn primary block" data-act="rvflip">Show answer</button></div>`;
+  return `${head}<div class="panel fc">${tag}${fcFace(c, true)}</div>
+    <div class="grades">${[[1, "Again"], [2, "Hard"], [3, "Good"], [4, "Easy"]].map(([gr, l]) => `<button class="grade g${gr}" data-act="rvgrade" data-id="${gr}"><b>${l}</b><span>${K.preview(c, gr)}</span></button>`).join("")}</div>`;
+}
+async function recStart() {
+  try {
+    keepCardForm();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true }), chunks = [], id = cardForm.id;
+    const mr = new MediaRecorder(stream);
+    mr.ondataavailable = e => e.data.size && chunks.push(e.data);
+    mr.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop()); recorder = null;
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" }), mid = "ca-" + id;
+      await photos.put(mid, blob);
+      keepCardForm();
+      if (cardForm && cardForm.id === id) { cardForm.aud = mid; const c = live("cards").find(x => x.id === id); if (c) { c.aud = mid; put("cards", c); save(); } }
+      render();
+    };
+    mr.start(); recorder = mr; render();
+  } catch (e) { toast("Microphone not allowed"); }
 }
 
 function taskFormHtml(k) {
@@ -1458,7 +1587,7 @@ function vMore() {
   return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>More</h1>
   <div class="panel"><h3>Sync and backup</h3>${Sync.panelHtml(esc)}</div>
   <div class="panel"><h3>Export</h3>
-    <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Photos are not included.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
+    <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Flashcard images and recordings are in the file; check-in photos and the copied text leave media out.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
     <div class="btns"><button class="btn primary" data-act="export">Export file</button><button class="btn" data-act="exportcopy">Copy JSON</button></div>
     <div id="exportBox"></div>
   </div>
@@ -1479,7 +1608,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.3 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1868,12 +1997,62 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       touchSettings(); save(); scheduleWindDown(); return render();
     }
 
+    // flashcards
+    case "bulk": bulkOpen = !bulkOpen; return render();
+    case "bulkadd": {
+      const f = readForm("#bulkForm"), list = K.parseBulk(f.bulk), deck = f.deck || lastDeck();
+      if (!list.length) return toast("One card per line: front | back");
+      const n = K.addCards(list, deck); setLastDeck(deck); bulkOpen = false; save();
+      toast(`${n} card${n === 1 ? "" : "s"} added to ${deck}${n < list.length ? ` · ${list.length - n} already there` : ""}`); return render();
+    }
+    case "starter": { const n = K.addCards(STARTER[id], id, starterIds(id)); save(); toast(`${id}: ${n} cards added`); return render(); }
+    case "newcardin": newDeck = id; return go("cards/edit/new");
+    case "cardsave": {
+      const f = readForm("#cardForm"), deck = f.deck || lastDeck(); if (!f.front || !f.back) return toast("Fill in both sides");
+      const c = live("cards").find(x => x.id === cardForm.id);
+      if (K.inDeck(deck).some(x => x.id !== cardForm.id && x.front.trim() === f.front)) return toast("That front is already in " + deck);
+      if (c) put("cards", { ...c, front: f.front, back: f.back, deck, ja: K.JA_RE.test(f.front) || K.JA_RE.test(f.back), img: cardForm.img, aud: cardForm.aud });
+      else put("cards", K.newCard({ id: cardForm.id, deck, front: f.front, back: f.back, img: cardForm.img, aud: cardForm.aud }));
+      setLastDeck(deck); save(); toast(c ? "Saved" : "Card added");
+      if (c) return go("cards/deck/" + encodeURIComponent(deck));
+      cardForm = null; render(); return $("#cardForm [data-f=front]")?.focus(); // stay for the next card
+    }
+    case "cardcancel": {
+      if (cardForm && cardForm.isNew) for (const m of [cardForm.img, cardForm.aud]) if (m) await photos.del(m).catch(() => {});
+      const c = cardForm && live("cards").find(x => x.id === cardForm.id);
+      return go(c ? "cards/deck/" + encodeURIComponent(c.deck) : "cards");
+    }
+    case "carddel": {
+      const c = live("cards").find(x => x.id === cardForm?.id); if (!c || !confirm("Delete this card?")) return;
+      await K.deleteCard(c); save(); toast("Card deleted"); return go("cards/deck/" + encodeURIComponent(c.deck));
+    }
+    case "cardimgdel": case "cardauddel": {
+      keepCardForm(); const key = a === "cardimgdel" ? "img" : "aud", m = cardForm[key]; if (m) await photos.del(m).catch(() => {});
+      cardForm[key] = null; const c = live("cards").find(x => x.id === cardForm.id); if (c) { c[key] = null; put("cards", c); save(); }
+      return render();
+    }
+    case "recstart": return recStart();
+    case "recstop": keepCardForm(); recorder && recorder.stop(); return;
+    case "say": { const c = live("cards").find(x => x.id === id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
+    case "rvpick": {
+      const c = rv && live("cards").find(x => x.id === rv.id); if (!c || rv.pick != null) return;
+      rv.pick = +id; announce(K.answerMcq(c, rv.opts[+id] === c.back.trim())); save(); return render();
+    }
+    case "rvnext": rv = null; return render();
+    case "rvflip": if (rv) rv.flip = true; return render();
+    case "rvgrade": {
+      const c = rv && live("cards").find(x => x.id === rv.id); if (!c) return;
+      announce(K.answerFlip(c, +id)); rv = null; save(); return render();
+    }
+
     // more
     case "export": case "exportcopy": {
-      const o = exportObject(), txt = JSON.stringify(o, null, 1), name = `export-${E.today()}.json`;
+      const o = exportObject(), name = `export-${E.today()}.json`;
       S.settings.lastExportAt = o.exportedAt; touchSettings(); save();
-      if (a === "export") { await download(name, txt); toast("Exported " + name); }
-      else { let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch (e) {} $("#exportBox").innerHTML = `<textarea readonly style="min-height:120px;margin-top:8px;font-size:12px">${esc(txt)}</textarea>`; toast(ok ? "Copied" : "Select the text and copy it"); }
+      // The file carries flashcard images and recordings (they never sync); the copied text leaves them out.
+      if (a === "export") { o.media = await K.mediaExport(); await download(name, JSON.stringify(o, null, 1)); toast("Exported " + name); return; }
+      const txt = JSON.stringify(o, null, 1);
+      { let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch (e) {} $("#exportBox").innerHTML = `<textarea readonly style="min-height:120px;margin-top:8px;font-size:12px">${esc(txt)}</textarea>`; toast(ok ? "Copied" : "Select the text and copy it"); }
       return;
     }
     default: if (Sync.handle(a, el, { render, toast })) return;
@@ -1930,6 +2109,13 @@ document.addEventListener("change", async ev => {
   if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
   if (k === "glassfull") { G.setCfg({ full: el.checked }); return; }
   if (k === "glassmins") { const v = num(el.value); if (v === null || v < 1 || v > 60) return render(); G.setCfg({ mins: Math.round(v) }); return render(); }
+  if (k === "cardsnew") { const v = num(el.value); if (v === null || v < 0 || v > 200) return render(); S.settings.cards.newPerDay = Math.round(v); touchSettings(); save(); return render(); }
+  if (k === "cardimg") {
+    const file = el.files[0]; if (!file || !cardForm) return; keepCardForm();
+    const mid = "cm-" + cardForm.id; await photos.put(mid, await shrink(file)); cardForm.img = mid;
+    const c = live("cards").find(x => x.id === cardForm.id); if (c) { c.img = mid; put("cards", c); save(); }
+    return render();
+  }
   if (k === "studynum") { const v = num(el.value), id = el.dataset.id; if (v === null || v < (id === "penaltyXp" || id === "grace" ? 0 : 1) || v > 500) return render(); S.settings.study[id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "planmin") { const v = num(el.value); if (v === null || v < 0 || v > 120) return render(); S.settings.plan[el.dataset.id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "slotoff") {
@@ -1946,7 +2132,8 @@ document.addEventListener("change", async ev => {
     const file = el.files[0]; if (!file) return;
     let o; try { o = JSON.parse(await file.text()); } catch (e) { return toast("That file isn't valid JSON"); }
     const err = validateImport(o); if (err) return toast(err);
-    await importMerge(o); save(); toast("Imported and merged"); return render();
+    await importMerge(o); const nm = o.media ? await K.mediaImport(o.media) : 0;
+    save(); toast("Imported and merged" + (nm ? ` · ${nm} card media` : "")); return render();
   }
 });
 

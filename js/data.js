@@ -1,13 +1,13 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
 // Habit IDs match the old planner so its backup imports cleanly in v2.
 export const HABITS = [
-  { id: "anki", name: "Anki reviews", note: "Never skipped", target: 7, c: "var(--jp)" },
+  { id: "anki", name: "Clear due flashcards", note: "Ticks itself when the due pile hits zero in a study block", target: 7, c: "var(--jp)" },
   { id: "jp", name: "Japanese grammar or reading", note: "25–40 min", target: 6, c: "var(--jp)" },
   { id: "fin", name: "Finance block", note: "90 min", target: 5, c: "var(--fin)" },
   { id: "math", name: "Mental math", note: "15 min", target: 6, c: "var(--fin)" },
