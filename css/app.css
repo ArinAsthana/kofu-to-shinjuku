@@ -421,6 +421,11 @@ body.has-bg .panel,body.has-bg .q,body.has-bg .fold,body.has-bg .strip,body.has-
 .wg-col{cursor:copy}
 body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 
+/* v2.2 dungeon */
+.dgate h3{font-size:20px}
+.dgate.open{background:linear-gradient(160deg,color-mix(in srgb,var(--acc) 16%,var(--panel-solid)),var(--panel));border-color:color-mix(in srgb,var(--acc) 40%,transparent)}
+.dgate .btn{flex:none}
+
 /* motion: subtle springs; off when the phone asks for reduced motion */
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}

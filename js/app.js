@@ -47,11 +47,11 @@ window.addEventListener("hashchange", () => { if (location.hash === "#plan/peopl
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", focus: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeon: "home", focus: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, focus: vFocus, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -120,7 +120,7 @@ function vHome() {
   const into = gate.open ? "train" : fg.open ? "focus" : "plan";
   const nm = new Date().getHours() * 60 + new Date().getMinutes();
   const cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
-  const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Start timer") : into === "train" ? "Enter" : "Open plan";
+  const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Enter dungeon") : into === "train" ? "Enter dungeon" : "Open plan";
   const q = todayQuests(t), next = q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
   const care = careToday(t), careNext = care.items.filter(c => !careDone(c.id, t)).sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0));
   const careRows = care.items.slice().sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0)).map(c => { const on = !!careDone(c.id, t);
@@ -154,7 +154,7 @@ function vHome() {
 
   <button class="quiet-row" data-act="go" data-id="body/food">
     <span>${ic("target", "inl")} ${a7 ? r1(a7) + " kg" : "No weight"}</span><span>${food.kcal}${ft.kcalTarget ? "/" + ft.kcalTarget : ""} kcal</span><span>${r1(food.protein)}${ft.proteinTarget ? "/" + ft.proteinTarget : ""} g protein</span><span class="chev">${ic("right")}</span></button>
-  <div class="quiet-links">${[["body/food", "Food"], ["body/weight", "Weight"], ["body/care", "Care"], ["body/check", "Check-in"], ["train", "Training"], ["study", "Study topics"]].map(([k, l]) => `<button data-act="go" data-id="${k}">${l}</button>`).join("")}</div>
+  <div class="quiet-links">${[["dungeon", "Dungeon"], ["body/food", "Food"], ["body/weight", "Weight"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button data-act="go" data-id="${k}">${l}</button>`).join("")}</div>
   <button class="cmdline dock" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 `;
 }
@@ -289,10 +289,10 @@ function reportDueBox(fg) {
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="focus">Report now</button></div>`);
 }
 function vFocus() {
-  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button>`;
   if (!g.open) {
     const nx = g.next;
-    return `${back}<h1>Study</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
+    return `${back}<h1>Study dungeon</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
       <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
       ${nx ? `<div class="small muted">${esc(nx.b.title)}</div>${topicLine(nx.b)}` : ""}
       <div class="small muted">A quest block opens ${S.settings.plan.openPad ?? 10} min before it starts. The report stays open ${S.settings.study.grace ?? 60} min after it ends.</div></div></div></div>`;
@@ -393,7 +393,7 @@ function vStatus() {
   </div>
   <button class="quiet-row" data-act="nav" data-id="skills"><span class="grow">Stats radar and skill tree</span><span class="chev">${ic("right")}</span></button>`;
 }
-const bodySeg = cur => `<div class="pills">${[["train", "Train"], ["body/weight", "Weight"], ["body/food", "Food"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
+const bodySeg = cur => `<div class="pills">${[["body/weight", "Weight"], ["body/food", "Food"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
 
 function statList() {
   const sk = Object.fromEntries(SKILLS.map(x => [x.id, E.skillInfo(x)]));
@@ -890,9 +890,31 @@ function vDay() {
   ${done.length ? fold("done-tasks", `<b class="grow">Done</b><span class="small muted">${done.length}</span>`, done.map(k => `<div class="item row between"><span class="small grow">${esc(k.title)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(k.doneAt || Date.now())))}</span></span><button class="btn sm" data-act="taskundo" data-id="${k.id}">Undo</button></div>`).join("")) : ""}`;
 }
 
+/* ================= DUNGEON ================= */
+// Stat building, gated by quest blocks: the Body dungeon (lifting, runs, calisthenics) and the Study dungeon
+// (topic + pomodoro, then flashcards, then JLPT practice). Each opens only around its block; skipping costs XP.
+function gateCard(kind, g) {
+  const isBody = kind === "body", nx = g.next, o = isBody ? (g.block ? { b: g.block, s: g.s, e: g.e } : null) : g.o;
+  const title = isBody ? "Body dungeon" : "Study dungeon", sub = isBody ? "Lifting · runs · calisthenics" : "Topic · flashcards · JLPT";
+  const state = g.open ? (o ? `Open now · ${esc(o.b.title)} ${span(o.s, o.e)}` : "Open for today") : nx ? `Opens ${nx.date === E.today() ? "today" : nx.date === E.addDays(E.today(), 1) ? "tomorrow" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)} · ${esc(nx.b.title)}` : "No block this week";
+  const btn = g.open ? `<button class="btn ${isBody || !g.ended ? "go" : "primary"}" data-act="nav" data-id="${isBody ? "train" : "focus"}">${!isBody && g.ended ? "Report" : "Enter"}</button>`
+    : `<button class="btn sm" data-act="nav" data-id="${isBody ? "train" : "focus"}">Peek</button>`;
+  const b = o ? o.b : nx ? nx.b : null;
+  return `<div class="panel dgate ${g.open ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">${sub}</span><h3 style="margin:2px 0 4px">${title}</h3>
+    <div class="small ${g.open ? "" : "muted"}">${g.open ? "" : ic("lock", "inl")}${state}</div>${!isBody && b ? topicLine(b) : ""}</div>${btn}</div></div>`;
+}
+function vDungeon() {
+  const t = E.today(), bg = P.trainGate(started(t)), sg = St.focusGate(), pens = St.openPenalties();
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Dungeon</h1></div>${gear("dungeon")}</header>
+  ${pens.length ? penaltyBox() : ""}
+  ${gateCard("body", bg)}${gateCard("study", sg)}
+  ${tip("dungeon", `Each dungeon opens ${S.settings.plan.openPad ?? 10} min before its quest block. Do the work inside the block, or it counts as skipped: −${S.settings.study.penaltyXp ?? 30} XP and a make-up quest.`)}
+  <div class="quiet-links"><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
+}
+
 let topicEdit = null; // subject whose topic list is open for editing
 function vStudyPage() {
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Study</h1></div>${gear("dungeon")}</header>${vStudy()}`;
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><h1>Study topics</h1></div>${gear("dungeon")}</header>${vStudy()}`;
 }
 function vStudy() {
   const sst = S.settings.study, fg = St.focusGate();
@@ -1132,7 +1154,7 @@ function vTrainHome() {
     ${gate.open ? `<div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>` : ""}`;
   const hasData = live("workouts").some(x => (x.entries || []).some(e => e.sets.length)) || live("runs").length > 0;
   // Gate closed: one card saying when, and today's session folded away instead of greyed-out rows.
-  return `<header class="top"><h1>Body</h1>${gear("body")}</header>${bodySeg("train")}
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><h1>Body dungeon</h1></div>${gear("body")}</header>
   ${gate.open ? `<div class="hero">${session}</div>` : lockedHtml(gate) + fold("train-peek", `<b class="grow">Peek: ${esc(plan.name)}</b><span class="small muted">${plan.slots.length + plan.extra.length} exercises</span>`, session)}
   ${drawer ? sessionDrawer() : ""}
   <div class="quiet-links"><button data-act="go" data-id="train/runs">${ic("right", "inl")} Runs · longest ${Math.max(0, ...live("runs").map(r => r.km))}/${RUN_GOAL_KM} km</button><button data-act="go" data-id="train/pick/browse">${ic("right", "inl")} Exercise library</button></div>
@@ -1330,7 +1352,7 @@ function vRuns() {
 let foodDate = null, foodForm = null;
 function vBody([sub]) {
   sub = sub || "weight";
-  return `<header class="top"><h1>Body</h1>${gear("body")}</header>${bodySeg("body/" + sub)}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Body</h1></div>${gear("body")}</header>${bodySeg("body/" + sub)}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
 }
 
 function weightChart() {
@@ -1457,7 +1479,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.2 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
