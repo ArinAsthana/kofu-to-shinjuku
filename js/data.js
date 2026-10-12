@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -244,12 +244,22 @@ export const PERSON_TYPES = [
   ["partner", "Partner", null], ["close", "Close friend", 7], ["friend", "Friend", 14],
   ["acq", "Acquaintance", 30], ["regular", "Recurring stranger", null],
 ];
-export const SOCIAL = { criteria: ["Communication", "Taste", "Charisma", "Reliability", "Ambition"] };
+// v2.5 traits (observable only). Communication became Engagement (scores carried over); Charisma and Ambition are
+// retired: their old scores stay in the data, hidden. Gentleness starts fresh.
+export const SOCIAL = { criteria: ["Engagement", "Gentleness", "Maturity", "Awareness", "Taste", "Reliability"] };
 // Scoring key: how to read each criterion, and what 1–5 look like. -1 = "don't know" (left out of the average).
 export const SOCIAL_KEY = {
   Communication: { read: "Listen to how they explain things and how they listen. Do they answer the actual question, ask follow-ups, and adjust to who they're talking to?",
     lv: ["Hard to follow, or talks over people", "Gets the point across with effort", "Clear, normal back-and-forth", "Clear and engaging, asks good questions", "Makes hard things simple; people feel heard"] },
-  Taste: { read: "Judge choices they made freely: how clothes fit and go together, music, places they pick, how their room or feed looks, what they recommend.",
+  Engagement: { read: "Watch the conversation itself: do they ask questions back, build on what you said, and remember it next time? Do people stay in the conversation with them?",
+    lv: ["Conversations die or turn into monologues", "Answers, but rarely asks back", "Normal back-and-forth, a few follow-ups", "Asks good questions, remembers details; people open up", "People seek them out to talk and leave feeling interesting"] },
+  Gentleness: { read: "Brings out the best in others. Watch how people act around them: do they relax, speak up, try things? How do they treat staff, juniors, someone who's struggling?",
+    lv: ["Makes people smaller: mocks, interrupts, corrects", "Neutral; neither lifts nor lowers anyone", "Kind and patient; puts people at ease", "Draws quiet people in, credits others, encourages", "People become their best around them"] },
+  Maturity: { read: "Watch them under pressure and after mistakes: do they own it, stay calm, keep perspective, and disagree without sulking or keeping score?",
+    lv: ["Blames, sulks or blows up", "Owns things sometimes; defensive under pressure", "Owns mistakes; steady most of the time", "Calm under pressure; disagrees without drama", "Grounded; others steady themselves on them"] },
+  Awareness: { read: "Reads the room. Do they notice when someone is bored, uncomfortable or wants to leave, adjust topic and volume, and know when they're not wanted?",
+    lv: ["Misses obvious signals; overstays", "Notices the big signals, late", "Reads most rooms and adjusts", "Catches subtle cues, exits gracefully, includes the person on the edge", "Sees the room before anyone; always the right move"] },
+  Taste: { read: "Judge choices they made freely: how clothes fit and go together, music, places they pick, how their room or feed looks, what they recommend. Also: is it readable? Can people tell who they are and what they're into from it?",
     lv: ["No visible care, or choices clash", "Plain, safe defaults", "Put together, a few deliberate choices", "Distinct and consistent; you'd ask their opinion", "Sets the standard; people copy them"] },
   Charisma: { read: "Watch the room when they arrive or talk. Do people lean in, laugh, follow their lead? How do you feel after time with them?",
     lv: ["Fades into the background or drains energy", "Pleasant one-on-one, quiet in groups", "Easy to be around; holds a group", "People gravitate to them", "Changes the mood of any room"] },
@@ -325,4 +335,44 @@ export const SUBJECTS = {
     ...[13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].map(genki),
     { id: "j-n4", t: "Official N4 sample test", do: "Take the official JLPT N4 sample test, timed.", out: "Score logged; every miss written down by section.", src: [["JLPT sample questions", "https://www.jlpt.jp/e/samples/forlearners.html"]] },
   ] },
+};
+
+/* ---------- social trials (schema 9) ---------- */
+// Trials are quests with a due date, placed by the planner like tasks, with a Battle Log when done.
+// xp: base XP; Fear Tower pays 20 × floor, Ego Break 10 × discomfort.
+export const TRIALS = {
+  rival: { name: "Rival Trial", xp: 40, mins: 30, note: "Aimed at the trait where your rival leads by the most." },
+  copy: { name: "Skill Copy", xp: 30, mins: 30, note: "Practise one habit you saw someone do." },
+  invasion: { name: "Invasion", xp: 60, mins: 60, note: "Get into the plans of someone ranked above you." },
+  tower: { name: "Fear Tower", xp: 20, mins: 30, note: "Comfort-zone floors 1 to 5. Clear one to open the next." },
+  ego: { name: "Ego Break", xp: 10, mins: 15, note: "A small embarrassment, on purpose." },
+  boss: { name: "Boss Raid", xp: 150, mins: 120, note: "One big event a month, with prep before and a debrief after." },
+  prep: { name: "Boss Raid prep", xp: 20, mins: 30, note: "Get ready for the Boss Raid." },
+  party: { name: "Party", xp: 50, mins: 90, note: "Real time with someone ranked above you, or a new person." },
+  taste: { name: "Show your taste", xp: 30, mins: 15, note: "Show one thing you're into, and say why." },
+  appraisal: { name: "Appraisal", xp: 40, mins: 20, note: "A trusted friend rates you blind on the same traits." },
+};
+export const TOWER = [
+  "Say hello plus one comment to a cashier, classmate or gym regular",
+  "Ask a stranger a real question, then one follow-up",
+  "Hold a 5-minute conversation with someone new",
+  "Ask someone you just met to get coffee or lunch",
+  "Join a group you don't know and speak first",
+];
+// [quest, discomfort 1-5]
+export const EGO = [
+  ["Ask for a discount somewhere that doesn't do discounts", 3], ["Solo karaoke, one full hour", 3],
+  ["Use your shaky Japanese on a stranger and keep going after you stumble", 2], ["Ask a \"dumb\" question in class", 2],
+  ["Compliment a stranger's outfit, specifically", 3], ["Ask staff for their favourite item and buy it", 1],
+  ["Eat alone at a busy restaurant, phone away", 2], ["Ask someone to take your photo, then ask for a retake", 2],
+  ["Introduce yourself to the person next to you in class", 2], ["Tell a short story to a group and own the ending, even if it falls flat", 4],
+];
+// What a Rival Trial asks for, per trait. Custom traits get a generic line.
+export const RIVAL_ACT = {
+  Engagement: "In 2 conversations, ask 3 follow-up questions before talking about yourself, and use their name back.",
+  Gentleness: "Make someone quieter look good: draw them in and credit their idea out loud.",
+  Maturity: "Handle one disagreement calmly: say your view once, ask theirs, no sulking after.",
+  Awareness: "In every conversation, watch for exit signals (short answers, body turned away) and end it first, warmly.",
+  Taste: "Show one thing you're into: wear it, play it or recommend it, and say why.",
+  Reliability: "Make 3 small promises and keep every one, on time.",
 };

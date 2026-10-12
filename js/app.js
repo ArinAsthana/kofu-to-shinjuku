@@ -1,5 +1,5 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY } from "./data.js";
+import { HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY, TRIALS, TOWER, EGO, RIVAL_ACT } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
@@ -11,6 +11,7 @@ import * as G from "./glass.js";
 import * as K from "./cards.js";
 import { STARTER } from "./decks.js";
 import * as J from "./jlpt.js";
+import * as Soc from "./social.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -45,7 +46,7 @@ document.addEventListener("touchend", e => {
   if (d < el.dataset.min || d > el.dataset.max) return;
   planDate = d === E.today() ? null : d; entering = true; render();
 }, { passive: true });
-window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; trialForm = null; battle = null; apForm = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
@@ -101,11 +102,14 @@ document.addEventListener("toggle", ev => {
 // Today's quests. Event quests = the to-do list planned for today (penalty quests first). Normal quests = the daily habits.
 function todayQuests(t = E.today()) {
   const p = P.plan();
-  const open = live("tasks").filter(k => !k.done && p.at.get(k.id)?.date === t).map(k => ({ k, at: p.at.get(k.id) }));
-  const doneT = live("tasks").filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }));
+  const open = live("tasks").filter(k => !k.done && !k.trial && p.at.get(k.id)?.date === t).map(k => ({ k, at: p.at.get(k.id) }));
+  const doneT = live("tasks").filter(k => k.done && !k.trial && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }));
+  // Trials: placed today or due by today, plus any cleared today. They get their own section at the top.
+  const trials = [...Soc.openTrials().filter(k => p.at.get(k.id)?.date === t || (k.due && k.due <= t)).map(k => ({ k })),
+    ...Soc.trials().filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }))];
   const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
   const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
-  return { events, habits, done: doneT.length + habits.filter(x => x.on).length, total: events.length + habits.length };
+  return { trials, events, habits, done: doneT.length + trials.filter(x => x.done).length + habits.filter(x => x.on).length, total: trials.length + events.length + habits.length };
 }
 const habitRow = ({ h, on }) => `<div class="q ${on ? "done" : ""}">
   <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
@@ -124,7 +128,7 @@ function vHome() {
   const nm = new Date().getHours() * 60 + new Date().getMinutes();
   const cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
   const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Enter dungeon") : into === "train" ? "Enter dungeon" : "Open plan";
-  const q = todayQuests(t), next = q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
+  const q = todayQuests(t), next = q.trials.find(e => !e.done)?.k.title || q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
   const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
@@ -145,7 +149,7 @@ function vHome() {
   </div>
 
   ${fold("quests", `<div class="grow"><div class="row between"><b>Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}<div class="small muted">${next ? "Next: " + esc(next) : "All cleared today."}</div></div>`,
-    `${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
+    `${q.trials.length ? `<div class="qsec trial">Trials <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
      <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
      <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
 
@@ -216,7 +220,7 @@ function sheetHtml(k) {
   const closeBtn = `<button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button>`;
   // Edit sheets: forms and actions for the tapped item.
   const edit = { task: () => arg ? taskActHtml(arg) : taskFormHtml(), block: () => blockFormHtml(blockForm && blockForm !== "new" ? live("blocks").find(b => b.id === blockForm) : blockNew),
-    add: addHtml, person: personFormHtml }[kind];
+    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg) }[kind];
   if (edit) return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>`;
   const body = { plan: planSettings, status: statusSettings, money: moneySettings, body: bodySettings, dungeon: dungeonSettings }[k] || homeSettings;
   return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog" aria-label="Settings">
@@ -273,6 +277,7 @@ function penaltyBox() {
   const pens = St.openPenalties(); if (!pens.length) return "";
   const xp = pens.reduce((a, p) => a + (p.xp || 0), 0), at = P.plan().at;
   const lines = pens.map(p => { const k = live("tasks").find(x => x.id === p.task), w = k && at.get(k.id);
+    if (p.trial) return `<div class="x">Missed trial: ${esc(p.title)}, due ${esc(dayLabel(p.date))}. Clear it late to lift the penalty.</div>`;
     return `<div class="x">Missed ${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}. Penalty quest: ${k ? P.dur(k.mins) + " make-up" : "make-up"}${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`; }).join("");
   return `<div class="sys pen"><b>Penalty</b> ${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
     ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan">Open penalty quests</button></div></div>`;
@@ -343,7 +348,7 @@ function tickPomo() {
   if (b) b.style.width = (1 - left / St.pomoLen(p)) * 100 + "%";
 }
 function runAssess() {
-  const fresh = St.assess();
+  const fresh = [...St.assess(), ...Soc.assess()];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
 
@@ -618,7 +623,10 @@ function vSocial([sub, id]) {
   if (sub === "me") return vSelf();
   sub = sub || "people";
   if (sub === "log") return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Hangouts</h1>${vHangouts()}`;
-  return `${planHead("people")}${vPeople()}<button class="quiet-row" data-act="go" data-id="social/log"><span class="grow">Hangout log</span><span class="chev">${ic("right")}</span></button>`;
+  if (sub === "habits") return vHabits();
+  if (sub === "battle") return vBattle();
+  if (sub === "appraise") return vAppraise(id);
+  return `${planHead("people")}${trialsPanel()}${vPeople()}<button class="quiet-row" data-act="go" data-id="social/log"><span class="grow">Hangout log</span><span class="chev">${ic("right")}</span></button>`;
 }
 function balance() {
   const t = E.today(), hs = live("hangouts").filter(h => E.daysBetween(h.date, t) < 30), ppl = Object.fromEntries(live("people").map(p => [p.id, p]));
@@ -665,6 +673,9 @@ function vPerson(id) {
     <label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
     <p class="small muted" style="margin-top:8px">${st.since === null ? "No hangouts logged yet." : `Last seen ${E.fmtDate(st.ls)} (${st.since}d ago).`}</p>
     <div class="btns"><button class="btn go" data-act="hangwith" data-id="${p.id}">Log a hangout with ${esc(p.name)}</button></div></div>
+  <h2>Field notes <span class="n">habits worth copying</span></h2>
+  <div class="panel">${live("fieldNotes").filter(n => n.person === p.id).map(n => `<div class="item small"><b>${esc(n.trait)}</b> · ${esc(n.habit)}${n.status ? ` <span class="muted">· ${n.status === "notme" ? "not me" : n.status}</span>` : ""}</div>`).join("") || `<p class="empty">Nothing yet. What do they do that works?</p>`}
+    <div class="btns"><button class="btn sm" data-act="go" data-id="social/habits">Add in Habit library</button></div></div>
   <h2>Notes</h2>
   <div class="panel"><label class="f">Where you met<input data-ch="pwhere" data-id="${p.id}" value="${esc(p.where || "")}"></label>
     <label class="f" style="margin-top:8px">Notes (birthday, interests, what you talked about)<textarea data-ch="pnote" data-id="${p.id}" rows="4">${esc(p.note || "")}</textarea></label></div>
@@ -1111,6 +1122,120 @@ function vExam(kind) {
     <div class="btns"><button class="btn" data-act="exammove" data-id="-1" ${exam.i ? "" : "disabled"}>Back</button>${exam.i < exam.qs.length - 1 ? `<button class="btn primary" data-act="exammove" data-id="1">Next</button>` : `<button class="btn go" data-act="examsubmit">Submit</button>`}</div>`;
 }
 
+/* ================= TRIALS (v2.5) ================= */
+let trialForm = null, battle = null, apForm = null; // new-trial form, Battle Log being filled, appraisal in progress
+const TR_C = "var(--ind)";
+const fearChips = (key, v, act = "bset") => `<div class="seg">${[1, 2, 3, 4, 5].map(n => `<button data-act="${act}" data-id="${key}:${n}" aria-pressed="${v === n}">${n}</button>`).join("")}</div>`;
+const yesNo = (key, v, opts = [["yes", "Yes"], ["no", "No"]]) => `<div class="seg">${opts.map(([k, l]) => `<button data-act="bset" data-id="${key}:${k}" aria-pressed="${v === k}">${l}</button>`).join("")}</div>`;
+const trialDue = k => { const at = P.plan().at.get(k.id); return at ? `${dayLabel(at.date)} ${P.toHM(at.s)}` : k.due ? "due " + dayLabel(k.due) : ""; };
+const trialRow = (k, done) => `<div class="q trial-q ${done ? "done" : ""}">
+  <button class="bx" data-act="${done ? "trialundo" : "taskdone"}" data-id="${k.id}" aria-pressed="${!!done}" aria-label="${esc(k.title)} done">${done ? ic("check") : ""}</button>
+  <button class="grow tbtn" style="text-align:left" data-act="sheet" data-id="battle:${k.id}"><div class="t">${esc(k.title)}</div><div class="small muted">${esc(TRIALS[k.trial]?.name || "Trial")} · ${done ? "cleared" : esc(trialDue(k))}${k.fear ? ` · fear ${k.fear}/5` : ""}</div></button>
+  <div class="xp">+${Soc.xpFor(k)}</div></div>`;
+function trialsPanel() {
+  const open = Soc.openTrials(), fl = Soc.towerFloor();
+  return `<div class="panel trials"><div class="row between"><span class="k" style="color:${TR_C}">Trials</span><span class="small muted">Fear Tower ${fl}/5</span></div>
+    ${open.length ? `<div class="list" style="margin-top:8px">${open.slice(0, 6).map(k => trialRow(k, false)).join("")}</div>` : `<p class="small muted" style="margin:6px 0 0">No trial running. Ratings don't change you; trials do.</p>`}
+    <div class="btns"><button class="btn sm go" data-act="sheet" data-id="trial">New trial</button><button class="btn sm" data-act="go" data-id="social/habits">Habit library</button><button class="btn sm" data-act="go" data-id="social/battle">Battle log</button><button class="btn sm" data-act="go" data-id="social/appraise">Appraisal</button></div></div>`;
+}
+// The new-trial sheet: pick a type, then a pre-filled form.
+function trialSheetHtml(type) {
+  if (!type) return `<h3>New trial</h3><div class="actlist">${Object.entries(TRIALS).filter(([k]) => k !== "prep").map(([k, t]) =>
+    `<button class="act" data-act="trialtype" data-id="${k}">${ic(k === "tower" ? "flame" : k === "boss" ? "star" : k === "invasion" ? "users" : "target")}<span>${esc(t.name)}${k === "tower" ? ` · floor ${Soc.towerNext()}` : ""}<small>${esc(t.note)}</small></span></button>`).join("")}</div>`;
+  const f = trialForm || (trialForm = { type, fear: null });
+  if (f.type !== type) Object.assign(f, { type, fear: null, title: null });
+  let title = "", extra = "", block = "";
+  if (type === "rival") {
+    const L = ladder();
+    if (!L.opp) block = "Rate yourself and at least one person above you first. The Rival Trial aims at the trait where they lead you most.";
+    else { const g = gaps(L.opp)[0], c = g ? g.c : S.settings.social.criteria[0]; f.trait = c; f.person = L.opp.p.id; title = `${c} vs ${L.opp.p.name}: ${RIVAL_ACT[c] || "Practise " + c + " on purpose twice this week."}`; }
+  } else if (type === "copy") {
+    const notes = live("fieldNotes").filter(n => !n.status || n.status === "tried"), ppl = Object.fromEntries(live("people").map(p => [p.id, p.name]));
+    if (!notes.length) block = "Your habit library is empty. Add a field note when you see someone do something well (on their page, or in Habit library).";
+    else { if (!notes.some(n => n.id === f.note)) f.note = notes[0].id; const n = notes.find(x => x.id === f.note); title = `Copy: ${n.habit}${ppl[n.person] ? " (from " + ppl[n.person] + ")" : ""}`;
+      extra = `<label class="f">Habit<select data-act-ch="trialnote">${notes.map(x => `<option value="${x.id}" ${x.id === f.note ? "selected" : ""}>${esc(x.trait)} · ${esc(x.habit)}</option>`).join("")}</select></label>`; }
+  } else if (type === "invasion") {
+    const L = ladder(), up = (L.ahead.length ? L.ahead : L.ppl.slice().sort((a, b) => b.rk.avg - a.rk.avg)).map(x => x.p);
+    if (!up.length) block = "Rate a few people first. An Invasion targets someone ranked above you.";
+    else { if (!up.some(p => p.id === f.person)) f.person = up[0].id; const p = up.find(x => x.id === f.person); title = `Get into ${p.name}'s next plan: ask to join, or invite yourself along`;
+      extra = `<label class="f">Who<select data-act-ch="trialperson">${up.map(p => `<option value="${p.id}" ${p.id === f.person ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>`; }
+  } else if (type === "tower") { const fl = Soc.towerNext(); f.floor = fl; title = `Floor ${fl}: ${TOWER[fl - 1]}`; }
+  else if (type === "ego") { if (f.ego == null) f.ego = Soc.egoPick(); f.pain = EGO[f.ego][1]; title = EGO[f.ego][0]; extra = `<div class="small muted">Discomfort ${f.pain}/5 · +${10 * f.pain} XP <button class="btn sm" data-act="egoroll">Another</button></div>`; }
+  else if (type === "boss") { title = f.title || ""; extra = `<p class="tiny muted">Name the event (a party, a club night, a networking event or OB/OG visit in Tokyo). Two prep trials land in the days before it; its Battle Log is the debrief.</p>`; }
+  else if (type === "party") title = "Real time with someone ranked above you, or someone new";
+  else if (type === "taste") title = "Show one thing you're into: wear it, play it or recommend it, and say why";
+  else if (type === "appraisal") title = "Ask a trusted friend to rate you blind";
+  if (f.title == null || type !== "boss") f.title = f.title && f.keepTitle ? f.title : title;
+  return `<h3>${esc(TRIALS[type].name)}</h3><p class="small muted">${esc(TRIALS[type].note)}</p>
+    ${block ? sysBox(esc(block)) : `<div id="trialForm"><label class="f">${type === "boss" ? "Event" : "Trial"}<textarea data-f="title" rows="2" placeholder="${type === "boss" ? "e.g. Shinjuku finance meetup" : ""}">${esc(f.title)}</textarea></label>
+    ${extra}<label class="f" style="margin-top:8px">${type === "boss" ? "Date" : "Do it by"}<input type="date" data-f="due" value="${esc(f.due || Soc.DUE[type]())}"></label>
+    <div class="small" style="margin-top:10px">How scary does it feel? (Battle Log compares this with how it went)</div>${fearChips("fear", f.fear, "tset")}
+    <div class="btns"><button class="btn go" data-act="trialsave">Accept trial</button><button class="btn" data-act="sheet" data-id="trial">Back</button></div></div>`}`;
+}
+function battleHtml(id) {
+  const k = live("tasks").find(x => x.id === id); if (!k) return `<p class="empty">That trial is gone.</p>`;
+  if (k.done) { const l = k.log || {};
+    return `<h3>${esc(k.title)}</h3><div class="small muted">${esc(TRIALS[k.trial]?.name || "Trial")} · cleared ${k.doneAt ? esc(dayLabel(E.ymd(new Date(k.doneAt)))) : ""}</div>
+      ${l.actual ? `<p class="small">Fear ${k.fear ?? "?"} → ${l.actual}/5 · wanted signals ${Soc.wantedScore(l)}/3</p>` : ""}
+      ${[["what", "What happened"], ["react", "How they reacted"], ["next", "Next time"]].map(([f, n]) => l[f] ? `<div class="small"><b>${n}:</b> ${esc(l[f])}</div>` : "").join("")}
+      <div class="btns"><button class="btn sm" data-act="trialundo" data-id="${k.id}">Mark not done</button></div>`; }
+  if (k.trial === "appraisal") return `<h3>${esc(k.title)}</h3><p class="small muted">Hand your phone to them. Your own ratings stay hidden until they're done.</p>
+    <div class="btns"><button class="btn go" data-act="go" data-id="social/appraise/${k.id}">Start the appraisal</button><button class="btn danger" data-act="trialdel" data-id="${k.id}">Drop it</button></div>`;
+  const b = battle && battle.id === id ? battle : (battle = { id, actual: null, asked: null, turned: null, ended: null, result: null, what: "", react: "", next: "" });
+  return `<h3>Battle Log</h3><div class="small"><b>${esc(k.title)}</b></div><div class="small muted">${esc(TRIALS[k.trial]?.name || "Trial")} · ${esc(trialDue(k))}${k.fear ? ` · you predicted fear ${k.fear}/5` : ""}</div>
+    <div id="battleForm"><div class="small" style="margin-top:12px">How scary was it, really?</div>${fearChips("actual", b.actual)}
+    <label class="f" style="margin-top:10px">What happened<textarea data-f="what" rows="2">${esc(b.what)}</textarea></label>
+    <label class="f" style="margin-top:6px">How they reacted<textarea data-f="react" rows="2">${esc(b.react)}</textarea></label>
+    <label class="f" style="margin-top:6px">Next time<textarea data-f="next" rows="2">${esc(b.next)}</textarea></label>
+    <h3>Wanted signals</h3>
+    <div class="row between small"><span>They asked questions back</span>${yesNo("asked", b.asked)}</div>
+    <div class="row between small" style="margin-top:6px"><span>They turned toward you</span>${yesNo("turned", b.turned)}</div>
+    <div class="row between small" style="margin-top:6px"><span>Who ended it</span>${yesNo("ended", b.ended, [["me", "Me"], ["them", "Them"], ["natural", "Natural"]])}</div>
+    ${k.trial === "copy" ? `<h3>The habit</h3>${yesNo("result", b.result, [["tried", "Tried"], ["worked", "Worked"], ["notme", "Not me"]])}` : ""}
+    <div class="btns"><button class="btn go" data-act="battlesave">Clear trial</button><button class="btn danger" data-act="trialdel" data-id="${k.id}">Drop it</button></div></div>`;
+}
+function vHabits() {
+  const ppl = live("people"), byId = Object.fromEntries(ppl.map(p => [p.id, p.name])), notes = live("fieldNotes"), crit = S.settings.social.criteria;
+  const lab = { tried: "tried", worked: "worked", notme: "not me" };
+  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Habit library</h1>
+  <p class="small muted">Habits you've seen people do, by trait. Copy one as a trial and mark whether it worked for you.</p>
+  <div class="panel" id="noteForm"><h3>Add a field note</h3><div class="grid">
+    <label class="f">Who<select data-f="person"><option value="">Someone</option>${ppl.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
+    <label class="f">Trait<select data-f="trait">${crit.map(c => `<option>${esc(c)}</option>`).join("")}</select></label>
+    <label class="f" style="flex-basis:100%">What they did<input data-f="habit" placeholder="Uses your name back; asks a second question"></label></div>
+    <div class="btns"><button class="btn go" data-act="noteadd">Add</button></div></div>
+  ${crit.map(c => { const ns = notes.filter(n => n.trait === c); return ns.length ? `<h2>${esc(c)} <span class="n">${ns.length}</span></h2><div class="panel">${ns.map(n => `<div class="item row between"><div class="grow small"><b>${esc(n.habit)}</b><div class="muted">${esc(byId[n.person] || "someone")}${n.status ? " · " + lab[n.status] : ""}</div></div>
+    <button class="btn sm" data-act="copynote" data-id="${n.id}">Copy</button><button class="rbtn" data-act="notedel" data-id="${n.id}" aria-label="Delete">${ic("x")}</button></div>`).join("")}</div>` : ""; }).join("") || `<p class="empty">No field notes yet.</p>`}`;
+}
+function vBattle() {
+  const bs = Soc.battles(), last = bs.slice(-20);
+  const sig = bs.filter(k => Soc.signalsLogged(k.log)), wanted = sig.filter(k => Soc.wantedScore(k.log) >= 2).length;
+  const fp = bs.filter(k => k.fear), over = fp.length ? fp.reduce((a, k) => a + (k.fear - k.log.actual), 0) / fp.length : null;
+  const chart = last.length >= 2 ? Ch.lines([{ d: last.map(k => k.fear ?? null), c: "var(--warn)", dash: "4 3" }, { d: last.map(k => k.log.actual), c: TR_C }], { min: 1, max: 5, ticks: [1, 3, 5], label: "Predicted vs actual fear" }) : "";
+  const wchart = sig.length >= 2 ? Ch.lines([{ d: sig.slice(-20).map(k => Soc.wantedScore(k.log)), c: "var(--lime)" }], { min: 0, max: 3, ticks: [0, 1, 2, 3], label: "Wanted signals" }) : "";
+  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Battle log</h1>
+  <div class="panel"><div class="row between"><div><div class="dm big2">${bs.length}</div><div class="small muted">trials logged</div></div>
+    <div style="text-align:right"><div class="dm big2">${sig.length ? Math.round(wanted / sig.length * 100) + "%" : "–"}</div><div class="small muted">wanted rate</div></div></div>
+    ${over != null ? `<p class="small" style="margin-top:8px">${over > 0.2 ? `You predict ${over.toFixed(1)} points more fear than you feel. The fear is lying.` : over < -0.2 ? `It's been ${(-over).toFixed(1)} points scarier than you expect. Take smaller floors.` : "Your fear predictions are accurate."}</p>` : ""}</div>
+  ${chart ? `<h2>Fear <span class="n">dashed: predicted · solid: actual</span></h2><div class="panel">${chart}</div>` : ""}
+  ${wchart ? `<h2>Wanted signals <span class="n">0–3 per trial</span></h2><div class="panel">${wchart}</div>` : ""}
+  ${bs.length ? `<h2>Logs</h2><div class="panel">${bs.slice().reverse().slice(0, 30).map(k => `<button class="item tbtn" style="width:100%;text-align:left" data-act="sheet" data-id="battle:${k.id}"><div class="row between small"><b class="grow">${esc(k.title)}</b><span class="muted">${k.fear ?? "?"}→${k.log.actual}</span></div><div class="small muted">${esc(dayLabel(E.ymd(new Date(k.doneAt))))}${k.log.what ? " · " + esc(k.log.what) : ""}</div></button>`).join("")}</div>` : `<p class="empty">Clear a trial and fill in its Battle Log to see your numbers.</p>`}`;
+}
+function vAppraise(trialId) {
+  const crit = S.settings.social.criteria, aps = live("appraisals").sort((a, b) => b.date.localeCompare(a.date)), back = `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button>`;
+  if (apForm) return `${back}<h1>Appraisal</h1><p class="small muted">Rate them honestly on what you've actually seen. Use the Key under each trait. Tap ? if you can't judge.</p>
+    <div class="panel" id="apForm"><label class="f">Your name<input data-f="by" value="${esc(apForm.by || "")}"></label></div>
+    <div class="panel">${crit.map(c => critRow(c, apForm.scores[c] || 0, "ap")).join("")}</div>
+    <div class="btns"><button class="btn go" data-act="apsave">Save appraisal</button><button class="btn" data-act="apcancel">Cancel</button></div>`;
+  const me = selfScores(), a = aps[0];
+  const cmp = a ? `<h2>Latest: ${esc(a.by || "a friend")} · ${esc(E.fmtDate(a.date))}</h2><div class="panel">${crit.map(c => { const s = me[c] > 0 ? me[c] : null, f = a.scores[c] > 0 ? a.scores[c] : null;
+    return `<div class="item row between small"><span class="grow">${esc(c)}</span><span class="mono">you ${s ?? "–"} · them ${f ?? "–"}</span>${s && f && Math.abs(s - f) >= 1 ? `<span class="${f > s ? "" : "warn"}" style="margin-left:8px">${f > s ? "+" : ""}${f - s}</span>` : ""}</div>`; }).join("")}
+    <p class="tiny muted">A gap of 1 or more is where your self-image and how you come across disagree.</p></div>` : "";
+  return `${back}<h1>Appraisal</h1><p class="small muted">Once a month, a trusted friend rates you blind on the same traits. Then compare with how you rate yourself.</p>
+    <div class="btns"><button class="btn go" data-act="apstart" data-id="${esc(trialId || "")}">Hand over the phone</button></div>${cmp}
+    ${aps.length > 1 ? fold("ap-hist", `<b class="grow">Earlier</b><span class="small muted">${aps.length - 1}</span>`, aps.slice(1).map(x => `<div class="item small">${esc(E.fmtDate(x.date))} · ${esc(x.by || "friend")} · avg ${(rankScores(x.scores).avg || 0).toFixed(1)}</div>`).join("")) : ""}`;
+}
+
 function taskFormHtml(k) {
   k = k || { mins: 60, prio: 2, energy: "high" };
   return `<div class="panel" id="taskForm">
@@ -1147,6 +1272,8 @@ function addHtml() {
     <button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, quest block, anything fixed</small></span></button>
     <button class="act" data-act="personform">${ic("user")}<span>Person<small>Add to your registry</small></span></button>
     <button class="act" data-act="go" data-id="social/log">${ic("users")}<span>Hangout<small>Log time with people</small></span></button>
+    <button class="act trial" data-act="sheet" data-id="trial">${ic("flame")}<span>Trial<small>A social quest with a Battle Log</small></span></button>
+    <button class="act" data-act="go" data-id="social/habits">${ic("edit")}<span>Field note<small>A habit you saw someone do well</small></span></button>
   </div>`;
 }
 
@@ -1248,12 +1375,23 @@ ${exLines.length ? exLines.join("\n") : "- No lifting or calisthenics logged"}
 - PRs: ${prs.length ? prs.join("; ") : "none"}
 - Runs: ${runs.length ? runs.map(r => `${r.km} km in ${E.fmtTime(r.sec)} (${E.fmtTime(E.pace(r))}/km, feel ${r.feel}/5)`).join("; ") : "none"}. Longest ever ${longest} / ${RUN_GOAL_KM} km.
 
+### Social
+${socialLines(wk)}
+
 ### Money
 ${moneyLines()}
 
 Please review: sessions vs plan, progression, stalls, pain, money pace. End with "Next week: 3 actions."`;
 }
 
+function socialLines(wk) {
+  const done = Soc.trials().filter(k => k.done && k.doneAt && wk.includes(E.ymd(new Date(k.doneAt))));
+  const logs = done.filter(k => k.log && k.log.actual), sig = logs.filter(k => Soc.signalsLogged(k.log));
+  const missed = live("penalties").filter(p => p.trial && wk.includes(p.date)).length;
+  return [`- Trials cleared: ${done.length}${done.length ? " (" + done.map(k => TRIALS[k.trial]?.name || "Trial").join(", ") + ")" : ""}. Missed: ${missed}. Fear Tower floor ${Soc.towerFloor()}/5.`,
+    logs.length ? `- Fear predicted vs actual: ${logs.map(k => (k.fear ?? "?") + "→" + k.log.actual).join(", ")}. Wanted signals 2+/3 in ${sig.filter(k => Soc.wantedScore(k.log) >= 2).length}/${sig.length}.` : "- No Battle Logs this week.",
+    ...logs.filter(k => k.log.next).map(k => `- Next time (${k.title}): ${k.log.next}`)].join("\n");
+}
 function moneyLines() {
   const mp = E.moneyPlan(), last = E.latestMoney(), prev = E.moneyReports().slice(-2, -1)[0], bl = E.bills(), mk = E.monthKey();
   return [
@@ -1542,7 +1680,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.4 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.5 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1737,6 +1875,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       personForm = false; save(); return go("social/p/" + p.id);
     }
     case "score": {
+      if (id === "ap") { if (!apForm) return; Object.assign(apForm, readForm("#apForm")); const c = el.dataset.c, n = +el.dataset.n; if (apForm.scores[c] === n) delete apForm.scores[c]; else apForm.scores[c] = n; return render(); }
       if (id === "me") {
         const c = el.dataset.c, n = +el.dataset.n, sc = { ...selfScores() }, L0 = ladder();
         if (sc[c] === n) delete sc[c]; else sc[c] = n;
@@ -1817,6 +1956,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "pday": planDate = id === E.today() ? null : id; entering = true; return render();
     case "taskdone": {
       const k = live("tasks").find(x => x.id === id); if (!k) return;
+      if (k.trial) { sheet = "battle:" + id; return render(); } // a trial closes through its Battle Log
       if (sheet && sheet.startsWith("task")) sheet = null;
       put("tasks", { ...k, done: true, doneAt: Date.now() });
       if (k.penalty) { save(); toast(St.openPenalties().length ? "Penalty quest cleared" : "Penalty cleared. Shop unlocked."); return render(); }
@@ -1927,6 +2067,43 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       announce(K.answerFlip(c, +id)); rv = null; save(); return render();
     }
 
+    // trials
+    case "trialtype": trialForm = { type: id, fear: null }; sheet = "trial:" + id; return render();
+    case "tset": { if (!trialForm) return; Object.assign(trialForm, readForm("#trialForm")); trialForm.keepTitle = true; const [k2, v] = id.split(":"); trialForm[k2] = trialForm[k2] === +v ? null : +v; return render(); }
+    case "egoroll": { if (!trialForm) return; let n = trialForm.ego; while (n === trialForm.ego && EGO.length > 1) n = Math.floor(Math.random() * EGO.length); trialForm.ego = n; trialForm.title = null; trialForm.keepTitle = false; return render(); }
+    case "trialsave": {
+      const f = readForm("#trialForm"), t = trialForm; if (!t || !f.title) return toast(t && t.type === "boss" ? "Name the event" : "Describe the trial");
+      if (f.due && f.due < E.today()) return toast("Pick today or later");
+      if (t.type === "boss") Soc.addBoss(f.title, f.due || Soc.DUE.boss(), t.fear);
+      else Soc.addTrial(t.type, { title: f.title, due: f.due, fear: t.fear, ...(t.type === "rival" ? { trait: t.trait, person: t.person } : t.type === "copy" ? { note: t.note } : t.type === "invasion" ? { person: t.person } : t.type === "tower" ? { floor: t.floor } : t.type === "ego" ? { ego: t.ego, pain: t.pain } : {}) });
+      trialForm = null; sheet = null; save(); toast("Trial accepted. The planner placed it."); return render();
+    }
+    case "bset": { if (!battle) return; Object.assign(battle, readForm("#battleForm")); const [k2, v] = id.split(":"); const val = /^\d$/.test(v) ? +v : v; battle[k2] = battle[k2] === val ? null : val; return render(); }
+    case "battlesave": {
+      if (!battle) return; Object.assign(battle, readForm("#battleForm"));
+      const k = live("tasks").find(x => x.id === battle.id); if (!k) return;
+      if (!battle.actual) return toast("Rate how scary it was");
+      const { id: _i, ...log } = battle; const gains = Soc.logBattle(k, log);
+      battle = null; sheet = null; save(); announce(gains); if (!gains.length) toast("Logged"); return render();
+    }
+    case "trialundo": { const k = live("tasks").find(x => x.id === id); if (!k) return; Soc.undoTrial(k); sheet = null; save(); return render(); }
+    case "trialdel": { const k = live("tasks").find(x => x.id === id); if (!k || !confirm("Drop this trial? If it's overdue, its penalty stays.")) return; remove("tasks", id); battle = null; sheet = null; save(); return render(); }
+    case "noteadd": {
+      const f = readForm("#noteForm"); if (!f.habit) return toast("What did they do?");
+      put("fieldNotes", { person: f.person || null, trait: f.trait, habit: f.habit, status: null, date: E.today() }); save(); toast("Added to the habit library"); return render();
+    }
+    case "notedel": if (confirm("Delete this field note?")) { remove("fieldNotes", id); save(); render(); } return;
+    case "copynote": { trialForm = { type: "copy", fear: null, note: id }; sheet = "trial:copy"; return render(); }
+    case "apstart": apForm = { scores: {}, by: "", trial: id || null }; render(); return window.scrollTo(0, 0);
+    case "apcancel": apForm = null; return render();
+    case "apsave": {
+      if (!apForm) return; const f = readForm("#apForm"), sc = apForm.scores;
+      if (!Object.keys(sc).length) return toast("Rate at least one trait");
+      put("appraisals", { date: E.today(), by: f.by || null, scores: sc });
+      const k = apForm.trial && live("tasks").find(x => x.id === apForm.trial); const gains = k && !k.done ? Soc.logBattle(k, { appraisal: true }) : [];
+      apForm = null; save(); announce(gains); toast("Appraisal saved"); if (location.hash !== "#social/appraise") return go("social/appraise"); render(); return window.scrollTo(0, 0);
+    }
+
     // jlpt
     case "jlptlvl": S.settings.jlpt.level = id; touchSettings(); save(); jq = null; return render();
     case "jqpick": {
@@ -1974,6 +2151,8 @@ document.addEventListener("input", ev => {
   if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
 document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-cmd]")) { ev.preventDefault(); cmdRun(ev.target.value); } });
 document.addEventListener("change", async ev => {
+  const sel = ev.target.closest("[data-act-ch]");
+  if (sel && trialForm) { Object.assign(trialForm, readForm("#trialForm")); trialForm[sel.dataset.actCh === "trialnote" ? "note" : "person"] = sel.value; trialForm.title = null; trialForm.keepTitle = false; return render(); }
   const el = ev.target.closest("[data-ch]"); if (!el) return;
   const k = el.dataset.ch;
   const lg = curLog();
@@ -2052,6 +2231,7 @@ function renameStyle() {
 (async function boot() {
   await load();
   renameStyle();
+  if (Soc.migrateTraits()) save();
   briefOpen = briefDue();
   entering = true; render();
   G.applyPhoto();
