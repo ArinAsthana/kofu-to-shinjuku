@@ -247,10 +247,27 @@ async function rpc(env, m) {
   }
 }
 
+// Opening the connector URL in a browser runs this: it checks each secret and one Firestore read.
+async function selfCheck(env) {
+  const out = ["Kofu to Shinjuku connector is running.", ""];
+  let sa = null;
+  try { sa = JSON.parse(env.SA_JSON || ""); out.push(sa.private_key && sa.client_email ? `OK  SA_JSON (${sa.client_email})` : "BAD SA_JSON: not a service account key file"); }
+  catch { out.push("BAD SA_JSON: missing or not valid JSON. Paste the whole downloaded key file."); }
+  out.push(env.UID ? "OK  UID set" : "BAD UID: missing. Copy it from the app: System → settings → Sync → Claude connector ID.");
+  if (sa && env.UID) {
+    try { const r = await readStore(env, "blocks"); out.push(r.updateTime ? `OK  Firestore: ${r.data.length} timetable blocks found` : "BAD Firestore: no data for this UID. Sign in on the phone and tap Sync now, then check the UID."); }
+    catch (e) { out.push("BAD Firestore: " + e.message); }
+  }
+  out.push("", "In Claude, add this same URL (without anything after the token) as a custom connector.");
+  return new Response(out.join("\n"), { headers: { "content-type": "text/plain; charset=utf-8" } });
+}
+
 export default {
   async fetch(req, env) {
-    const url = new URL(req.url);
-    if (!env.PATH_TOKEN || url.pathname !== "/mcp/" + env.PATH_TOKEN) return new Response("Not found", { status: 404 });
+    const url = new URL(req.url), path = url.pathname.replace(/\/+$/, "");
+    // The token works with or without the /mcp/ prefix.
+    if (!env.PATH_TOKEN || (path !== "/mcp/" + env.PATH_TOKEN && path !== "/" + env.PATH_TOKEN)) return new Response("Not found. Check the URL ends with /mcp/<PATH_TOKEN>.", { status: 404 });
+    if (req.method === "GET" && !(req.headers.get("accept") || "").includes("text/event-stream")) return selfCheck(env);
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
     let body; try { body = await req.json(); } catch { return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, { status: 400 }); }
     const out = Array.isArray(body) ? (await Promise.all(body.map(m => rpc(env, m)))).filter(Boolean) : await rpc(env, body);
