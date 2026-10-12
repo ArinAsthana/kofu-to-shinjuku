@@ -63,7 +63,7 @@ function hydrate() {
 
 /* ================= SYSTEM (home) ================= */
 const yen = n => "¥" + Math.round(n || 0).toLocaleString("en-US");
-const sysBox = (body, sub, act) => `<div class="sys"><b>[SYSTEM]</b> ${body}${sub ? `<div class="x">${sub}</div>` : ""}${act || ""}</div>`;
+const sysBox = (body, sub, act) => `<div class="sys"><b>System</b> · ${body}${sub ? `<div class="x">${sub}</div>` : ""}${act || ""}</div>`;
 
 // Drop-downs remember whether you left them open (per phone).
 const FOLD_KEY = "kts-fold";
@@ -235,7 +235,7 @@ function briefHtml() {
   const t = E.today(), q = todayQuests(t), pens = St.openPenalties();
   const blocks = St.questOcc(t).sort((a, b) => a.s - b.s);
   return `<div class="modal-scrim" data-act="briefclose"></div><div class="modal brief" role="dialog" aria-label="Today's quests">
-    <div class="hdr">[System] ${esc(E.fmtDate(t))}</div><h2 class="bh">Daily quests have arrived</h2>
+    <div class="hdr">System · ${esc(E.fmtDate(t))}</div><h2 class="bh">Daily quests have arrived</h2>
     ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} Make up ${esc(p.title)} · shop locked until done</div>`).join("")}` : ""}
     ${blocks.length ? `<div class="bsec">Quest blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
       return `<div class="bl"><span class="mono">${span(o.s, o.e)}</span> <b>${esc(o.b.title)}</b>${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}</div>`; }).join("")}` : ""}
@@ -271,7 +271,7 @@ function vFocus() {
   const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="plan">${ic("left")} Plan</button>`;
   if (!g.open) {
     const nx = g.next;
-    return `${back}<h1>Study</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">[System] Gate closed</div>
+    return `${back}<h1>Study</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
       <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
       ${nx ? `<div class="small muted">${esc(nx.b.title)}</div>${topicLine(nx.b)}` : ""}
       <div class="small muted">A quest block opens ${S.settings.plan.openPad ?? 10} min before it starts. The report stays open ${S.settings.study.grace ?? 60} min after it ends.</div></div></div></div>`;
@@ -300,7 +300,7 @@ function vFocus() {
       <div class="chips">${opts.map(([v, l]) => `<button class="chip" data-act="blockreport" data-id="${v}">${l}</button>`).join("")}</div>
       <p class="tiny muted">${g.ended ? `Report by ${P.toHM(g.closes)}.` : "Report when the block ends."} No work done by then counts as skipped: −${pen} XP and a make-up penalty quest. The shop locks until it's cleared.</p></div>`;
   }
-  return `${back}<header class="top"><div><div class="hdr">[System] Quest · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>
+  return `${back}<header class="top"><div><div class="hdr">System · Quest · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>
   ${timer}${topicHtml}${rep}`;
 }
 // Phase change: buzz, beep, and a notification if the app is in the background.
@@ -361,7 +361,7 @@ function vStatus() {
   return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div>${gear("status")}</header>${statusSeg("status")}
   <div class="carousel">
     <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
-      <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "#fff")}
+      <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "var(--mag)")}
       <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} to spend${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
     <div class="card g-ind"><span class="k">Days to graduation</span>
       <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
@@ -751,7 +751,7 @@ function cmdCard(p) {
       <label class="f" style="flex-basis:100%">Link${p.shop ? ` (${esc(p.shop)} search)` : ""}<input type="url" data-f="link" value="${esc(p.link)}"></label></div>
       <div class="small muted" style="margin-top:8px">${p.price ? `Costs ${E.suggestXp(p.price).toLocaleString("en-US")} XP at ¥${S.settings.fun.yenPerXp} per XP.` : "Add the price and the XP cost is set from it."}</div>`;
   }
-  return `<div class="panel" id="cmdCard"><div class="hdr">[System] Confirm</div><h3>${title}</h3>${body}
+  return `<div class="panel" id="cmdCard"><div class="hdr">System · Confirm</div><h3>${title}</h3>${body}
     <div class="btns"><button class="btn go" data-act="cmdapply">Apply</button><button class="btn" data-act="cmdcancel">Cancel</button></div></div>`;
 }
 function vCmd() {
@@ -1067,7 +1067,7 @@ const started = date => { const w = E.workoutOn(date); return !!(w && (w.entries
 // Shown instead of the log when no workout block is open.
 function lockedHtml(g) {
   const nx = g.next;
-  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">[System] Gate closed</div>
+  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
     <b>${nx ? `Opens ${nx.date === E.today() ? "today" : nx.date === E.addDays(E.today(), 1) ? "tomorrow" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No workout block this week"}</b>
     <div class="small muted">${nx ? esc(nx.b.title) + " block. " : ""}Logging opens ${S.settings.plan.openPad ?? 10} min before a workout block and closes ${S.settings.plan.openPad ?? 10} min after. Once you log a set it stays open for the day.</div></div></div></div>`;
 }
@@ -1435,7 +1435,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.15 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.0 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1901,7 +1901,7 @@ document.addEventListener("change", async ev => {
 });
 
 /* ---------- boot ---------- */
-// v1.15: the "Style" criterion became "Taste". Scores move across; nothing is dropped.
+// v2.0: the "Style" criterion became "Taste". Scores move across; nothing is dropped.
 function renameStyle() {
   const so = S.settings.social, i = so.criteria.indexOf("Style");
   if (i < 0 || so.criteria.includes("Taste")) return;
