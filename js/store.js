@@ -12,6 +12,7 @@ export const RECORD_STORES = [
   "care", "careLog", "people", "hangouts", // schema 4: care items {name, slot, order, days, note}; careLog {item, date}; people {name, type, scores:{criterion:1-5}, every, where, note}; hangouts {date, people:[ids], what, note}
   "wishlist", // schema 5: {name, price ¥, xp cost, kind item|trip, link, note, bought: null|{date, xp, yen}}
   "blockLog", "penalties", // schema 6: blockLog {date, block, subj, topic, gain %, poms, done}; penalties {date, block, title, xp, task} (id "pen-<date>-<block>")
+  "fieldNotes", "appraisals", // schema 9: fieldNotes {person, trait, habit, status tried|worked|notme}; appraisals {date, by, scores}
   "jlptItems", "jlptExams", // schema 8: JLPT results, see jlpt.js (questions themselves are static files in data/jlpt)
   "cards", "reviewDays", // schema 7: flashcards (see cards.js); reviewDays one record a day {id "rv-<date>", date, n, ok}. Card media stays in the photos store.
 ];
@@ -36,7 +37,7 @@ function freshSettings() {
     plan: { ...PLAN_SETTINGS },
     sessions: {}, // per weekday: { off: [slot keys], extra: [exercise ids] }
     windDown: { ...WIND_DOWN },
-    social: { criteria: SOCIAL.criteria.slice(), self: {}, selfAt: null }, // self: your own scores, for the rival ladder
+    social: { criteria: SOCIAL.criteria.slice(), self: {}, selfAt: null, tower: 0, v25: true }, // self: your own scores, for the rival ladder
     fun: { ...FUN, start: localIso(new Date()).slice(0, 7) },
     // from: only quest blocks ending after this (ms) can earn a penalty. topics: edited topic lists, null = built-in.
     study: { ...STUDY, from: Date.now(), topics: null },
@@ -138,6 +139,9 @@ const MIGRATIONS = {
   6: s => { s.cards = s.cards || []; s.reviewDays = s.reviewDays || []; return s; },
   // 7 -> 8: JLPT ladder results. Two new empty stores; nothing existing changes.
   7: s => { s.jlptItems = s.jlptItems || []; s.jlptExams = s.jlptExams || []; return s; },
+  // 8 -> 9: social trials. Two new empty stores; trials themselves are tasks with a `trial` field.
+  // Marks the old trait set for migrateTraits() in social.js (fresh installs start on the new set).
+  8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {
   const d = new Date(), since = localIso(d).slice(0, 10); // adherence counts from the day tracking starts

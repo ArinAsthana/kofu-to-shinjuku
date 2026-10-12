@@ -480,3 +480,12 @@ body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150p
 .opt.sel{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 14%,var(--panel-solid))}
 .sys.ex{margin-top:10px}
 .ptab{overflow-x:auto;margin:6px 0}.ptab table{border-collapse:collapse;font-size:12px;min-width:100%}.ptab th,.ptab td{border:1px solid var(--rule);padding:4px 6px;text-align:left;vertical-align:top}.ptab th{color:var(--dim);font-weight:600}
+
+/* v2.5 trials: their own accent (muted indigo) */
+.q.trial-q{border-color:color-mix(in srgb,var(--ind) 40%,transparent);background:color-mix(in srgb,var(--ind) 7%,var(--panel))}
+.q.trial-q .t{color:var(--ind)}
+.q.trial-q .bx{border-color:var(--ind)}
+.q.trial-q .tbtn{background:none;border:0;padding:0;color:inherit}
+.qsec.trial{color:var(--ind)}
+.panel.trials{border-color:color-mix(in srgb,var(--ind) 30%,transparent)}
+.act.trial .ic{color:var(--ind)}
