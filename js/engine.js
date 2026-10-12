@@ -252,6 +252,19 @@ export const billMonthly = b => b.amount == null ? 0 : b.freq === "year" ? b.amo
 export const billsMonthly = () => bills().reduce((a, b) => a + billMonthly(b), 0);
 export const monthKey = (s = today()) => s.slice(0, 7);
 
+/* ---------- wishlist rewards ---------- */
+// XP wallet: everything earned minus what purchases spent. Level and total XP never go down.
+export const xpSpent = () => live("wishlist").filter(w => w.bought).reduce((a, w) => a + (w.bought.xp || 0), 0);
+export const xpWallet = () => xpTotal() - xpSpent();
+// Fun budget accrues every month from the start month (inclusive); unspent yen rolls over.
+export function funBudget() {
+  const f = S.settings.fun, start = f.start || monthKey(), now = monthKey();
+  const months = Math.max(1, (+now.slice(0, 4) - +start.slice(0, 4)) * 12 + (+now.slice(5) - +start.slice(5)) + 1);
+  const spent = live("wishlist").filter(w => w.bought).reduce((a, w) => a + (w.bought.yen || 0), 0);
+  return { accrued: months * (f.monthly || 0), spent, left: months * (f.monthly || 0) - spent, monthly: f.monthly || 0 };
+}
+export const suggestXp = yen => Math.max(10, Math.round((yen || 0) / (S.settings.fun.yenPerXp || 20) / 10) * 10);
+
 /* ---------- skills ---------- */
 export function skillValue(sk) {
   if (sk.src === "run") return Math.max(0, ...live("runs").map(r => r.km));

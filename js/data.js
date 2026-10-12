@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -231,3 +231,7 @@ export const PERSON_TYPES = [
   ["acq", "Acquaintance", 30], ["regular", "Recurring stranger", null],
 ];
 export const SOCIAL = { criteria: ["Communication", "Style", "Charisma", "Reliability", "Ambition"] };
+
+/* ---------- wishlist rewards (schema 5) ---------- */
+// Buy wishlist items by spending XP (a wallet separate from level) out of a monthly fun budget that rolls over.
+export const FUN = { monthly: 5000, yenPerXp: 20, start: null };

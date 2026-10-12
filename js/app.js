@@ -28,7 +28,7 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; render(); window.scrollTo(0, 0); });
 
 const TABS = [["home", "System"], ["plan", "Plan"], ["social", "Social"], ["train", "Train"], ["body", "Body"], ["money", "Money"], ["skills", "Skills"]];
 function render() {
@@ -86,7 +86,7 @@ function vHome() {
   <div class="carousel">
     <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
       <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "#fff")}
-      <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1}${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
+      <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} to spend${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
     <div class="card g-ind"><span class="k">Days to graduation</span>
       <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
     <button class="card g-org" data-act="nav" data-id="money"><span class="k">Treasury</span>
@@ -197,7 +197,8 @@ function moneyChart() {
     { min: 0, max, ticks: [0, max / 2, max], fmt: v => v ? Math.round(v / 1000) + "k" : "0", label: "Bank balance and debt vs pace to graduation",
       labels: [[0, E.fmtDate(d0).slice(4)], [mid, E.fmtDate(E.addDays(d0, Math.round(span / 2))).slice(4)], [N, "Grad"]] });
 }
-function vMoney() {
+function vMoney([sub] = []) {
+  if (sub === "rewards") return vRewards();
   const mp = E.moneyPlan(), rs = E.moneyReports().slice().reverse(), last = rs[0], due = E.moneyDue(), mk = E.monthKey();
   const bl = E.bills(), unpaid = bl.filter(b => !(b.paid || {})[mk]);
   const segs = 20, filled = Math.round(mp.paidPct * segs);
@@ -211,6 +212,11 @@ function vMoney() {
     </div>
     <div class="btns"><button class="btn primary block" data-act="savemoney">Submit report</button></div>
   </div>
+
+  <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="money/rewards">
+    <div class="grow"><div class="small muted">Rewards shop</div><b>${E.xpWallet().toLocaleString("en-US")} XP · ${yen(E.funBudget().left)} fun budget</b>
+      <div class="small muted">${(() => { const w = E.xpWallet(), f = E.funBudget().left, r = live("wishlist").filter(x => !x.bought && w >= x.xp && f >= x.price).length; return r ? `${r} wishlist item${r === 1 ? "" : "s"} unlocked` : `${live("wishlist").filter(x => !x.bought).length} on the wishlist`; })()}</div></div>
+    <span class="chev">›</span></button>
 
   <h2>Quest: ${yen(mp.goal)} by graduation</h2>
   <div class="panel">
@@ -256,6 +262,56 @@ function vMoney() {
     <label class="f">Starting debt (¥)<input type="number" inputmode="numeric" data-ch="debtstart" value="${S.settings.money.debtStart}"></label></div>
     <p class="tiny muted">Starting debt is the 100% mark for the debt bar. Deadline is graduation, ${E.fmtDate(S.settings.dates.graduation)}.</p>
   </details>`;
+}
+
+/* ================= REWARDS (wishlist) ================= */
+let wishForm = null; // null | "new" | id
+function wishFormHtml(w) {
+  w = w || { kind: "item" };
+  return `<div class="panel" id="wishForm"><h3>${w.id ? "Edit" : "Add to wishlist"}</h3><div class="grid">
+    <label class="f" style="flex-basis:100%">What<input data-f="name" value="${esc(w.name || "")}" placeholder="e.g. Uniqlo U coat, Osaka trip"></label>
+    <label class="f">Price (¥)<input type="number" inputmode="numeric" data-f="price" value="${w.price ?? ""}"></label>
+    <label class="f">XP cost<input type="number" inputmode="numeric" data-f="xp" value="${w.xp ?? ""}" placeholder="auto: ¥${S.settings.fun.yenPerXp} = 1 XP"></label>
+    <label class="f">Type<select data-f="kind"><option value="item" ${w.kind === "item" ? "selected" : ""}>Item</option><option value="trip" ${w.kind === "trip" ? "selected" : ""}>Trip</option><option value="exp" ${w.kind === "exp" ? "selected" : ""}>Experience</option></select></label>
+    <label class="f" style="flex-basis:100%">Link (optional)<input type="url" data-f="link" value="${esc(w.link || "")}"></label></div>
+    <div class="btns"><button class="btn go" data-act="savewish" ${w.id ? `data-id="${w.id}"` : ""}>Save</button><button class="btn" data-act="wishform">Cancel</button>
+      ${w.id ? `<button class="btn danger" data-act="delwish" data-id="${w.id}">Delete</button>` : ""}</div></div>`;
+}
+function vRewards() {
+  const wallet = E.xpWallet(), fb = E.funBudget(), all = live("wishlist");
+  const open = all.filter(w => !w.bought), got = all.filter(w => w.bought).sort((a, b) => b.bought.date.localeCompare(a.bought.date));
+  const ready = w => wallet >= w.xp && fb.left >= w.price;
+  const pct = w => Math.min(wallet / (w.xp || 1), fb.left / (w.price || 1), 1);
+  open.sort((a, b) => ready(b) - ready(a) || pct(b) - pct(a));
+  const icon = k => k === "trip" ? "✈" : k === "exp" ? "★" : "◆";
+  const editing = wishForm && wishForm !== "new" ? all.find(w => w.id === wishForm) : null;
+  return `<button class="back" data-act="nav" data-id="money">‹ Money</button>
+  <header class="top"><div><div class="hdr">Shop</div><h1>Rewards</h1></div></header>
+  <div class="carousel">
+    <div class="card g-mag"><span class="k">XP to spend</span><div><div class="dm big2">${wallet.toLocaleString("en-US")}</div><div class="small soft">${E.xpTotal().toLocaleString("en-US")} earned · ${E.xpSpent().toLocaleString("en-US")} spent · level unaffected</div></div></div>
+    <div class="card g-org"><span class="k">Fun budget</span><div><div class="dm big2">${yen(fb.left)}</div><div class="small soft">${yen(fb.monthly)} / month, rolls over · ${yen(fb.spent)} spent</div></div></div>
+  </div>
+  ${wishForm === "new" ? wishFormHtml() : `<div class="btns"><button class="btn primary" data-act="wishform" data-id="new">+ Wishlist item</button></div>`}
+  <h2>Wishlist <span class="n">${open.filter(ready).length} ready</span></h2>
+  <div class="list">${open.map(w => {
+    if (editing && editing.id === w.id) return wishFormHtml(w);
+    const ok = ready(w), xpGap = Math.max(0, w.xp - wallet), yenGap = Math.max(0, w.price - fb.left);
+    const wks = yenGap && fb.monthly ? Math.ceil(yenGap / fb.monthly) : 0;
+    return `<div class="panel wish ${ok ? "ready" : ""}" style="margin-top:0">
+      <div class="row between"><button class="tbtn grow" data-act="wishform" data-id="${w.id}"><b>${icon(w.kind)} ${esc(w.name)}</b>
+        <div class="small muted">${yen(w.price)} · ${w.xp.toLocaleString("en-US")} XP${w.link ? ` · <a href="${esc(w.link)}" target="_blank" rel="noopener">link</a>` : ""}</div></button>
+        ${ok ? `<button class="btn go sm" data-act="buywish" data-id="${w.id}">Buy</button>` : `<span class="rank" style="--c:var(--dim);font-size:16px">🔒</span>`}</div>
+      <div class="small muted" style="margin-top:8px">XP ${Math.min(wallet, w.xp).toLocaleString("en-US")}/${w.xp.toLocaleString("en-US")}</div>${bar(wallet / w.xp, "var(--mag)")}
+      <div class="small muted">Budget ${yen(Math.max(0, Math.min(fb.left, w.price)))}/${yen(w.price)}</div>${bar(fb.left / w.price, "var(--org)")}
+      ${ok ? `<div class="small" style="color:var(--lime)">Unlocked. You earned this.</div>` : `<div class="small muted">${[xpGap ? `${xpGap.toLocaleString("en-US")} XP to go` : "", yenGap ? `${yen(yenGap)} more budget (${wks} month${wks === 1 ? "" : "s"})` : ""].filter(Boolean).join(" · ")}</div>`}
+    </div>`;
+  }).join("") || `<p class="empty">Nothing on the wishlist. Add the things and trips you want, with real prices.</p>`}</div>
+  ${got.length ? `<h2>Claimed <span class="n">${got.length}</span></h2><div class="panel">${got.map(w => `<div class="item row between"><div class="grow small"><b>${icon(w.kind)} ${esc(w.name)}</b><div class="muted">${E.fmtDate(w.bought.date)} · ${yen(w.bought.yen)} · ${w.bought.xp.toLocaleString("en-US")} XP</div></div>
+    <button class="btn sm" data-act="unbuy" data-id="${w.id}">Undo</button></div>`).join("")}</div>` : ""}
+  <details class="panel"><summary>Budget settings</summary><div class="grid" style="margin-top:8px">
+    <label class="f">Fun budget per month (¥)<input type="number" inputmode="numeric" data-ch="funmonthly" value="${fb.monthly}"></label>
+    <label class="f">Yen per 1 XP (for new items)<input type="number" inputmode="numeric" data-ch="funrate" value="${S.settings.fun.yenPerXp}"></label></div>
+    <p class="tiny muted">Started ${esc(S.settings.fun.start)}. Every month adds the budget; anything unspent carries over. Keep it small enough that the savings and debt quests stay on pace.</p></details>`;
 }
 
 /* ================= CARE ================= */
@@ -936,7 +992,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.3 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.4 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1094,6 +1150,31 @@ document.addEventListener("click", async ev => {
       put("bills", b); save(); return render();
     }
 
+    // rewards
+    case "wishform": wishForm = id && wishForm !== id ? id : null; render(); if (wishForm) $("#wishForm")?.scrollIntoView({ block: "center" }); return;
+    case "savewish": {
+      const f = readForm("#wishForm"), price = num(f.price);
+      if (!f.name) return toast("Name it"); if (price === null || price < 0) return toast("Add the price");
+      const old = id ? live("wishlist").find(x => x.id === id) : null;
+      const xp = num(f.xp) > 0 ? Math.round(num(f.xp)) : E.suggestXp(price);
+      put("wishlist", { ...(old || { bought: null }), name: f.name, price: Math.round(price), xp, kind: f.kind, link: f.link });
+      wishForm = null; save(); toast(`${f.name}: ${xp.toLocaleString("en-US")} XP`); return render();
+    }
+    case "delwish": if (confirm("Delete this wishlist item?")) { remove("wishlist", id); wishForm = null; save(); render(); } return;
+    case "buywish": {
+      const w = live("wishlist").find(x => x.id === id); if (!w) return;
+      const wallet = E.xpWallet(), fb = E.funBudget();
+      if (wallet < w.xp || fb.left < w.price) return toast("Not unlocked yet");
+      const mp = E.moneyPlan(), after = Math.max(0, mp.goal - (mp.bank - w.price)) / mp.weeks;
+      if (!confirm(`Buy ${w.name} for ${yen(w.price)}?
+
+Spends ${w.xp} XP (${(wallet - w.xp).toLocaleString("en-US")} left) and ${yen(w.price)} of fun budget.
+Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.`)) return;
+      put("wishlist", { ...w, bought: { date: E.today(), xp: w.xp, yen: w.price } }); save();
+      toast(`Claimed: ${w.name}. Enjoy it, you earned it.`, true); return render();
+    }
+    case "unbuy": { const w = live("wishlist").find(x => x.id === id); if (!w || !confirm("Undo this purchase? XP and budget come back.")) return; put("wishlist", { ...w, bought: null }); save(); return render(); }
+
     // care
     case "care": {
       const done = careDone(id, E.today());
@@ -1233,6 +1314,7 @@ document.addEventListener("change", async ev => {
   if (k === "photos") { pendingPhotos = [...el.files]; $("#photoCount").textContent = pendingPhotos.length + " photo(s) ready"; return; }
   if (k === "billamt") { const b = live("bills").find(x => x.id === el.dataset.id); if (!b) return; b.amount = num(el.value); put("bills", b); save(); return render(); }
   if (k === "moneygoal" || k === "debtstart") { const v = num(el.value); if (v === null || v < 0) return render(); S.settings.money[k === "moneygoal" ? "goal" : "debtStart"] = v; touchSettings(); save(); return render(); }
+  if (k === "funmonthly" || k === "funrate") { const v = num(el.value); if (v === null || v < (k === "funrate" ? 1 : 0)) return render(); S.settings.fun[k === "funmonthly" ? "monthly" : "yenPerXp"] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "ptype" || k === "pevery" || k === "pwhere" || k === "pnote") {
     const p = live("people").find(x => x.id === el.dataset.id); if (!p) return;
     if (k === "ptype") p.type = el.value;
