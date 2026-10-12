@@ -1,5 +1,5 @@
 // Offline app shell. Bump VERSION on every release so phones pick up the new files.
-const VERSION = "kts-v1.7.0";
+const VERSION = "kts-v1.8.0";
 const SHELL = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "js/app.js", "js/data.js", "js/store.js", "js/engine.js", "js/sync.js", "js/charts.js", "js/planner.js", "js/icons.js", "js/firebase-config.js",

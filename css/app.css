@@ -285,3 +285,78 @@ nav button{transition:background .25s,color .25s}
 .lv .ic{width:18px;height:18px}
 .lockbox{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--dim);color:var(--soft)}
 .lockbox .ic{width:18px;height:18px}
+
+/* ================= v1.8 "System window" theme (manhwa) =================
+   Deep navy, glowing blue frames with corner brackets, square edges, dark-blue-to-clear cards. */
+:root{
+  --bg:#02050d; --dotc:#0d1a33; --sys:#4fb6ff; --sys2:#2b7fff; --sysdim:rgba(79,182,255,.28); --navy:rgba(10,36,92,.92);
+  --panel:rgba(5,13,32,.86); --rule:rgba(79,182,255,.16);
+  /* corner brackets as stacked gradients, reused by framed surfaces */
+  --cb:linear-gradient(var(--sys),var(--sys));
+  --corners:var(--cb) 0 0/12px 1.5px no-repeat,var(--cb) 0 0/1.5px 12px no-repeat,
+    var(--cb) 100% 0/12px 1.5px no-repeat,var(--cb) 100% 0/1.5px 12px no-repeat,
+    var(--cb) 0 100%/12px 1.5px no-repeat,var(--cb) 0 100%/1.5px 12px no-repeat,
+    var(--cb) 100% 100%/12px 1.5px no-repeat,var(--cb) 100% 100%/1.5px 12px no-repeat;
+}
+body{background:var(--bg) radial-gradient(ellipse at 50% -10%,rgba(43,127,255,.18),transparent 60%) fixed,
+  radial-gradient(var(--dotc) 1.2px,transparent 1.3px) 0 0/14px 14px fixed;background-color:var(--bg)}
+html{background:var(--bg)}
+h1{text-shadow:0 0 18px rgba(79,182,255,.35)}
+h2{color:#7fb8e6}
+h2::before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;transform:rotate(45deg);border:1.5px solid var(--sys);flex:none;align-self:center}
+h2{justify-content:flex-start}
+h2 .n{margin-left:auto}
+.hdr{color:#7fb8e6}
+
+/* framed surfaces */
+.panel,.q,.strip,.sys{border-radius:4px;border:1px solid var(--sysdim);
+  background:var(--corners),linear-gradient(180deg,rgba(10,30,72,.55),rgba(5,13,32,.88));
+  box-shadow:inset 0 0 22px rgba(43,127,255,.10),0 0 0 1px rgba(0,0,0,.4)}
+.sys{background:var(--corners),linear-gradient(180deg,rgba(14,48,110,.7),rgba(5,14,36,.92));border-color:rgba(79,182,255,.55);box-shadow:inset 0 0 28px rgba(79,182,255,.18),0 0 18px rgba(43,127,255,.15);color:#d6ecff}
+.sys b{color:var(--sys);text-shadow:0 0 10px rgba(79,182,255,.6)}
+.q.person{background:var(--corners),linear-gradient(180deg,rgba(10,30,72,.55),rgba(5,13,32,.88))}
+.panel.winding{border-color:var(--sys)}
+
+/* cards: square, dark blue fading to clear */
+.card,.g-mag,.g-ind,.g-org,.g-cyan{border-radius:4px;border:1px solid rgba(79,182,255,.45);
+  background:var(--corners),linear-gradient(160deg,rgba(18,56,140,.95) 0%,rgba(10,34,92,.55) 45%,rgba(6,16,40,0) 100%);
+  box-shadow:inset 0 0 30px rgba(79,182,255,.12)}
+.carousel>.card{flex:0 0 68%;max-width:300px;aspect-ratio:1/1;min-height:0}
+.card .k{color:#9cd2ff;opacity:1}
+.card .dm{text-shadow:0 0 16px rgba(79,182,255,.55)}
+.card .bar{background:rgba(79,182,255,.15)}
+.card .bar i{background:var(--sys)!important;box-shadow:0 0 10px var(--sys)}
+
+/* controls */
+.btn,.pill,.seg button,.chip,.rbtn{border-radius:4px}
+.btn{border-color:var(--sysdim);background:rgba(43,127,255,.08);text-transform:uppercase;letter-spacing:.06em;font-size:14px}
+.btn.primary{background:linear-gradient(180deg,rgba(43,127,255,.45),rgba(20,70,170,.35));border-color:var(--sys);color:#fff;box-shadow:0 0 14px rgba(43,127,255,.35),inset 0 0 10px rgba(79,182,255,.25)}
+.btn.go{background:linear-gradient(180deg,#4fb6ff,#2b7fff);border-color:#8fd0ff;color:#02050d;box-shadow:0 0 16px rgba(79,182,255,.5)}
+.btn.danger{color:#ff6b7a;border-color:rgba(255,107,122,.35)}
+.pills{border-radius:4px;border-color:var(--sysdim);background:rgba(10,30,72,.4)}
+.seg button[aria-pressed="true"],.pill[aria-pressed="true"],#bdays .chip[aria-pressed="true"]{background:rgba(43,127,255,.35);color:#fff;border-color:var(--sys);box-shadow:0 0 10px rgba(43,127,255,.35)}
+.rbtn{border-color:var(--sysdim);background:rgba(10,30,72,.5);color:#cfe8ff}
+input,select,textarea{border-radius:4px;border-color:var(--sysdim);background:rgba(2,8,22,.7)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--sys);box-shadow:0 0 0 2px rgba(79,182,255,.25)}
+.back{color:var(--sys)}
+
+/* quest boxes */
+.bx{border-radius:3px;border-color:rgba(79,182,255,.5);background:rgba(2,8,22,.6)}
+.q.done .bx,.bx.on{background:var(--sys);border-color:#8fd0ff;color:#02050d;box-shadow:0 0 12px rgba(79,182,255,.6)}
+.q .xp{color:var(--sys)}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(79,182,255,.7)}100%{box-shadow:0 0 0 14px rgba(79,182,255,0)}}
+
+/* nav: a floating system bar */
+nav .in{border-radius:6px;border-color:var(--sysdim);background:rgba(4,12,30,.94);box-shadow:0 0 20px rgba(43,127,255,.15)}
+nav button{border-radius:4px;text-transform:uppercase;letter-spacing:.06em;font-size:12.5px}
+nav button[aria-current="page"]{background:rgba(43,127,255,.3);color:#fff;box-shadow:inset 0 0 0 1px var(--sys),0 0 12px rgba(43,127,255,.4)}
+
+/* misc */
+.badge{background:var(--sys2);box-shadow:0 0 10px var(--sys)}
+.toast{border-radius:4px;border-color:var(--sys);background:var(--corners),rgba(6,18,44,.97);box-shadow:0 0 22px rgba(43,127,255,.35)}
+.bar{border-radius:2px}.bar i{border-radius:2px}
+.segbar i{border-radius:1px}.segbar i.f{background:var(--sys);box-shadow:0 0 6px var(--sys)}
+.rank,.lockbox{border-radius:3px}
+.strip b{color:#fff;text-shadow:0 0 10px rgba(79,182,255,.6)}
+.nowline{border-top-color:var(--sys)}.nowline span{color:var(--sys)}
+details summary{cursor:pointer}
