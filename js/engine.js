@@ -262,6 +262,10 @@ export const xpSpent = () => live("wishlist").filter(w => w.bought).reduce((a, w
 // Penalties come off the wallet too, never off level.
 export const xpPenalty = () => live("penalties").reduce((a, p) => a + (p.xp || 0), 0);
 export const xpWallet = () => xpTotal() - xpSpent() - xpPenalty();
+// Purchasing power grows 1% per level, up to ×2 (around level 100, roughly a year of steady quests).
+// Wishlist items keep their base XP; what you pay is base ÷ power. Prices don't fall; your XP is worth more.
+export const xpPower = (lv = level()) => Math.min(2, 1 + 0.01 * (lv - 1));
+export const xpPrice = w => Math.max(5, Math.round((w.xp || 0) / xpPower() / 5) * 5);
 // Fun budget accrues every month from the start month (inclusive); unspent yen rolls over.
 export function funBudget() {
   const f = S.settings.fun, start = f.start || monthKey(), now = monthKey();

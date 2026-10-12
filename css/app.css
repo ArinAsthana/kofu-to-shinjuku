@@ -452,3 +452,88 @@ nav button[aria-current="page"]{box-shadow:inset 0 0 0 1px rgba(111,159,204,.6);
 .sys.pen b{color:var(--bad);text-shadow:0 0 10px rgba(255,94,108,.6)}
 .bad-t{color:var(--bad)}
 .item.cur{color:var(--sys)}
+
+/* ================= v1.13 streamline: folds, hero, quiet rows, sheet, brief, backgrounds ================= */
+/* card weights: hero (glow), panel (frame), quiet (no frame) */
+.hero{margin-top:12px;padding:16px;border:1px solid rgba(111,159,204,.55);border-radius:4px;
+  background:var(--corners),linear-gradient(170deg,rgba(26,62,128,.85),rgba(8,20,48,.9));box-shadow:0 0 22px rgba(63,111,168,.22),inset 0 0 22px rgba(111,159,204,.08)}
+.hero.winding{border-color:#b49cff;box-shadow:0 0 22px rgba(140,110,255,.25)}
+.hero .now-t{font-size:24px;font-weight:700;margin:4px 0 2px;line-height:1.15}
+.hero .bar{height:6px;margin:10px 0 2px}
+.hero .bar i{transition:width .6s}
+.quiet-row{display:flex;align-items:center;gap:12px;width:100%;margin-top:10px;padding:10px 4px;border:0;border-bottom:1px solid var(--rule);background:none;color:var(--soft);font-size:14px;text-align:left}
+.quiet-row span:not(.chev):not(.grow){white-space:nowrap}
+.quiet-row .chev{margin-left:auto;font-size:18px}
+.quiet-row .ic{width:16px;height:16px;color:var(--sys)}
+.quiet-links{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:12px}
+.quiet-links button{border:0;background:none;color:var(--sys);font-size:14px;padding:6px 0;display:flex;align-items:center;gap:4px}
+.quiet-links .ic{width:14px;height:14px}
+
+/* drop-downs */
+.fold{margin-top:10px;border:1px solid var(--sysdim);border-radius:4px;background:var(--corners),linear-gradient(180deg,rgba(10,30,72,.5),rgba(5,13,32,.86))}
+.fold>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:13px 14px;cursor:pointer}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary .bar{height:5px;margin:6px 0 4px}
+.fold .fchev{color:var(--soft);transition:transform .15s;flex:none}
+.fold .fchev .ic{width:18px;height:18px}
+.fold[open] .fchev{transform:rotate(90deg)}
+.fold-b{padding:0 12px 12px}
+.fold[open] .fold-b{animation:foldin .15s ease-out}
+@keyframes foldin{from{opacity:0;transform:translateY(-4px)}}
+.qsec{display:flex;justify-content:space-between;align-items:baseline;font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#8aa6c2;margin:6px 2px 8px}
+.qsec span{letter-spacing:0;text-transform:none;font-weight:400;color:var(--soft)}
+.qsec:not(:first-child){margin-top:16px}
+.q.pen-q{border-color:rgba(255,94,108,.55)}
+.q.pen-q .t{color:#ffc7cd}
+
+/* alert strip: one message + count */
+.astrip{position:relative;margin-top:10px}
+.astrip .sys{padding-right:84px}
+.more-a{position:absolute;top:10px;right:10px;border:1px solid var(--sysdim);background:rgba(5,13,32,.8);color:var(--sys);border-radius:4px;font:12px var(--mono);padding:4px 8px}
+
+/* agenda: low-value blocks thin, current block lit */
+.ag.thin{padding-top:4px;padding-bottom:4px;opacity:.7}
+.ag.thin .tm{font-size:11px}
+.ag.cur{background:rgba(63,111,168,.16);box-shadow:inset 0 0 0 1px rgba(111,159,204,.5)}
+.meal-q{margin-top:6px}
+
+/* command bar docked above the tab bar on Home */
+.cmdline.dock{position:fixed;left:0;right:0;bottom:calc(76px + env(safe-area-inset-bottom,0px));width:calc(100% - 32px);max-width:528px;margin:0 auto;z-index:20;background:rgba(4,12,30,.94);border-color:var(--sysdim)}
+body[data-tab="home"] main{padding-bottom:calc(160px + env(safe-area-inset-bottom,0px))}
+.rbtn.on{color:#fff;border-color:var(--sys);background:rgba(63,111,168,.45)}
+
+/* bottom sheet and modal */
+#overlay:empty{display:none}
+.modal-scrim{position:fixed;inset:0;background:rgba(1,4,12,.66);z-index:50;animation:fadein .2s}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:86vh;overflow-y:auto;z-index:51;max-width:560px;margin:0 auto;padding:12px 16px calc(24px + env(safe-area-inset-bottom,0px));
+  background:#06102a;border-top:1px solid rgba(111,159,204,.5);border-radius:10px 10px 0 0;box-shadow:0 -12px 30px rgba(0,0,0,.5);animation:sheetup .22s ease-out}
+.sheet-h{position:sticky;top:-12px;background:#06102a;padding:6px 0 10px;margin-bottom:6px;z-index:1}
+.sheet h3{margin-top:6px}
+@keyframes sheetup{from{transform:translateY(100%)}}
+.modal{position:fixed;left:16px;right:16px;top:50%;transform:translateY(-50%);max-width:480px;max-height:82vh;overflow-y:auto;margin:0 auto;z-index:51;padding:18px;
+  border:1px solid rgba(111,159,204,.7);border-radius:4px;background:var(--corners),linear-gradient(170deg,rgba(18,46,104,.97),rgba(5,13,32,.98));box-shadow:0 0 40px rgba(63,111,168,.35);animation:popin .25s ease-out}
+@keyframes popin{from{opacity:0;transform:translateY(-46%) scale(.96)}}
+.brief .bh{font-size:20px;letter-spacing:.02em;text-transform:none;color:#fff;margin:6px 0 10px;display:block}
+.brief .bh::before{display:none}
+.bsec{font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--sys);margin:14px 0 6px}
+.bl{font-size:14px;padding:5px 0;border-bottom:1px solid var(--rule)}
+.bl .mono{font-size:12px;color:var(--soft)}
+body.modal-open{overflow:hidden}
+@media (prefers-reduced-motion:reduce){.sheet,.modal,.modal-scrim,.fold[open] .fold-b{animation:none}.fold .fchev{transition:none}}
+
+/* backgrounds: blurred photo or live camera (Glass mode) */
+#bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+#bg img,#bg video{position:absolute;top:-40px;left:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;opacity:0;transition:opacity .5s;
+  filter:blur(22px) brightness(.36) saturate(1.2)}
+body.has-bg #bg img[src]{opacity:1}
+body.glass-live #bg video{opacity:1}
+body.glass-live #bg img{opacity:0}
+body.has-bg{background:transparent}
+html:has(body.has-bg){background:#02050d}
+body.has-bg .panel,body.has-bg .q,body.has-bg .fold,body.has-bg .strip,body.has-bg .sys{background:var(--corners),rgba(5,13,32,.52)}
+body.has-bg .hero{background:var(--corners),rgba(14,36,82,.6)}
+body.has-bg .card{background:var(--corners),linear-gradient(160deg,rgba(22,52,110,.7),rgba(6,16,40,.25))}
+body.has-bg nav .in,body.has-bg .cmdline.dock{background:rgba(4,12,30,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+header.top>div:first-child{min-width:0}
+header.top h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(21px,6.2vw,26px)}
+header.top .hdr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
