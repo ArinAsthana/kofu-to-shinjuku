@@ -7,6 +7,7 @@ import * as P from "./planner.js";
 import { ic } from "./icons.js";
 import * as C from "./command.js";
 import * as St from "./study.js";
+import * as G from "./glass.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -31,7 +32,7 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { entering = true; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; render(); window.scrollTo(0, 0); });
 
 // Five tabs. Train, Body and Care share one tab; Money and Skills live under Status.
 const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Body"], ["social", "Social"], ["status", "Status"]];
@@ -47,6 +48,8 @@ function render() {
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
+  $("#overlay").innerHTML = (briefOpen ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "");
+  document.body.classList.toggle("modal-open", !!(briefOpen || sheet));
   hydrate();
   if (tab === "cmd" && !cmd.prop && !cmd.done) $("[data-cmd]")?.focus();
 }
@@ -62,59 +65,178 @@ function hydrate() {
 const yen = n => "¥" + Math.round(n || 0).toLocaleString("en-US");
 const sysBox = (body, sub, act) => `<div class="sys"><b>[SYSTEM]</b> ${body}${sub ? `<div class="x">${sub}</div>` : ""}${act || ""}</div>`;
 
+// Drop-downs remember whether you left them open (per phone).
+const FOLD_KEY = "kts-fold";
+const foldState = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY)) || {}; } catch (e) { return {}; } };
+function fold(key, summary, body, def = false, cls = "") {
+  const st = foldState(), open = key in st ? st[key] : def;
+  return `<details class="fold ${cls}" data-fold="${esc(key)}" ${open ? "open" : ""}><summary>${summary}<span class="fchev">${ic("right")}</span></summary><div class="fold-b">${body}</div></details>`;
+}
+document.addEventListener("toggle", ev => {
+  const d = ev.target; if (!d.matches || !d.matches("details[data-fold]")) return;
+  const st = foldState(); st[d.dataset.fold] = d.open;
+  try { localStorage.setItem(FOLD_KEY, JSON.stringify(st)); } catch (e) {}
+}, true);
+
+// Today's quests. Event quests = the to-do list planned for today (penalty quests first). Normal quests = the daily habits.
+function todayQuests(t = E.today()) {
+  const p = P.plan();
+  const open = live("tasks").filter(k => !k.done && p.at.get(k.id)?.date === t).map(k => ({ k, at: p.at.get(k.id) }));
+  const doneT = live("tasks").filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }));
+  const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
+  const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
+  return { events, habits, done: doneT.length + habits.filter(x => x.on).length, total: events.length + habits.length };
+}
+const habitRow = ({ h, on }) => `<div class="q ${on ? "done" : ""}">
+  <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
+  <div class="grow"><div class="t">${esc(h.name)}</div><div class="small muted">${esc(h.note)} · ${E.habitWeekCount(h.id)}/${E.habitTarget(h.id)} this week</div></div>
+  <div class="xp">+${XP.habit}</div></div>`;
+const eventRow = ({ k, at, done }) => `<div class="q ${done ? "done" : ""} ${k.penalty ? "pen-q" : ""}">
+  <button class="bx" data-act="${done ? "taskundo" : "taskdone"}" data-id="${k.id}" aria-pressed="${!!done}" aria-label="${esc(k.title)} done">${done ? ic("check") : ""}</button>
+  <div class="grow"><div class="t">${esc(k.title)}</div><div class="small muted">${done ? "done" : `${span(at.s, at.e)} · ${P.dur(k.mins)}`}</div></div>
+  <div class="xp">${k.penalty ? "" : "+" + XP.task}</div></div>`;
+
 function vHome() {
-  const t = E.today(), plan = E.planFor(t), w = E.workoutOn(t);
-  const done = w ? (w.entries || []).filter(e => e.sets && e.sets.length).length : 0;
-  const quests = HABITS.map(h => {
-    const on = !!E.habitDone(h.id, t), wc = E.habitWeekCount(h.id), tg = E.habitTarget(h.id);
-    return `<div class="q ${on ? "done" : ""}">
-      <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
-      <div class="grow"><div class="t">${esc(h.name)}</div><div class="small muted">${esc(h.note)} · ${wc}/${tg} this week</div></div>
-      <div class="xp">+${XP.habit}</div></div>`;
-  }).join("");
-  const a7 = E.avg7(), food = E.dayFood(t), ft = S.settings.food;
+  const t = E.today(), a7 = E.avg7(), food = E.dayFood(t), ft = S.settings.food;
   const days = E.daysBetween(t, S.settings.dates.graduation);
-  const doneToday = HABITS.filter(h => E.habitDone(h.id, t)).length;
   const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length, gate = P.trainGate(started(t)), fg = St.focusGate();
-  const into = gate.open ? "train" : fg.open && !fg.ended ? "focus" : "plan";
+  const into = gate.open ? "train" : fg.open ? "focus" : "plan";
+  const nm = new Date().getHours() * 60 + new Date().getMinutes();
+  const cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
+  const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Start timer") : into === "train" ? "Enter" : "Open plan";
+  const q = todayQuests(t), next = q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
+  const care = careToday(t), careNext = care.items.filter(c => !careDone(c.id, t)).sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0));
+  const careRows = care.items.slice().sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0)).map(c => { const on = !!careDone(c.id, t);
+    return `<div class="q ${on ? "done" : ""}"><button class="bx" data-act="care" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)} done">${on ? ic("check") : ""}</button><div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${esc((CARE_SLOTS.find(x => x[0] === c.slot) || [, ""])[1])}${c.note ? " · " + esc(c.note) : ""}</div></div><div></div></div>`; }).join("");
+  const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
-    <button class="rbtn" data-act="nav" data-id="more" aria-label="Settings and backup">${ic("settings")}</button></div></header>
+    <button class="rbtn ${G.live() ? "on" : ""}" data-act="glass" aria-label="Glass mode ${G.live() ? "on" : "off"}" aria-pressed="${G.live()}">${ic("eye")}</button>
+    <button class="rbtn" data-act="sheet" data-id="home" aria-label="Settings">${ic("settings")}</button></div></header>
   <button class="strip" data-act="nav" data-id="status">
     <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${E.streak()}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
-  <button class="cmdline" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
-  ${penaltyBox()}${reportDueBox(fg)}
+  ${alertStrip()}
 
-  <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
-  <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="${into}">
-    <div class="grow">${wd ? `<div class="now-t">Wind down</div><div class="small muted">bed at ${P.toHM(wd.bed)}</div>` : nn.now ? `<div class="now-t">${esc(nn.now.type === "task" ? nn.now.k.title : nn.now.b.title)}</div>${topicLine(nn.now.b)}<div class="small muted">until ${P.toHM(nn.now.e)}${into !== "plan" ? " · tap to enter" : ""}</div>` : `<div class="now-t">Free time</div>`}
-      <div class="small muted">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} at ${P.toHM(nn.next.s)}` : "Nothing else today"}</div></div>
-    <span class="chev">${ic("right")}</span></button>
+  <div class="hero now ${wd ? "winding" : ""}">
+    <div class="row between"><span class="hdr">Now · ${P.toHM(nm)}</span>${cur && !wd ? `<span class="hdr">${P.dur(Math.max(0, cur.e - nm))} left</span>` : ""}</div>
+    <div class="now-t">${esc(nowTitle)}</div>
+    ${wd ? `<div class="small muted">Bed at ${P.toHM(wd.bed)}. Screens off, shower, set out tomorrow's clothes.</div>` : cur && cur.type === "block" ? topicLine(cur.b) : ""}
+    ${cur && !wd ? `<div class="bar"><i style="width:${pct * 100}%;background:var(--sys)"></i></div>` : ""}
+    <div class="row between" style="margin-top:8px"><span class="small muted grow">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} · ${P.toHM(nn.next.s)}` : "Nothing else today"}</span>
+      <button class="btn sm ${into !== "plan" || (fg.open && fg.ended) ? "primary" : ""}" data-act="nav" data-id="${into}">${act}</button></div>
+  </div>
 
-  <h2>Daily quests <span class="n">${doneToday}/${HABITS.length}</span></h2>
-  <div class="list">${quests}</div>
+  ${fold("quests", `<div class="grow"><div class="row between"><b>Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}<div class="small muted">${next ? "Next: " + esc(next) : "All cleared today."}</div></div>`,
+    `${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
+     <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
+     <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan/todo">Open to-do</button></div>`)}
 
-  <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="body/care">
-    <div class="grow"><div class="small muted">Care: meds, skin, teeth</div><b>${careToday().done}/${careToday().items.length} today</b>
-      <div class="small muted">${esc(careToday().items.filter(c => !careDone(c.id, t)).slice(0, 3).map(c => c.name).join(", ")) || "All done"}</div></div>
-    <span class="chev">${ic("right")}</span></button>
+  ${care.items.length ? fold("care", `<div class="grow"><div class="row between"><b>Care</b><span class="mono small">${care.done}/${care.items.length}</span></div>${bar(care.done / care.items.length, "var(--sys)")}<div class="small muted">${careNext.length ? "Next: " + esc(careNext[0].name) : "All done."}</div></div>`,
+    `<div class="list">${careRows}</div><div class="btns"><button class="btn sm" data-act="go" data-id="body/care">Edit care list</button></div>`) : ""}
 
-  ${gate.open ? `<h2>Today's dungeon <span class="n">open now</span></h2>
-  <button class="panel row between dungeon-open" style="width:100%;text-align:left" data-act="nav" data-id="train">
-    <div><div class="small muted">${esc(plan.where)}</div><b>${esc(plan.name)}</b>
-      <div class="small muted">${plan.postShift ? "After night shift · " : ""}${done}/${plan.slots.length + plan.extra.length} exercises${w && E.habitDone("gym", t) ? " · logged" : ""}</div></div>
-    <span class="chev">${ic("right")}</span></button>` : ""}
-
-  <button class="panel row between" style="width:100%;text-align:left" data-act="nav" data-id="body/food">
-    <div class="grow"><div class="small muted">Body and food today</div>
-      <div><b>${a7 ? r1(a7) + " kg" : "No weight yet"}</b> <span class="small muted">${a7 ? "7-day average" : ""}</span></div>
-      <div class="small">${food.kcal} kcal${ft.kcalTarget ? " / " + ft.kcalTarget : ""} · ${r1(food.protein)} g protein${ft.proteinTarget ? " / " + ft.proteinTarget : ""}</div></div>
-    <span class="chev">${ic("right")}</span></button>
-
+  <button class="quiet-row" data-act="go" data-id="body/food">
+    <span>${ic("target", "inl")} ${a7 ? r1(a7) + " kg" : "No weight"}</span><span>${food.kcal}${ft.kcalTarget ? "/" + ft.kcalTarget : ""} kcal</span><span>${r1(food.protein)}${ft.proteinTarget ? "/" + ft.proteinTarget : ""} g protein</span><span class="chev">${ic("right")}</span></button>
+  <button class="cmdline dock" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 `;
 }
 
+// The most urgent System message, with a count of the rest. Full list behind the bell.
+function alertStrip() {
+  const list = alertList(); if (!list.length) return "";
+  return `<div class="astrip">${list[0]}${list.length > 1 ? `<button class="more-a" data-act="nav" data-id="alerts">+${list.length - 1} more</button>` : ""}</div>`;
+}
+
+function planSettings() {
+  const wd = S.settings.windDown, pl = S.settings.plan, sst = S.settings.study;
+  const perm = typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  return `  <h3>Wind-down</h3>
+  <div class="panel">
+    <label class="row"><input type="checkbox" data-ch="wdon" style="width:auto" ${wd.on !== false ? "checked" : ""}> Remind me before bed</label>
+    <div class="grid" style="margin-top:10px">
+      <label class="f">Minutes before sleep<input type="number" inputmode="numeric" min="15" max="180" step="15" data-ch="wdmins" value="${wd.mins ?? 60}"></label>
+    </div>
+    <p class="small muted" style="margin-top:8px">Bedtime comes from your Sleep blocks. On shift nights there is no wind-down; it would land mid-shift.</p>
+    <h3 style="margin-top:12px">Get it on your phone</h3>
+    <p class="small muted">A web app can't ring at a set time while it's closed. Your calendar can. Add the wind-down there once and set its notification to "At time of event".</p>
+    <div class="btns">${P.windDownLinks().map(l => `<a class="btn sm" href="${esc(l.url)}" target="_blank" rel="noopener">+ Google Calendar · ${P.toHM(l.at)} ${l.days.map(x => P.DAY_NAMES[x]).join(" ")}</a>`).join("") || `<span class="small muted">Turn the reminder on and add a Sleep block first.</span>`}</div>
+    <div class="btns"><button class="btn sm" data-act="ics">Download whole timetable (.ics)</button></div>
+    <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>
+    <h3 style="margin-top:12px">While the app is open</h3>
+    <p class="small muted">${perm === "unsupported" ? "This browser has no notifications." : perm === "denied" ? "Notifications are blocked for this site. Allow them in the browser's site settings." : wd.notify && perm === "granted" ? "On. You'll get a notification at wind-down if the app is still open or in the background." : "Best effort: a notification at wind-down if the app is still open or in the background."}</p>
+    ${perm === "unsupported" || perm === "denied" ? "" : `<div class="btns"><button class="btn sm" data-act="wdnotify">${wd.notify && perm === "granted" ? "Turn off" : "Turn on"}</button></div>`}
+  </div>
+
+  <h3 style="margin-top:14px">Planner window</h3>
+  <div class="panel"><div class="grid">
+    <label class="f">Plan tasks from<input type="time" data-ch="dayStart" value="${esc(pl.dayStart)}"></label>
+    <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label>
+    <label class="f">Padding around blocks (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="buffer" value="${pl.buffer ?? 10}"></label>
+    <label class="f">Workout opens early / closes late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
+    <label class="f">Edit lock before a block (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="lockMins" value="${pl.lockMins ?? 15}"></label></div>
+    <p class="tiny muted">Tasks only go inside this window, outside blocks plus padding, and before wind-down. Today's blocks can't be changed from the lock time until they end.</p></div>
+  <h3 style="margin-top:14px">Pomodoro and penalties</h3><div class="panel"><div class="grid">
+    ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
+    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p></div>`;
+}
+function bodySettings() {
+  const st = S.settings;
+  return `<h3>Food targets</h3><div class="grid"><label class="f">Calories per day<input type="number" inputmode="numeric" data-ch="kcalTarget" value="${st.food.kcalTarget ?? ""}"></label>
+    <label class="f">Protein per day (g)<input type="number" inputmode="numeric" data-ch="proteinTarget" value="${st.food.proteinTarget ?? ""}"></label></div>
+    <h3 style="margin-top:14px">Weekly quest targets</h3>${HABITS.map(h => `<div class="row between item"><span class="small">${esc(h.name)}</span><input style="width:80px" type="number" min="0" max="7" data-ch="htarget" data-id="${h.id}" value="${E.habitTarget(h.id)}"></div>`).join("")}`;
+}
+function statusSettings() {
+  return `<h3>Weekly report</h3><p class="small muted">Markdown summary of this week, to paste to Claude for the Sunday coaching report.</p>
+    <div class="btns"><button class="btn primary" data-act="report">Copy weekly report</button></div><div id="reportBox"></div>
+    <p class="tiny muted" style="margin-top:10px">${esc(Sync.statusText())}</p>`;
+}
+function moneySettings() {
+  return `<h3>Goals</h3><div class="grid"><label class="f">Savings goal (¥)<input type="number" inputmode="numeric" data-ch="moneygoal" value="${S.settings.money.goal}"></label>
+    <label class="f">Starting debt (¥)<input type="number" inputmode="numeric" data-ch="debtstart" value="${S.settings.money.debtStart}"></label></div>
+    <p class="tiny muted">Starting debt is the 100% mark for the debt bar. Deadline is graduation, ${E.fmtDate(S.settings.dates.graduation)}.</p>
+    <h3 style="margin-top:14px">Fun budget</h3><div class="grid"><label class="f">Per month (¥)<input type="number" inputmode="numeric" data-ch="funmonthly" value="${E.funBudget().monthly}"></label>
+    <label class="f">Yen per 1 XP (new items)<input type="number" inputmode="numeric" data-ch="funrate" value="${S.settings.fun.yenPerXp}"></label></div>
+    <p class="tiny muted">Started ${esc(S.settings.fun.start)}. Every month adds the budget; anything unspent carries over.</p>`;
+}
+/* ---------- settings sheet ---------- */
+// One gear per tab opens its settings from the bottom, so daily screens stay clean.
+let sheet = null;
+function sheetHtml(k) {
+  const body = { plan: planSettings, status: statusSettings, money: moneySettings, body: bodySettings }[k] || homeSettings;
+  return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog" aria-label="Settings">
+    <div class="row between sheet-h"><b>Settings</b><button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button></div>${body()}
+    <div class="btns"><button class="btn sm" data-act="nav" data-id="more">Backup, sync and all settings</button></div></div>`;
+}
+const gear = k => `<button class="rbtn" data-act="sheet" data-id="${k}" aria-label="Settings">${ic("settings")}</button>`;
+function homeSettings() {
+  const c = G.cfg();
+  return `<h3>Background</h3>
+    <p class="small muted">A photo of your choice, blurred and darkened behind the cards. It stays on this phone.</p>
+    <div class="btns"><label class="btn sm">${c.photo ? "Change photo" : "Pick a photo"}<input type="file" accept="image/*" data-ch="bgphoto" hidden></label>${c.photo ? `<button class="btn sm" data-act="bgclear">Remove</button>` : ""}</div>
+    <h3 style="margin-top:14px">Glass mode</h3>
+    <p class="small muted">Uses the back camera so the app looks see-through. It turns itself off after the time below, when the battery drops under 20%, or when you leave the app. The camera runs only on this phone; nothing is recorded.</p>
+    <div class="grid"><label class="f">Turn off after (min)<input type="number" inputmode="numeric" min="1" max="60" data-ch="glassmins" value="${c.mins}"></label></div>
+    <div class="btns"><button class="btn sm ${G.live() ? "" : "primary"}" data-act="glass">${G.live() ? `Turn off (${G.minsLeft()} min left)` : "Turn on"}</button></div>`;
+}
+
+/* ---------- morning brief ---------- */
+// First open of each day (from 04:00): a System window listing today's quests. Shown once per day per phone.
+const BRIEF_KEY = "kts-brief";
+let briefOpen = false;
+function briefDue() { const d = new Date(); if (d.getHours() < 4) return false; try { return localStorage.getItem(BRIEF_KEY) !== E.today(); } catch (e) { return false; } }
+function briefHtml() {
+  const t = E.today(), q = todayQuests(t), pens = St.openPenalties();
+  const blocks = St.questOcc(t).sort((a, b) => a.s - b.s);
+  return `<div class="modal-scrim" data-act="briefclose"></div><div class="modal brief" role="dialog" aria-label="Today's quests">
+    <div class="hdr">[System] ${esc(E.fmtDate(t))}</div><h2 class="bh">Daily quests have arrived</h2>
+    ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} Make up ${esc(p.title)} · shop locked until done</div>`).join("")}` : ""}
+    ${blocks.length ? `<div class="bsec">Quest blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
+      return `<div class="bl"><span class="mono">${span(o.s, o.e)}</span> <b>${esc(o.b.title)}</b>${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}</div>`; }).join("")}` : ""}
+    <div class="bsec">Event quests</div>${q.events.filter(e => !e.done).map(({ k, at }) => `<div class="bl"><span class="mono">${span(at.s, at.e)}</span> ${esc(k.title)}</div>`).join("") || `<div class="bl muted">No to-dos planned today.</div>`}
+    <div class="bsec">Normal quests</div><div class="bl">${q.habits.map(({ h }) => esc(h.name)).join(" · ")}</div>
+    <p class="tiny muted" style="margin-top:10px">Skipped quest blocks cost ${S.settings.study.penaltyXp ?? 30} XP and earn a penalty quest.</p>
+    <div class="btns"><button class="btn primary block" data-act="briefclose">Accept</button></div></div>`;
+}
 
 /* ---------- study blocks and penalties ---------- */
 const mmss = ms => { const x = Math.ceil(ms / 1000); return E.pad(Math.floor(x / 60)) + ":" + E.pad(x % 60); };
@@ -229,7 +351,7 @@ const statusSeg = cur => `<div class="pills">${[["status", "Overview"], ["money"
 function vStatus() {
   const t = E.today(), xp = E.xpTotal(), mp = E.moneyPlan(), days = E.daysBetween(t, S.settings.dates.graduation);
   const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
-  return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div></header>${statusSeg("status")}
+  return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div>${gear("status")}</header>${statusSeg("status")}
   <div class="carousel">
     <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
       <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "#fff")}
@@ -241,13 +363,7 @@ function vStatus() {
     <div class="card g-cyan"><span class="k">Streak</span>
       <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
   </div>
-  <div class="panel">
-    <h3>Weekly report</h3>
-    <p class="small muted">Markdown summary of this week for Claude.</p>
-    <div class="btns"><button class="btn primary" data-act="report">Copy weekly report</button></div>
-    <div id="reportBox"></div>
-  </div>
-  <p class="tiny muted" style="text-align:right;margin-top:8px">${esc(Sync.statusText())}</p>`;
+  <button class="quiet-row" data-act="nav" data-id="skills"><span class="grow">Stats radar and skill tree</span><span class="chev">${ic("right")}</span></button>`;
 }
 const bodySeg = cur => `<div class="pills">${[["train", "Train"], ["body/weight", "Weight"], ["body/food", "Food"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
 
@@ -272,8 +388,8 @@ function vSkills([sub]) {
   let body = "";
   if (sub === "tree") {
     body = `<div class="panel">${Ch.tree(sk)}</div>
-    <div class="list">${sk.map(x => `<div class="unl"><div class="lv" style="color:var(--${x.c})">T${x.tier}</div><div><b>${esc(x.name)}: ${esc(x.tiers[Math.max(0, x.tier - 1)])}</b></div>
-      <div class="need">${x.src === "run" ? `longest run ${x.value} km` : `${x.value} session${x.value === 1 ? "" : "s"} logged`}${x.next != null ? ` · next tier at ${x.next}${x.src === "run" ? " km" : ""}` : " · maxed"}</div></div>`).join("")}</div>
+    ${fold("skill-tiers", `<b class="grow">Tier details</b><span class="small muted">${sk.length} skills</span>`, `<div class="list">${sk.map(x => `<div class="unl"><div class="lv" style="color:var(--${x.c})">T${x.tier}</div><div><b>${esc(x.name)}: ${esc(x.tiers[Math.max(0, x.tier - 1)])}</b></div>
+      <div class="need">${x.src === "run" ? `longest run ${x.value} km` : `${x.value} session${x.value === 1 ? "" : "s"} logged`}${x.next != null ? ` · next tier at ${x.next}${x.src === "run" ? " km" : ""}` : " · maxed"}</div></div>`).join("")}</div>`)}
     <p class="tiny muted">Tiers unlock from what you log: quest ticks for study skills, workout days for Strength, longest run for Endurance.</p>`;
   } else if (sub === "overlap") {
     const lvl = ids => ids.reduce((a, id) => a + by[id].pct, 0) / ids.length;
@@ -322,43 +438,35 @@ function vMoney([sub] = []) {
   const mp = E.moneyPlan(), rs = E.moneyReports().slice().reverse(), last = rs[0], due = E.moneyDue(), mk = E.monthKey();
   const bl = E.bills(), unpaid = bl.filter(b => !(b.paid || {})[mk]);
   const segs = 20, filled = Math.round(mp.paidPct * segs);
-  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div><div class="rbtn" aria-hidden="true">${ic("wallet")}</div></header>${statusSeg("money")}
-  ${due ? sysBox("Weekly money report is due.", "Asked every week. Enter today's numbers.") : ""}
-  <div class="card g-ind" style="margin-top:12px">
-    <div class="k">${due ? "Report for this week" : "Update this week's report"}</div>
-    <div class="grid" id="moneyForm" style="margin-top:10px">
+  const form = `<div class="grid" id="moneyForm">
       <label class="f">Bank balance (¥)<input type="number" inputmode="numeric" data-f="bank" value="${due ? "" : last ? last.bank : ""}" placeholder="${last ? last.bank : ""}"></label>
       <label class="f">Debt left (¥)<input type="number" inputmode="numeric" data-f="debt" value="${due ? "" : last ? last.debt : ""}" placeholder="${last ? last.debt : ""}"></label>
     </div>
-    <div class="btns"><button class="btn primary block" data-act="savemoney">Submit report</button></div>
+    <div class="btns"><button class="btn primary block" data-act="savemoney">${due ? "Submit report" : "Update report"}</button></div>`;
+  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div>${gear("money")}</header>${statusSeg("money")}
+  ${due ? `<div class="panel report-due"><h3>Weekly money report is due</h3><p class="small muted">Bank balance and debt left. Takes 20 seconds.</p>${form}</div>` : ""}
+
+  <div class="hero">
+    <div class="row between"><span class="hdr">Savings · goal ${yen(mp.goal)}</span><span class="mono small muted">${Math.round(mp.savePct * 100)}%</span></div>
+    <div class="dm big2" style="margin-top:6px">${yen(mp.bank)}</div>
+    <div class="bar thick"><i style="width:${mp.savePct * 100}%;background:var(--sys)"></i></div>
+    <div class="row between small muted"><span>${yen(mp.goal - mp.bank)} to go</span><span>save ${yen(mp.saveWeek)} / week</span></div>
+    <div class="row between" style="margin-top:14px"><span class="hdr">Debt left</span><b class="mono">${yen(mp.debt)}</b></div>
+    <div class="segbar">${[...Array(segs)].map((_, i) => `<i class="${i < filled ? "f" : ""}"></i>`).join("")}</div>
+    <div class="row between small muted"><span>${yen(mp.debtStart - mp.debt)} paid of ${yen(mp.debtStart)}</span><span>pay ${yen(mp.debtWeek)} / week</span></div>
+    <p class="tiny muted" style="margin-top:8px">${Math.round(mp.weeks)} weeks to graduation. Both need about ${yen(mp.saveWeek + mp.debtWeek)} a week.</p>
   </div>
 
   <button class="panel row between" style="width:100%;text-align:left" data-act="go" data-id="money/rewards">
     <div class="grow"><div class="small muted">Rewards shop</div><b>${E.xpWallet().toLocaleString("en-US")} XP · ${yen(E.funBudget().left)} fun budget</b>
-      <div class="small muted">${(() => { const w = E.xpWallet(), f = E.funBudget().left, r = live("wishlist").filter(x => !x.bought && w >= x.xp && f >= x.price).length; return r ? `${r} wishlist item${r === 1 ? "" : "s"} unlocked` : `${live("wishlist").filter(x => !x.bought).length} on the wishlist`; })()}</div></div>
+      <div class="small muted">${(() => { const w = E.xpWallet(), f = E.funBudget().left, r = live("wishlist").filter(x => !x.bought && w >= E.xpPrice(x) && f >= x.price).length; return r ? `${r} wishlist item${r === 1 ? "" : "s"} unlocked` : `${live("wishlist").filter(x => !x.bought).length} on the wishlist`; })()} · purchasing power ×${E.xpPower().toFixed(2)}</div></div>
     <span class="chev">${ic("right")}</span></button>
 
-  <h2>Quest: ${yen(mp.goal)} by graduation</h2>
-  <div class="panel">
-    <div class="row between"><span class="dm big2">${yen(mp.bank)}</span><span class="mono small muted">${Math.round(mp.savePct * 100)}%</span></div>
-    <div class="bar thick"><i style="width:${mp.savePct * 100}%;background:linear-gradient(90deg,var(--sys2),var(--sys));box-shadow:0 0 10px var(--sys)"></i></div>
-    <div class="row between small muted"><span>${yen(mp.goal - mp.bank)} to go</span><span>save ${yen(mp.saveWeek)} / week</span></div>
-  </div>
+  ${due ? "" : fold("money-update", `<b class="grow">Update this week's numbers</b>`, form)}
+  ${rs.length > 1 ? fold("money-trend", `<b class="grow">Trend</b><span class="small muted">${rs.length} reports</span>`, `${moneyChart()}
+    <div class="legend"><span><i style="background:var(--mag)"></i>Bank</span><span><i style="background:var(--org)"></i>Debt</span><span><i style="background:var(--dim)"></i>Pace to goal</span></div>`, true) : ""}
 
-  <h2>Quest: debt free by graduation</h2>
-  <div class="panel">
-    <div class="row between"><span class="dm big2">${yen(mp.debt)}</span><span class="mono small muted">left</span></div>
-    <div class="segbar">${[...Array(segs)].map((_, i) => `<i class="${i < filled ? "f" : ""}"></i>`).join("")}</div>
-    <div class="row between small muted"><span>${yen(mp.debtStart - mp.debt)} paid of ${yen(mp.debtStart)}</span><span>pay ${yen(mp.debtWeek)} / week</span></div>
-  </div>
-  <p class="tiny muted">${Math.round(mp.weeks)} weeks left. Both quests together need about ${yen(mp.saveWeek + mp.debtWeek)} a week.</p>
-
-  <h2>Trend</h2>
-  <div class="panel">${rs.length > 1 ? moneyChart() : `${moneyChart()}<p class="small muted">The trend fills in as you send weekly reports.</p>`}
-    <div class="legend"><span><i style="background:var(--mag)"></i>Bank</span><span><i style="background:var(--org)"></i>Debt</span><span><i style="background:var(--dim)"></i>Pace to goal</span></div></div>
-
-  <h2>Bills and insurance <span class="n">${yen(E.billsMonthly())} / month</span></h2>
-  <div class="panel">
+  ${fold("money-bills", `<b class="grow">Bills and insurance</b><span class="small ${unpaid.length && bl.length ? "warn" : "muted"}">${yen(E.billsMonthly())}/mo${unpaid.length && bl.length ? ` · ${unpaid.length} unpaid` : ""}</span>`, `
     ${bl.length ? bl.map(b => { const paid = !!(b.paid || {})[mk]; return `<div class="item row between">
       <button class="bx sm ${paid ? "on" : ""}" data-act="billpaid" data-id="${b.id}" aria-pressed="${paid}" aria-label="Paid ${esc(b.name)} this month">${paid ? ic("check") : ""}</button>
       <div class="grow"><b>${esc(b.name)}</b><div class="small muted">${b.kind === "insurance" ? "Insurance · " : ""}${b.freq === "year" ? "yearly" : "monthly"}${paid ? " · paid this month" : ""}</div></div>
@@ -371,17 +479,9 @@ function vMoney([sub] = []) {
         <label class="f">How often<select data-f="freq"><option value="month">Monthly</option><option value="year">Yearly</option></select></label>
         <label class="f">Type<select data-f="kind"><option value="bill">Bill</option><option value="insurance">Insurance</option></select></label></div>
       <div class="btns"><button class="btn go" data-act="addbill">Add</button><button class="btn" data-act="billform">Cancel</button></div>`
-      : `<div class="btns"><button class="btn sm" data-act="billform">+ Bill</button></div>`}
-  </div>
+      : `<div class="btns"><button class="btn sm" data-act="billform">+ Bill</button></div>`}`, unpaid.length > 0 && bl.length > 0)}
 
-  <h2>History</h2>
-  <div class="panel">${rs.map(r => `<div class="item row between"><span>${E.fmtDate(r.date)}</span><span class="mono small">bank ${yen(r.bank)} · debt ${yen(r.debt)}</span><button class="btn sm danger" data-act="delmoney" data-id="${r.id}" aria-label="Delete report">${ic("x")}</button></div>`).join("") || `<p class="empty">No reports yet.</p>`}</div>
-
-  <details class="panel"><summary>Goal settings</summary>
-    <div class="grid" style="margin-top:8px"><label class="f">Savings goal (¥)<input type="number" inputmode="numeric" data-ch="moneygoal" value="${S.settings.money.goal}"></label>
-    <label class="f">Starting debt (¥)<input type="number" inputmode="numeric" data-ch="debtstart" value="${S.settings.money.debtStart}"></label></div>
-    <p class="tiny muted">Starting debt is the 100% mark for the debt bar. Deadline is graduation, ${E.fmtDate(S.settings.dates.graduation)}.</p>
-  </details>`;
+  ${rs.length ? fold("money-hist", `<b class="grow">History</b><span class="small muted">${rs.length}</span>`, rs.map(r => `<div class="item row between"><span>${E.fmtDate(r.date)}</span><span class="mono small">bank ${yen(r.bank)} · debt ${yen(r.debt)}</span><button class="btn sm danger" data-act="delmoney" data-id="${r.id}" aria-label="Delete report">${ic("x")}</button></div>`).join("")) : ""}`;
 }
 
 /* ================= REWARDS (wishlist) ================= */
@@ -400,8 +500,8 @@ function wishFormHtml(w) {
 function vRewards() {
   const wallet = E.xpWallet(), fb = E.funBudget(), all = live("wishlist");
   const open = all.filter(w => !w.bought), got = all.filter(w => w.bought).sort((a, b) => b.bought.date.localeCompare(a.bought.date));
-  const locked = St.openPenalties().length > 0, ready = w => !locked && wallet >= w.xp && fb.left >= w.price;
-  const pct = w => Math.min(wallet / (w.xp || 1), fb.left / (w.price || 1), 1);
+  const locked = St.openPenalties().length > 0, ready = w => !locked && wallet >= E.xpPrice(w) && fb.left >= w.price;
+  const pct = w => Math.min(wallet / (E.xpPrice(w) || 1), fb.left / (w.price || 1), 1);
   open.sort((a, b) => ready(b) - ready(a) || pct(b) - pct(a));
   const icon = k => ic(k === "trip" ? "plane" : k === "exp" ? "star" : "gem", "inl");
   const editing = wishForm && wishForm !== "new" ? all.find(w => w.id === wishForm) : null;
@@ -409,6 +509,7 @@ function vRewards() {
   <header class="top"><div><div class="hdr">Shop</div><h1>Rewards</h1></div></header>
   <div class="carousel">
     <div class="card g-mag"><span class="k">XP to spend</span><div><div class="dm big2">${wallet.toLocaleString("en-US")}</div><div class="small soft">${E.xpTotal().toLocaleString("en-US")} earned · ${E.xpSpent().toLocaleString("en-US")} spent · level unaffected</div></div></div>
+    <div class="card g-cyan"><span class="k">Purchasing power</span><div><div class="dm big2">×${E.xpPower().toFixed(2)}</div><div class="small soft">LV ${E.level()}: every item costs ${Math.round((1 - 1 / E.xpPower()) * 100)}% less XP. +1% per level, up to ×2.</div></div></div>
     <div class="card g-org"><span class="k">Fun budget</span><div><div class="dm big2">${yen(fb.left)}</div><div class="small soft">${yen(fb.monthly)} / month, rolls over · ${yen(fb.spent)} spent</div></div></div>
   </div>
   ${penaltyBox()}
@@ -416,23 +517,20 @@ function vRewards() {
   <h2>Wishlist <span class="n">${open.filter(ready).length} ready</span></h2>
   <div class="list">${open.map(w => {
     if (editing && editing.id === w.id) return wishFormHtml(w);
-    const ok = ready(w), xpGap = Math.max(0, w.xp - wallet), yenGap = Math.max(0, w.price - fb.left);
+    const ok = ready(w), xpGap = Math.max(0, E.xpPrice(w) - wallet), yenGap = Math.max(0, w.price - fb.left);
     const wks = yenGap && fb.monthly ? Math.ceil(yenGap / fb.monthly) : 0;
     return `<div class="panel wish ${ok ? "ready" : ""}" style="margin-top:0">
       <div class="row between"><button class="tbtn grow" data-act="wishform" data-id="${w.id}"><b>${icon(w.kind)} ${esc(w.name)}</b>
-        <div class="small muted">${yen(w.price)} · ${w.xp.toLocaleString("en-US")} XP${w.link ? ` · <a href="${esc(w.link)}" target="_blank" rel="noopener">link</a>` : ""}</div></button>
+        <div class="small muted">${yen(w.price)} · ${E.xpPrice(w).toLocaleString("en-US")} XP${E.xpPrice(w) < w.xp ? ` <s>${w.xp.toLocaleString("en-US")}</s>` : ""}${w.link ? ` · <a href="${esc(w.link)}" target="_blank" rel="noopener">link</a>` : ""}</div></button>
         ${ok ? `<button class="btn go sm" data-act="buywish" data-id="${w.id}">Buy</button>` : `<span class="lockbox">${ic("lock")}</span>`}</div>
-      <div class="small muted" style="margin-top:8px">XP ${Math.min(wallet, w.xp).toLocaleString("en-US")}/${w.xp.toLocaleString("en-US")}</div>${bar(wallet / w.xp, "var(--mag)")}
+      <div class="small muted" style="margin-top:8px">XP ${Math.min(wallet, E.xpPrice(w)).toLocaleString("en-US")}/${E.xpPrice(w).toLocaleString("en-US")}</div>${bar(wallet / E.xpPrice(w), "var(--mag)")}
       <div class="small muted">Budget ${yen(Math.max(0, Math.min(fb.left, w.price)))}/${yen(w.price)}</div>${bar(fb.left / w.price, "var(--org)")}
       ${ok ? `<div class="small" style="color:var(--lime)">Unlocked. You earned this.</div>` : `<div class="small muted">${[xpGap ? `${xpGap.toLocaleString("en-US")} XP to go` : "", yenGap ? `${yen(yenGap)} more budget (${wks} month${wks === 1 ? "" : "s"})` : ""].filter(Boolean).join(" · ")}</div>`}
     </div>`;
   }).join("") || `<p class="empty">Nothing on the wishlist. Add the things and trips you want, with real prices.</p>`}</div>
   ${got.length ? `<h2>Claimed <span class="n">${got.length}</span></h2><div class="panel">${got.map(w => `<div class="item row between"><div class="grow small"><b>${icon(w.kind)} ${esc(w.name)}</b><div class="muted">${E.fmtDate(w.bought.date)} · ${yen(w.bought.yen)} · ${w.bought.xp.toLocaleString("en-US")} XP</div></div>
     <button class="btn sm" data-act="unbuy" data-id="${w.id}">Undo</button></div>`).join("")}</div>` : ""}
-  <details class="panel"><summary>Budget settings</summary><div class="grid" style="margin-top:8px">
-    <label class="f">Fun budget per month (¥)<input type="number" inputmode="numeric" data-ch="funmonthly" value="${fb.monthly}"></label>
-    <label class="f">Yen per 1 XP (for new items)<input type="number" inputmode="numeric" data-ch="funrate" value="${S.settings.fun.yenPerXp}"></label></div>
-    <p class="tiny muted">Started ${esc(S.settings.fun.start)}. Every month adds the budget; anything unspent carries over. Keep it small enough that the savings and debt quests stay on pace.</p></details>`;
+  <p class="tiny muted">Budget settings: the gear on the Money screen.</p>`;
 }
 
 /* ================= CARE ================= */
@@ -681,7 +779,7 @@ function vPlan([sub]) {
   const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"], ["study", "Study"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
   const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : sub === "study" ? vStudy() : vDay();
   return `<header class="top"><div><div class="hdr">Timetable · auto-planner</div><h1>Plan</h1></div>
-    <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button><button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">${ic("plus")}</button></div></header>${seg}${body}`;
+    <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button><button class="rbtn" data-act="newtask" aria-label="Add a task">${ic("plus")}</button>${gear("plan")}</div></header>${seg}${body}`;
 }
 
 function agendaRows(date, p) {
@@ -694,8 +792,9 @@ function agendaRows(date, p) {
     if (r.type === "task") return pre + `<div class="ag task ${r.at.late ? "late" : ""}"><div class="tm">${span(r.s, r.e)}</div>
       <div class="grow"><b>${esc(r.k.title)}</b><div class="small muted">${P.dur(r.k.mins)}${r.k.energy === "high" ? " · focus" : ""}${r.k.due ? ` · due ${E.fmtDate(r.k.due)}` : ""}${r.at.late ? ` · <span class="warn">after deadline</span>` : ""}${r.at.pinned ? " · pinned" : ""}</div></div>
       <button class="bx sm" data-act="taskdone" data-id="${r.k.id}" aria-label="Done: ${esc(r.k.title)}"></button></div>`;
-    const b = r.b;
-    return pre + `<div class="ag blk k-${esc(b.kind)}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
+    const b = r.b, thin = ["sleep", "nap", "work"].includes(b.kind), cur = isToday && r.s <= nm && nm < r.e;
+    if (thin) return pre + `<div class="ag blk thin k-${esc(b.kind)} ${cur ? "cur" : ""}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div><div class="grow small">${esc(b.title)}</div></div>`;
+    return pre + `<div class="ag blk k-${esc(b.kind)} ${cur ? "cur" : ""}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
       <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div>${r.tail ? "" : topicLine(b)}</div></div>`;
   });
   if (!marked) rows.push(`<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`);
@@ -736,12 +835,9 @@ function vStudy() {
   const pens = live("penalties").sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15), open = new Set(St.openPenalties().map(p => p.id));
   return `${fg.open ? `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="nav" data-id="focus">${fg.ended ? "Report " : "Enter "}${esc(fg.o.b.title)}</button></div>` : ""}
   <h2>Topics <span class="n">one per study block</span></h2>${subj}
-  <h2>Reports</h2><div class="panel">${logs.map(r => `<div class="item row between"><div class="grow small"><b>${esc(r.title)}</b> · ${esc(dayLabel(r.date))}<div class="muted">${r.done ? "Done" : r.gain || r.poms ? `+${r.gain}% · ${r.poms} round${r.poms === 1 ? "" : "s"}` : "Not done"}${r.topic && r.subj ? " · " + esc((St.topics(r.subj).find(t => t.id === r.topic) || {}).t || "") : ""}</div></div>
-    <button class="btn sm" data-act="delreport" data-id="${r.id}">Delete</button></div>`).join("") || `<p class="empty">No reports yet. They show up after each study block.</p>`}</div>
-  <h2>Penalties <span class="n">${open.size} open</span></h2><div class="panel">${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}</div>
-  <details class="panel"><summary>Pomodoro and penalty settings</summary><div class="grid" style="margin-top:8px">
-    ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
-    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round. Moving or skipping a block before its edit lock is allowed and isn't penalised.</p></details>`;
+  ${fold("study-reports", `<b class="grow">Reports</b><span class="small muted">${logs.length}</span>`, `${logs.map(r => `<div class="item row between"><div class="grow small"><b>${esc(r.title)}</b> · ${esc(dayLabel(r.date))}<div class="muted">${r.done ? "Done" : r.gain || r.poms ? `+${r.gain}% · ${r.poms} round${r.poms === 1 ? "" : "s"}` : "Not done"}${r.topic && r.subj ? " · " + esc((St.topics(r.subj).find(t => t.id === r.topic) || {}).t || "") : ""}</div></div>
+    <button class="btn sm" data-act="delreport" data-id="${r.id}">Delete</button></div>`).join("") || `<p class="empty">No reports yet. They show up after each study block.</p>`}`)}
+  ${fold("study-pens", `<b class="grow">Penalties</b><span class="small ${open.size ? "bad-t" : "muted"}">${open.size} open</span>`, `${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}`, open.size > 0)}`;
 }
 
 function taskFormHtml(k) {
@@ -755,7 +851,7 @@ function taskFormHtml(k) {
       <label class="f">Due (optional)<input type="date" data-f="due" value="${esc(k.due || "")}"></label>
     </div>
     <div class="btns"><button class="btn go" data-act="savetask" ${k.id ? `data-id="${k.id}"` : ""}>${k.id ? "Save" : "Add and plan"}</button>
-      ${k.id ? `<button class="btn" data-act="taskform">Cancel</button><button class="btn danger" data-act="deltask" data-id="${k.id}">Delete</button>` : ""}</div>
+      <button class="btn" data-act="taskform">Cancel</button>${k.id ? `<button class="btn danger" data-act="deltask" data-id="${k.id}">Delete</button>` : ""}</div>
   </div>`;
 }
 
@@ -765,12 +861,13 @@ function vTodo() {
   open.sort((a, b) => { const x = when(a), y = when(b); return x && y ? (x.date + String(x.s).padStart(4, "0")).localeCompare(y.date + String(y.s).padStart(4, "0")) : x ? -1 : y ? 1 : 0; });
   const done = live("tasks").filter(k => k.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
   const editing = taskForm && taskForm !== "new" ? live("tasks").find(k => k.id === taskForm) : null;
-  return `${editing ? "" : taskFormHtml()}
+  open.sort((a, b) => !!b.penalty - !!a.penalty);
+  return `${taskForm === "new" ? taskFormHtml() : editing ? "" : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="newtask">+ Task</button></div>`}
   <h2>Open <span class="n">${open.length} · ${P.dur(open.reduce((a, k) => a + k.mins, 0) || 0)}</span></h2>
   <div class="list">${open.map(k => {
     if (editing && editing.id === k.id) return taskFormHtml(k);
     const at = when(k);
-    return `<div class="q ${at && at.late ? "late" : ""}">
+    return `<div class="q ${at && at.late ? "late" : ""} ${k.penalty ? "pen-q" : ""}">
       <button class="bx" data-act="taskdone" data-id="${k.id}" aria-label="Done: ${esc(k.title)}"></button>
       <button class="grow tbtn" data-act="taskform" data-id="${k.id}"><div class="t">${esc(k.title)}</div>
         <div class="small muted">${at ? `<span class="${at.late ? "warn" : ""}">${esc(dayLabel(at.date))} ${span(at.s, at.e)}</span>` : `<span class="warn">No slot in 2 weeks</span>`} · ${P.dur(k.mins)}${k.prio === 3 ? " · high" : k.prio === 1 ? " · low" : ""}${k.energy === "high" ? " · focus" : ""}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""}</div></button>
@@ -820,8 +917,7 @@ function weekGrid() {
 }
 
 function vWeek() {
-  const bl = live("blocks"), wd = S.settings.windDown, pl = S.settings.plan;
-  const perm = typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  const bl = live("blocks");
   const editing = blockForm && blockForm !== "new" ? bl.find(b => b.id === blockForm) : null;
   const oneOff = bl.filter(b => b.date && b.date >= E.today()).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const row = b => editing && editing.id === b.id ? blockFormHtml(b) : `<button class="ag blk tbtn" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}">
@@ -830,32 +926,7 @@ function vWeek() {
   <h2>This week <span class="n">tap a block to edit</span></h2>
   ${weekGrid()}
   ${oneOff.length ? `<h2>One-off</h2><div class="panel agenda">${oneOff.map(b => row(b).replace(`<b>`, `<span class="small muted">${E.fmtDate(b.date)}</span> <b>`)).join("")}</div>` : ""}
-
-  <h2>Wind-down</h2>
-  <div class="panel">
-    <label class="row"><input type="checkbox" data-ch="wdon" style="width:auto" ${wd.on !== false ? "checked" : ""}> Remind me before bed</label>
-    <div class="grid" style="margin-top:10px">
-      <label class="f">Minutes before sleep<input type="number" inputmode="numeric" min="15" max="180" step="15" data-ch="wdmins" value="${wd.mins ?? 60}"></label>
-    </div>
-    <p class="small muted" style="margin-top:8px">Bedtime comes from your Sleep blocks. On shift nights there is no wind-down; it would land mid-shift.</p>
-    <h3 style="margin-top:12px">Get it on your phone</h3>
-    <p class="small muted">A web app can't ring at a set time while it's closed. Your calendar can. Add the wind-down there once and set its notification to "At time of event".</p>
-    <div class="btns">${P.windDownLinks().map(l => `<a class="btn sm" href="${esc(l.url)}" target="_blank" rel="noopener">+ Google Calendar · ${P.toHM(l.at)} ${l.days.map(x => P.DAY_NAMES[x]).join(" ")}</a>`).join("") || `<span class="small muted">Turn the reminder on and add a Sleep block first.</span>`}</div>
-    <div class="btns"><button class="btn sm" data-act="ics">Download whole timetable (.ics)</button></div>
-    <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>
-    <h3 style="margin-top:12px">While the app is open</h3>
-    <p class="small muted">${perm === "unsupported" ? "This browser has no notifications." : perm === "denied" ? "Notifications are blocked for this site. Allow them in the browser's site settings." : wd.notify && perm === "granted" ? "On. You'll get a notification at wind-down if the app is still open or in the background." : "Best effort: a notification at wind-down if the app is still open or in the background."}</p>
-    ${perm === "unsupported" || perm === "denied" ? "" : `<div class="btns"><button class="btn sm" data-act="wdnotify">${wd.notify && perm === "granted" ? "Turn off" : "Turn on"}</button></div>`}
-  </div>
-
-  <h2>Planner window</h2>
-  <div class="panel"><div class="grid">
-    <label class="f">Plan tasks from<input type="time" data-ch="dayStart" value="${esc(pl.dayStart)}"></label>
-    <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label>
-    <label class="f">Padding around blocks (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="buffer" value="${pl.buffer ?? 10}"></label>
-    <label class="f">Workout opens early / closes late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
-    <label class="f">Edit lock before a block (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="lockMins" value="${pl.lockMins ?? 15}"></label></div>
-    <p class="tiny muted">Tasks only go inside this window, outside blocks plus padding, and before wind-down. Today's blocks can't be changed from the lock time until they end.</p></div>`;
+`;
 }
 
 // Fires the wind-down as a notification while the app is open or backgrounded. The calendar covers the rest.
@@ -980,24 +1051,24 @@ function vTrainHome() {
   const extra = w ? (w.entries || []).filter(e => e.sets.length && !plan.slots.some(k => E.slotState(k).current === e.exercise) && !plan.extra.includes(e.exercise)) : [];
   const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const flags = E.painFlags();
-  return `<h1>Body</h1>${bodySeg("train")}
-  ${gate.open ? "" : lockedHtml(gate)}
-  <div class="panel">
+  const session = `
     <div class="row between"><div><div class="small muted">${E.fmtDate(t)} · ${esc(plan.where)}</div><h3 style="margin:2px 0 0">${esc(plan.name)}</h3></div>
       <button class="rbtn" data-act="drawer" aria-label="Session settings and circle method">${ic("menu")}</button></div>
     ${plan.postShift || postShift ? `<label class="row small" style="margin-top:8px"><input type="checkbox" data-ch="postshift" ${postShift ? "checked" : ""} style="width:22px;height:22px"> After a night shift: keep 1–2 reps in reserve</label>` : ""}
     ${flags.length ? `<div class="flag bad">${flags.map(esc).join(" ")} Deload or swap. Stop on sharp pain.</div>` : ""}
     <div style="margin-top:6px">${slots}</div>
     ${extra.map(e => { const ex = E.exById(e.exercise); return `<button class="slot" data-act="go" data-id="train/log/${ex.id}"><span class="done-dot on"></span><span class="grow"><span class="lab">Extra</span><br><b>${esc(ex.name)}</b><br><span class="small muted">Today: ${esc(E.fmtSets(ex, e.sets))}</span></span><span class="chev">${ic("right")}</span></button>`; }).join("")}
-    ${gate.open ? `<div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>` : ""}
-  </div>${drawer ? sessionDrawer() : ""}
-  <div class="panel row between"><div><b>Runs</b><div class="small muted">Longest ${Math.max(0, ...live("runs").map(r => r.km))} of ${RUN_GOAL_KM} km continuous</div></div><button class="btn sm" data-act="go" data-id="train/runs">Open</button></div>
-  <div class="panel row between"><div><b>Exercise library</b><div class="small muted">By area. Add your own.</div></div><button class="btn sm" data-act="go" data-id="train/pick/browse">Open</button></div>
-  <h2>Progress</h2>
-  ${trainCharts()}
-  <h2>Recent sessions</h2>
-  <div class="panel">${recent.length ? recent.map(x => `<div class="item"><div class="row between"><b>${E.fmtDate(x.date)}</b>${x.postShift ? `<span class="pill">post-shift</span>` : ""}</div>
-    ${x.entries.filter(e => e.sets.length).map(e => { const ex = E.exById(e.exercise); return `<button class="link small" style="display:block;text-align:left" data-act="go" data-id="train/log/${ex.id}/${x.date}">${esc(ex.name)}: ${esc(E.fmtSets(ex, e.sets))}${e.pr ? " · PR" : ""}</button>`; }).join("")}</div>`).join("") : `<p class="empty">No sessions yet.</p>`}</div>`;
+    ${gate.open ? `<div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>` : ""}`;
+  const hasData = live("workouts").some(x => (x.entries || []).some(e => e.sets.length)) || live("runs").length > 0;
+  // Gate closed: one card saying when, and today's session folded away instead of greyed-out rows.
+  return `<header class="top"><h1>Body</h1>${gear("body")}</header>${bodySeg("train")}
+  ${gate.open ? `<div class="hero">${session}</div>` : lockedHtml(gate) + fold("train-peek", `<b class="grow">Peek: ${esc(plan.name)}</b><span class="small muted">${plan.slots.length + plan.extra.length} exercises</span>`, session)}
+  ${drawer ? sessionDrawer() : ""}
+  <div class="quiet-links"><button data-act="go" data-id="train/runs">${ic("right", "inl")} Runs · longest ${Math.max(0, ...live("runs").map(r => r.km))}/${RUN_GOAL_KM} km</button><button data-act="go" data-id="train/pick/browse">${ic("right", "inl")} Exercise library</button></div>
+  ${hasData ? `<h2>Progress</h2>${trainCharts()}` : ""}
+  ${recent.length ? `<h2>Recent sessions</h2>
+  <div class="panel">${recent.map(x => `<div class="item"><div class="row between"><b>${E.fmtDate(x.date)}</b>${x.postShift ? `<span class="pill">post-shift</span>` : ""}</div>
+    ${x.entries.filter(e => e.sets.length).map(e => { const ex = E.exById(e.exercise); return `<button class="link small" style="display:block;text-align:left" data-act="go" data-id="train/log/${ex.id}/${x.date}">${esc(ex.name)}: ${esc(E.fmtSets(ex, e.sets))}${e.pr ? " · PR" : ""}</button>`; }).join("")}</div>`).join("")}</div>` : ""}`;
 }
 
 function trainCharts() {
@@ -1188,7 +1259,7 @@ function vRuns() {
 let foodDate = null, foodForm = null;
 function vBody([sub]) {
   sub = sub || "weight";
-  return `<h1>Body</h1>${bodySeg("body/" + sub)}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
+  return `<header class="top"><h1>Body</h1>${gear("body")}</header>${bodySeg("body/" + sub)}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
 }
 
 function weightChart() {
@@ -1223,7 +1294,7 @@ function vWeight() {
     <div class="stepper" style="margin-top:6px"><button data-act="kg" data-step="-0.1" aria-label="Less">−</button><output>${draft.kg.toFixed(1)}<span class="u">kg</span></output><button data-act="kg" data-step="0.1" aria-label="More">+</button></div>
     <div class="btns"><button class="btn go block" data-act="savekg">${todays ? "Update" : "Save"} today's weight</button></div>
   </div>
-  <div class="panel">${all.slice(0, 14).map(e => `<div class="item row between"><span>${E.fmtDate(e.date)}</span><span><b>${e.kg.toFixed(1)}</b> kg <button class="btn sm danger" data-act="delkg" data-id="${e.id}" aria-label="Delete">${ic("x")}</button></span></div>`).join("") || `<p class="empty">No entries yet. Weigh in each morning, same conditions.</p>`}</div>`;
+  ${all.length ? fold("weight-hist", `<b class="grow">History</b><span class="small muted">${all.length}</span>`, all.slice(0, 14).map(e => `<div class="item row between"><span>${E.fmtDate(e.date)}</span><span><b>${e.kg.toFixed(1)}</b> kg <button class="btn sm danger" data-act="delkg" data-id="${e.id}" aria-label="Delete">${ic("x")}</button></span></div>`).join("")) : `<p class="tiny muted">Weigh in each morning, same conditions.</p>`}`;
 }
 
 function vFood() {
@@ -1233,13 +1304,14 @@ function vFood() {
     <div class="row between"><button class="btn sm" data-act="fday" data-step="-1" aria-label="Previous day">${ic("left")}</button><b>${d === E.today() ? "Today" : E.fmtDate(d)}</b><button class="btn sm" data-act="fday" data-step="1" aria-label="Next day" ${d >= E.today() ? "disabled" : ""}>${ic("right")}</button></div>
     <div class="row between" style="margin-top:10px"><span>Calories</span><b>${Math.round(f.kcal)}${ft.kcalTarget ? " / " + ft.kcalTarget : ""}</b></div>${ft.kcalTarget ? bar(f.kcal / ft.kcalTarget, "var(--chuo)") : ""}
     <div class="row between" style="margin-top:6px"><span>Protein</span><b>${r1(f.protein)} g${ft.proteinTarget ? " / " + ft.proteinTarget : ""}</b></div>${ft.proteinTarget ? bar(f.protein / ft.proteinTarget, "var(--train)") : ""}
-    ${!ft.kcalTarget || !ft.proteinTarget ? `<p class="small muted" style="margin-top:6px">Set daily targets in More.</p>` : ""}
+    ${!ft.kcalTarget || !ft.proteinTarget ? `<p class="small muted" style="margin-top:6px">Set daily targets with the gear above.</p>` : ""}
     ${low ? `<div class="flag">Only ${Math.round(f.kcal)} kcal logged. If that's real, it's too low for training and recomposition. If you skipped logging, fill it in.</div>` : ""}
   </div>
   ${MEALS.map(([k, label]) => {
     const meal = f.meals.find(m => m.meal === k), items = meal ? meal.items : [];
     const kc = items.reduce((a, i) => a + (+i.kcal || 0), 0), pr = items.reduce((a, i) => a + (+i.protein || 0), 0);
     const open = foodForm === k;
+    if (!items.length && !open) return `<button class="quiet-row meal-q" data-act="foodform" data-id="${k}"><span class="grow">${label}</span><span class="small muted">+ item</span></button>`;
     return `<div class="panel meal"><h3><span>${label}</span><span class="small muted">${Math.round(kc)} kcal · ${r1(pr)} g</span></h3>
       ${items.map((it, i) => `<div class="food-item"><span class="grow">${esc(it.name)}</span><span class="small muted">${it.kcal} kcal · ${it.protein} g</span><button class="btn sm danger" data-act="delitem" data-id="${k}" data-i="${i}" aria-label="Remove">${ic("x")}</button></div>`).join("")}
       ${open ? `<div class="grid" id="itemForm" style="margin-top:8px"><label class="f" style="flex-basis:100%">Item<input data-f="name" placeholder="e.g. Salad chicken" autofocus></label>
@@ -1256,7 +1328,8 @@ let pendingPhotos = [];
 function vCheck() {
   const checks = live("physique").sort((a, b) => b.date.localeCompare(a.date));
   const a7 = E.avg7();
-  return `<div class="panel">
+  const recent = checks[0] && E.daysBetween(checks[0].date, E.today()) < 7;
+  return `${fold("check-new", `<b class="grow">New weekly check</b><span class="small ${recent ? "muted" : "warn"}">${recent ? "done this week" : "due"}</span>`, `<div>
     <p class="small muted">Once a week, same day and time. Photos stay on this phone only and are never exported or synced.</p>
     <div class="grid" id="checkForm">
       <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
@@ -1269,12 +1342,11 @@ function vCheck() {
     </div>
     <div class="small muted" id="photoCount">${pendingPhotos.length ? pendingPhotos.length + " photo(s) ready" : ""}</div>
     <div class="btns"><button class="btn go block" data-act="savecheck">Save weekly check</button></div>
-  </div>
-  <h2>Past checks</h2>
-  <div class="panel">${checks.length ? checks.map(c => `<div class="item"><div class="row between"><b>${E.fmtDate(c.date)}</b><button class="btn sm danger" data-act="delcheck" data-id="${c.id}" aria-label="Delete">${ic("x")}</button></div>
+  </div>`, !recent, "")}
+  ${checks.length ? fold("check-past", `<b class="grow">Past checks</b><span class="small muted">${checks.length}</span>`, `${checks.map(c => `<div class="item"><div class="row between"><b>${E.fmtDate(c.date)}</b><button class="btn sm danger" data-act="delcheck" data-id="${c.id}" aria-label="Delete">${ic("x")}</button></div>
     <div class="small">${[c.kg && c.kg + " kg", c.waist && "waist " + c.waist, c.chest && "chest " + c.chest, c.arms && "arms " + c.arms].filter(Boolean).join(" · ")}</div>
     ${c.note ? `<div class="small muted">${esc(c.note)}</div>` : ""}
-    ${(c.photoIds || []).length ? `<div class="thumbs">${c.photoIds.map(p => `<img data-photo="${p}" alt="Check photo ${E.fmtDate(c.date)}">`).join("")}</div>` : ""}</div>`).join("") : `<p class="empty">No checks yet.</p>`}</div>`;
+    ${(c.photoIds || []).length ? `<div class="thumbs">${c.photoIds.map(p => `<img data-photo="${p}" alt="Check photo ${E.fmtDate(c.date)}">`).join("")}</div>` : ""}</div>`).join("")}`) : ""}`;
 }
 
 async function shrink(file) {
@@ -1314,7 +1386,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.12 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.13 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1527,13 +1599,14 @@ document.addEventListener("click", async ev => {
       const w = live("wishlist").find(x => x.id === id); if (!w) return;
       if (St.openPenalties().length) return toast("Shop locked: clear your penalty quest first");
       const wallet = E.xpWallet(), fb = E.funBudget();
-      if (wallet < w.xp || fb.left < w.price) return toast("Not unlocked yet");
+      const cost = E.xpPrice(w);
+      if (wallet < cost || fb.left < w.price) return toast("Not unlocked yet");
       const mp = E.moneyPlan(), after = Math.max(0, mp.goal - (mp.bank - w.price)) / mp.weeks;
       if (!confirm(`Buy ${w.name} for ${yen(w.price)}?
 
-Spends ${w.xp} XP (${(wallet - w.xp).toLocaleString("en-US")} left) and ${yen(w.price)} of fun budget.
+Spends ${cost} XP (${(wallet - cost).toLocaleString("en-US")} left) and ${yen(w.price)} of fun budget.
 Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.`)) return;
-      put("wishlist", { ...w, bought: { date: E.today(), xp: w.xp, yen: w.price } }); save();
+      put("wishlist", { ...w, bought: { date: E.today(), xp: cost, yen: w.price } }); save();
       toast(`Claimed: ${w.name}. Enjoy it, you earned it.`, true); return render();
     }
     case "unbuy": { const w = live("wishlist").find(x => x.id === id); if (!w || !confirm("Undo this purchase? XP and budget come back.")) return; put("wishlist", { ...w, bought: null }); save(); return render(); }
@@ -1583,6 +1656,17 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "delhang": if (confirm("Delete this hangout?")) { E.revokeXP("hang:" + id); remove("hangouts", id); save(); render(); } return;
 
+    // shell: settings sheet, morning brief, backgrounds
+    case "sheet": sheet = id && sheet !== id ? id : null; return render();
+    case "brief": briefOpen = true; return render();
+    case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
+    case "glass": {
+      if (G.live()) { G.stopGlass(); return render(); }
+      const err = await G.startGlass(why => { if (why) toast(why); render(); });
+      toast(err || `Glass mode on for ${G.cfg().mins} min`); return render();
+    }
+    case "bgclear": await G.clearPhoto(); return render();
+
     // study blocks
     case "pomo": {
       const g = St.focusGate(); if (!g.open) return render();
@@ -1625,6 +1709,11 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       save(); announce(gains); if (!gains.length) toast("Done"); return render();
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return; E.revokeXP("task:" + id); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
+    case "newtask": {
+      const show = () => { taskForm = "new"; render(); $("#taskForm input")?.focus(); };
+      if (route().join("/") === "plan/todo") return show();
+      go("plan/todo"); return setTimeout(show, 60);
+    }
     case "taskform": taskForm = id && taskForm !== id ? id : null; return render();
     case "savetask": {
       const f = readForm("#taskForm"); if (!f.title) { toast("Name the task"); return $("#taskForm input")?.focus(); }
@@ -1728,6 +1817,8 @@ document.addEventListener("change", async ev => {
   if (k === "criteria") { const list = el.value.split("\n").map(x => x.trim()).filter(Boolean); if (!list.length) return render(); S.settings.social.criteria = [...new Set(list)]; touchSettings(); save(); return render(); }
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
+  if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
+  if (k === "glassmins") { const v = num(el.value); if (v === null || v < 1 || v > 60) return render(); G.setCfg({ mins: Math.round(v) }); return render(); }
   if (k === "studynum") { const v = num(el.value), id = el.dataset.id; if (v === null || v < (id === "penaltyXp" || id === "grace" ? 0 : 1) || v > 500) return render(); S.settings.study[id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "planmin") { const v = num(el.value); if (v === null || v < 0 || v > 120) return render(); S.settings.plan[el.dataset.id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "slotoff") {
@@ -1751,7 +1842,9 @@ document.addEventListener("change", async ev => {
 /* ---------- boot ---------- */
 (async function boot() {
   await load();
+  briefOpen = briefDue();
   entering = true; render();
+  G.applyPhoto();
   Sync.init({ render, toast });
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
   setTimeout(() => { runAssess(); render(); }, 6000);
@@ -1760,6 +1853,7 @@ document.addEventListener("change", async ev => {
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
   setInterval(() => {
     runAssess();
+    if (!briefOpen && document.visibilityState === "visible" && briefDue()) { briefOpen = true; render(); }
     const busy = document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
     if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0]) && !topicEdit) render();
   }, 60000);
