@@ -547,3 +547,11 @@ header.top .hdr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tune output{font:12px var(--mono);text-align:right;color:var(--fg)}
 /* Full screen: the status bar is gone, so drop the space kept for it. */
 :root:fullscreen main{padding-top:40px}
+
+/* v1.15 social key + rival ladder */
+details.key{margin-top:6px}
+details.key summary{font:12px var(--mono);color:var(--sys);cursor:pointer;list-style:none;letter-spacing:.06em;text-transform:uppercase}
+details.key summary::-webkit-details-marker{display:none}
+details.key ol{list-style:none;padding:0;margin:6px 0;display:grid;gap:4px}
+details.key li b{display:inline-block;width:18px;font-family:var(--mono);color:var(--sys)}
+.panel.rival{border-color:var(--sys)}

@@ -244,7 +244,20 @@ export const PERSON_TYPES = [
   ["partner", "Partner", null], ["close", "Close friend", 7], ["friend", "Friend", 14],
   ["acq", "Acquaintance", 30], ["regular", "Recurring stranger", null],
 ];
-export const SOCIAL = { criteria: ["Communication", "Style", "Charisma", "Reliability", "Ambition"] };
+export const SOCIAL = { criteria: ["Communication", "Taste", "Charisma", "Reliability", "Ambition"] };
+// Scoring key: how to read each criterion, and what 1–5 look like. -1 = "don't know" (left out of the average).
+export const SOCIAL_KEY = {
+  Communication: { read: "Listen to how they explain things and how they listen. Do they answer the actual question, ask follow-ups, and adjust to who they're talking to?",
+    lv: ["Hard to follow, or talks over people", "Gets the point across with effort", "Clear, normal back-and-forth", "Clear and engaging, asks good questions", "Makes hard things simple; people feel heard"] },
+  Taste: { read: "Judge choices they made freely: how clothes fit and go together, music, places they pick, how their room or feed looks, what they recommend.",
+    lv: ["No visible care, or choices clash", "Plain, safe defaults", "Put together, a few deliberate choices", "Distinct and consistent; you'd ask their opinion", "Sets the standard; people copy them"] },
+  Charisma: { read: "Watch the room when they arrive or talk. Do people lean in, laugh, follow their lead? How do you feel after time with them?",
+    lv: ["Fades into the background or drains energy", "Pleasant one-on-one, quiet in groups", "Easy to be around; holds a group", "People gravitate to them", "Changes the mood of any room"] },
+  Reliability: { read: "Track record only, not intentions: on time, does what they said, replies, keeps what you tell them private.",
+    lv: ["Often cancels, late, or leaks", "Hit and miss", "Usually shows up and follows through", "You can count on them", "Never drops anything; first call in a crisis"] },
+  Ambition: { read: "What are they working toward, and what do they do about it every week? Talk alone caps at 2; action counts.",
+    lv: ["No direction", "Talks about goals, little action", "A clear goal and steady effort", "Driven; visible progress", "Relentless; already ahead of their peers"] },
+};
 
 /* ---------- wishlist rewards (schema 5) ---------- */
 // Buy wishlist items by spending XP (a wallet separate from level) out of a monthly fun budget that rolls over.

@@ -34,7 +34,7 @@ function freshSettings() {
     plan: { ...PLAN_SETTINGS },
     sessions: {}, // per weekday: { off: [slot keys], extra: [exercise ids] }
     windDown: { ...WIND_DOWN },
-    social: { criteria: SOCIAL.criteria.slice() },
+    social: { criteria: SOCIAL.criteria.slice(), self: {}, selfAt: null }, // self: your own scores, for the rival ladder
     fun: { ...FUN, start: localIso(new Date()).slice(0, 7) },
     // from: only quest blocks ending after this (ms) can earn a penalty. topics: edited topic lists, null = built-in.
     study: { ...STUDY, from: Date.now(), topics: null },
