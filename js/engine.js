@@ -259,7 +259,9 @@ export const monthKey = (s = today()) => s.slice(0, 7);
 /* ---------- wishlist rewards ---------- */
 // XP wallet: everything earned minus what purchases spent. Level and total XP never go down.
 export const xpSpent = () => live("wishlist").filter(w => w.bought).reduce((a, w) => a + (w.bought.xp || 0), 0);
-export const xpWallet = () => xpTotal() - xpSpent();
+// Penalties come off the wallet too, never off level.
+export const xpPenalty = () => live("penalties").reduce((a, p) => a + (p.xp || 0), 0);
+export const xpWallet = () => xpTotal() - xpSpent() - xpPenalty();
 // Fun budget accrues every month from the start month (inclusive); unspent yen rolls over.
 export function funBudget() {
   const f = S.settings.fun, start = f.start || monthKey(), now = monthKey();
