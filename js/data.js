@@ -14,6 +14,10 @@ export const HABITS = [
   { id: "news", name: "News and markets", note: "15 min + one line in Obsidian", target: 5, c: "var(--fin)" },
   { id: "case", name: "Case or interview practice", note: "Aloud", target: 2, c: "var(--fin)" },
   { id: "gym", name: "Workout", note: "Ticks itself when you log a workout or run", target: 6, c: "var(--train)" },
+  // Life skills (v1.14). Charisma grows from these.
+  { id: "stranger", name: "Talk to a stranger", note: "Cashier, classmate, someone at the gym. Ask one question, then one follow-up", target: 3, c: "var(--warn)" },
+  { id: "friend", name: "Talk to a friend", note: "Call, meet or a real chat, not just a reaction. Ticks itself when you log a hangout", target: 4, c: "var(--warn)" },
+  { id: "speak", name: "Speak up", note: "Ask a question in class, give an opinion, or start the conversation", target: 2, c: "var(--warn)" },
 ];
 
 export const XP = {
@@ -151,6 +155,8 @@ export const SKILLS = [
     tiers: ["First session", "Consistent", "Novice gains", "Intermediate", "Iron habit"] },
   { id: "end", name: "Endurance", short: "END", c: "lime", src: "run", at: [3, 5, 8, 10, 12],
     tiers: ["3 km", "5 km", "8 km", "10 km", "12 km"] },
+  { id: "cha", name: "Charisma", short: "CHA", c: "warn", src: ["stranger", "friend", "speak"], at: [5, 20, 45, 80, 130],
+    tiers: ["Says hello", "Small talk", "Keeps it going", "Reads the room", "Magnetic"] },
 ];
 
 // What tiers unlock. need: { skillId: tier }.
@@ -163,6 +169,9 @@ export const UNLOCKS = [
   { need: { fin: 4, math: 3 }, title: "Value a listed Japanese company end to end" },
   { need: { jp: 5, fin: 5 }, title: "Pass a finance case interview in Japanese" },
   { need: { end: 5 }, title: "Run 12 km without stopping" },
+  { need: { cha: 2, jp: 2 }, title: "Small talk with a stranger in Japanese" },
+  { need: { cha: 3, fin: 2 }, title: "Hold a relaxed 30-minute OB visit" },
+  { need: { cha: 4, jp: 4 }, title: "Work the room at a career event in Japanese" },
 ];
 
 // Creative ways to use skills together. Lit when both skills reach tier 2.
@@ -172,6 +181,9 @@ export const COMBOS = [
   { a: "str", b: "jp", title: "Count sets in Japanese", text: "Reps, rest and weights out loud in Japanese. Free daily speaking practice." },
   { a: "math", b: "fin", title: "Headline to case question", text: "Turn one news story a day into a market-sizing question and solve it in 5 minutes." },
   { a: "end", b: "jp", title: "Shadowing runs", text: "Easy runs with Japanese podcasts, repeating lines on the way." },
+  { a: "cha", b: "jp", title: "Konbini and café conversations", text: "One extra sentence in Japanese with staff each visit. Low stakes, daily reps." },
+  { a: "cha", b: "str", title: "Gym talk", text: "Ask someone for a spot or a form tip. Strangers at the gym are the easiest openers." },
+  { a: "cha", b: "fin", title: "Explain a market move to a friend", text: "Tell a friend one money story this week in plain words. If they get it, an interviewer will." },
   { a: "str", b: "math", title: "Plate math sprints", text: "Work out e1RM and next targets in your head before checking the app." },
 ];
 

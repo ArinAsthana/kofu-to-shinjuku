@@ -546,4 +546,4 @@ header.top .hdr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tune input[type=range]{padding:0;border:0;background:none;accent-color:var(--sys);height:28px}
 .tune output{font:12px var(--mono);text-align:right;color:var(--fg)}
 /* Full screen: the status bar is gone, so drop the space kept for it. */
-:root:fullscreen main{padding-top:12px}
+:root:fullscreen main{padding-top:40px}

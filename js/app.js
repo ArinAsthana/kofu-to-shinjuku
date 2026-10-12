@@ -377,7 +377,7 @@ const bodySeg = cur => `<div class="pills">${[["train", "Train"], ["body/weight"
 function statList() {
   const sk = Object.fromEntries(SKILLS.map(x => [x.id, E.skillInfo(x)]));
   return [["STR", sk.str.pct * 100, "org"], ["END", sk.end.pct * 100, "lime"], ["JP", sk.jp.pct * 100, "mag"],
-    ["FIN", sk.fin.pct * 100, "ind"], ["MATH", sk.math.pct * 100, "cyan"], ["DISC", E.discipline() * 100, "fg"]];
+    ["FIN", sk.fin.pct * 100, "ind"], ["MATH", sk.math.pct * 100, "cyan"], ["CHA", sk.cha.pct * 100, "warn"], ["DISC", E.discipline() * 100, "fg"]];
 }
 
 /* ================= SKILLS ================= */
@@ -397,7 +397,7 @@ function vSkills([sub]) {
     body = `<div class="panel">${Ch.tree(sk)}</div>
     ${fold("skill-tiers", `<b class="grow">Tier details</b><span class="small muted">${sk.length} skills</span>`, `<div class="list">${sk.map(x => `<div class="unl"><div class="lv" style="color:var(--${x.c})">T${x.tier}</div><div><b>${esc(x.name)}: ${esc(x.tiers[Math.max(0, x.tier - 1)])}</b></div>
       <div class="need">${x.src === "run" ? `longest run ${x.value} km` : `${x.value} session${x.value === 1 ? "" : "s"} logged`}${x.next != null ? ` · next tier at ${x.next}${x.src === "run" ? " km" : ""}` : " · maxed"}</div></div>`).join("")}</div>`)}
-    <p class="tiny muted">Tiers unlock from what you log: quest ticks for study skills, workout days for Strength, longest run for Endurance.</p>`;
+    <p class="tiny muted">Tiers unlock from what you log: quest ticks for study and life skills, workout days for Strength, longest run for Endurance.</p>`;
   } else if (sub === "overlap") {
     const lvl = ids => ids.reduce((a, id) => a + by[id].pct, 0) / ids.length;
     const domains = [{ name: "Japanese", c: "mag", level: lvl(["jp"]) }, { name: "Finance", c: "ind", level: lvl(["fin"]) }, { name: "Body", c: "org", level: lvl(["str", "end"]) }, { name: "Mind", c: "cyan", level: lvl(["math"]) }];
@@ -410,7 +410,7 @@ function vSkills([sub]) {
         <div class="need">${parts.map(([id, n]) => `<span style="color:var(--${by[id].c})">${esc(by[id].name)}</span> T${Math.min(by[id].tier, n)}/${n}`).join(" · ")}</div></div>`;
     }).join("")}</div>`;
   } else {
-    const g = { jp: "g-mag", fin: "g-ind", math: "g-cyan", str: "g-org", end: "g-cyan" };
+    const g = { jp: "g-mag", fin: "g-ind", math: "g-cyan", str: "g-org", end: "g-cyan", cha: "g-org" };
     body = `<div class="list">${COMBOS.map(c => {
       const ok = by[c.a].tier >= 2 && by[c.b].tier >= 2;
       return `<div class="combo ${g[c.a]} ${ok ? "" : "dimmed"}"><div class="chips">${[c.a, c.b].map(id => `<span class="chip">${esc(by[id].name.toUpperCase())}</span>`).join("")}${ok ? "" : `<span class="chip">LOCKED · T2 BOTH</span>`}</div>
@@ -1393,7 +1393,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.13.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.14 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1659,6 +1659,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const h = put("hangouts", { date: f.date, people: ids, what: f.what, note: f.note });
       const ppl = live("people"), social = ids.some(i => { const p = ppl.find(x => x.id === i); return p && p.type !== "partner"; });
       const gains = social ? [E.gainXP("social", "hang:" + h.id, "Hangout")] : [];
+      if (social && !E.habitDone("friend", f.date)) put("habitLog", { date: f.date, habit: "friend", auto: true });
       hangSel = null; save(); announce(gains); if (!gains.length) toast("Logged"); return render();
     }
     case "delhang": if (confirm("Delete this hangout?")) { E.revokeXP("hang:" + id); remove("hangouts", id); save(); render(); } return;
