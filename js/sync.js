@@ -51,6 +51,7 @@ export function panelHtml(esc) {
     <div class="btns"><button class="btn primary" data-act="signin">Sign in with Google</button></div>`;
   return `<p class="small">Signed in as <b>${esc(user.email || user.displayName || "you")}</b>.</p>
     <p class="small muted">${esc(statusText())}${error ? " · " + esc(error) : ""}</p>
+    <details class="small" style="margin-top:6px"><summary>Claude connector ID</summary><p class="tiny muted">Paste this as UID when setting up the Claude connector.</p><code style="user-select:all;word-break:break-all">${esc(user.uid)}</code></details>
     <div class="btns"><button class="btn" data-act="syncnow">Sync now</button><button class="btn" data-act="signout">Sign out</button></div>`;
 }
 
