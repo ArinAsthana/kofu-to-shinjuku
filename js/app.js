@@ -1,5 +1,5 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY } from "./data.js";
+import { HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
@@ -44,7 +44,7 @@ document.addEventListener("touchend", e => {
   if (d < el.dataset.min || d > el.dataset.max) return;
   planDate = d === E.today() ? null : d; entering = true; render();
 }, { passive: true });
-window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
@@ -53,7 +53,7 @@ const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeo
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -116,7 +116,7 @@ const eventRow = ({ k, at, done }) => `<div class="q ${done ? "done" : ""} ${k.p
   <div class="xp">${k.penalty ? "" : "+" + XP.task}</div></div>`;
 
 function vHome() {
-  const t = E.today(), a7 = E.avg7(), food = E.dayFood(t), ft = S.settings.food;
+  const t = E.today();
   const days = E.daysBetween(t, S.settings.dates.graduation);
   const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length, gate = P.trainGate(started(t)), fg = St.focusGate();
   const into = gate.open ? "train" : fg.open ? "focus" : "plan";
@@ -124,9 +124,6 @@ function vHome() {
   const cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
   const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Enter dungeon") : into === "train" ? "Enter dungeon" : "Open plan";
   const q = todayQuests(t), next = q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
-  const care = careToday(t), careNext = care.items.filter(c => !careDone(c.id, t)).sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0));
-  const careRows = care.items.slice().sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0)).map(c => { const on = !!careDone(c.id, t);
-    return `<div class="q ${on ? "done" : ""}"><button class="bx" data-act="care" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)} done">${on ? ic("check") : ""}</button><div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${esc((CARE_SLOTS.find(x => x[0] === c.slot) || [, ""])[1])}${c.note ? " · " + esc(c.note) : ""}</div></div><div></div></div>`; }).join("");
   const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
   return `
   <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
@@ -151,12 +148,7 @@ function vHome() {
      <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
      <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
 
-  ${care.items.length ? fold("care", `<div class="grow"><div class="row between"><b>Care</b><span class="mono small">${care.done}/${care.items.length}</span></div>${bar(care.done / care.items.length, "var(--sys)")}<div class="small muted">${careNext.length ? "Next: " + esc(careNext[0].name) : "All done."}</div></div>`,
-    `<div class="list">${careRows}</div><div class="btns"><button class="btn sm" data-act="go" data-id="body/care">Edit care list</button></div>`) : ""}
-
-  <button class="quiet-row" data-act="go" data-id="body/food">
-    <span>${ic("target", "inl")} ${a7 ? r1(a7) + " kg" : "No weight"}</span><span>${food.kcal}${ft.kcalTarget ? "/" + ft.kcalTarget : ""} kcal</span><span>${r1(food.protein)}${ft.proteinTarget ? "/" + ft.proteinTarget : ""} g protein</span><span class="chev">${ic("right")}</span></button>
-  <div class="quiet-links">${[["dungeon", "Dungeon"], ["body/food", "Food"], ["body/weight", "Weight"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button data-act="go" data-id="${k}">${l}</button>`).join("")}</div>
+  <div class="quiet-links"><button data-act="go" data-id="dungeon">Dungeon</button><button data-act="go" data-id="cards">Flashcards</button></div>
   <button class="cmdline dock" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 `;
 }
@@ -200,9 +192,7 @@ function dungeonSettings() {
 }
 function bodySettings() {
   const st = S.settings;
-  return `<h3>Food targets</h3><div class="grid"><label class="f">Calories per day<input type="number" inputmode="numeric" data-ch="kcalTarget" value="${st.food.kcalTarget ?? ""}"></label>
-    <label class="f">Protein per day (g)<input type="number" inputmode="numeric" data-ch="proteinTarget" value="${st.food.proteinTarget ?? ""}"></label></div>
-    <h3 style="margin-top:14px">Weekly quest targets</h3>${HABITS.map(h => `<div class="row between item"><span class="small">${esc(h.name)}</span><input style="width:80px" type="number" min="0" max="7" data-ch="htarget" data-id="${h.id}" value="${E.habitTarget(h.id)}"></div>`).join("")}`;
+  return `<h3>Weekly quest targets</h3>${HABITS.map(h => `<div class="row between item"><span class="small">${esc(h.name)}</span><input style="width:80px" type="number" min="0" max="7" data-ch="htarget" data-id="${h.id}" value="${E.habitTarget(h.id)}"></div>`).join("")}`;
 }
 function statusSettings() {
   return `<h3>Weekly report</h3><p class="small muted">Markdown summary of this week, to paste to Claude for the Sunday coaching report.</p>
@@ -399,7 +389,6 @@ function vStatus() {
   </div>
   <button class="quiet-row" data-act="nav" data-id="skills"><span class="grow">Stats radar and skill tree</span><span class="chev">${ic("right")}</span></button>`;
 }
-const bodySeg = cur => `<div class="pills">${[["body/weight", "Weight"], ["body/food", "Food"], ["body/care", "Care"], ["body/check", "Check-in"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
 
 function statList() {
   const sk = Object.fromEntries(SKILLS.map(x => [x.id, E.skillInfo(x)]));
@@ -565,37 +554,6 @@ function vRewards() {
   ${got.length ? `<h2>Claimed <span class="n">${got.length}</span></h2><div class="panel">${got.map(w => `<div class="item row between"><div class="grow small"><b>${icon(w.kind)} ${esc(w.name)}</b><div class="muted">${E.fmtDate(w.bought.date)} · ${yen(w.bought.yen)} · ${w.bought.xp.toLocaleString("en-US")} XP</div></div>
     <button class="btn sm" data-act="unbuy" data-id="${w.id}">Undo</button></div>`).join("")}</div>` : ""}
   <p class="tiny muted">Budget settings: the gear on the Money screen.</p>`;
-}
-
-/* ================= CARE ================= */
-const careDue = (c, date) => !(c.days || []).length || c.days.includes(E.parse(date).getDay());
-const careDone = (id, date) => live("careLog").find(l => l.item === id && l.date === date);
-function careToday(date = E.today()) {
-  const items = live("care").filter(c => careDue(c, date));
-  return { items, done: items.filter(c => careDone(c.id, date)).length };
-}
-let careForm = false;
-function vCare() {
-  const t = E.today(), { items, done } = careToday(t), all = live("care");
-  const week = [...Array(7)].map((_, i) => E.addDays(t, -i));
-  const adh = c => { const due = week.filter(d => careDue(c, d) && d >= (c.since || "0")); return due.length ? due.filter(d => careDone(c.id, d)).length + "/" + due.length : "–"; };
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  return `<h2>Today <span class="n">${done}/${items.length}</span></h2>
-  ${CARE_SLOTS.map(([k, l]) => { const list = items.filter(c => c.slot === k).sort((a, b) => (a.order || 0) - (b.order || 0)); if (!list.length) return "";
-    return `<div class="small muted" style="margin:14px 0 6px">${esc(l)}</div><div class="list">${list.map(c => { const on = !!careDone(c.id, t);
-      return `<div class="q ${on ? "done" : ""}"><button class="bx" data-act="care" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)} done">${on ? ic("check") : ""}</button>
-        <div class="grow"><div class="t">${esc(c.name)}</div><div class="small muted">${c.note ? esc(c.note) + " · " : ""}${adh(c)} last 7 days</div></div><div></div></div>`; }).join("")}</div>`; }).join("")}
-  <details class="panel" style="margin-top:18px" ${careForm ? "open" : ""}><summary>Edit list (${all.length})</summary>
-    ${all.sort((a, b) => CARE_SLOTS.findIndex(x => x[0] === a.slot) - CARE_SLOTS.findIndex(x => x[0] === b.slot) || (a.order || 0) - (b.order || 0)).map(c => `<div class="item row between"><div class="grow"><b>${esc(c.name)}</b><div class="small muted">${esc((CARE_SLOTS.find(x => x[0] === c.slot) || [, ""])[1])} · ${(c.days || []).length ? c.days.map(d => dayNames[d]).join(" ") : "daily"}</div></div>
-      <button class="btn sm danger" data-act="delcare" data-id="${c.id}" aria-label="Delete ${esc(c.name)}">${ic("x")}</button></div>`).join("")}
-    <div class="grid" id="careForm" style="margin-top:10px">
-      <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Retinol serum"></label>
-      <label class="f">When<select data-f="slot">${CARE_SLOTS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select></label>
-      <label class="f">Note<input data-f="note" placeholder="optional"></label></div>
-    <div class="small muted" style="margin-top:8px">Days (none = every day)</div>
-    <div class="chips" id="cdays">${[1, 2, 3, 4, 5, 6, 0].map(d => `<button class="chip" data-act="bday" data-id="${d}" aria-pressed="false">${dayNames[d]}</button>`).join("")}</div>
-    <div class="btns"><button class="btn go" data-act="addcare">Add</button></div>
-  </details>`;
 }
 
 /* ================= SOCIAL ================= */
@@ -1192,12 +1150,6 @@ function weeklyReport() {
   const area = {};
   ws.forEach(w => w.entries.forEach(e => { const a = E.exById(e.exercise).area; area[a] = (area[a] || 0) + e.sets.length; }));
   const postShift = ws.filter(w => w.postShift).map(w => w.date);
-  const a7 = E.avg7(t), a7p = E.avg7(E.addDays(t, -7));
-  const checks = live("physique").sort((a, b) => b.date.localeCompare(a.date));
-  const foodDays = wk.map(d => E.dayFood(d)).filter(f => f.meals.length);
-  const ft = S.settings.food;
-  const avgK = foodDays.length ? Math.round(foodDays.reduce((a, f) => a + f.kcal, 0) / foodDays.length) : null;
-  const avgP = foodDays.length ? Math.round(foodDays.reduce((a, f) => a + f.protein, 0) / foodDays.length) : null;
   const longest = Math.max(0, ...live("runs").map(r => r.km));
   return `## Weekly report, ${E.isoWeek(t)} (week of ${E.fmtDate(wk[0])})
 Level ${E.level()}, ${E.xpTotal()} XP (+${xpWeek} this week).
@@ -1212,15 +1164,10 @@ ${exLines.length ? exLines.join("\n") : "- No lifting or calisthenics logged"}
 - PRs: ${prs.length ? prs.join("; ") : "none"}
 - Runs: ${runs.length ? runs.map(r => `${r.km} km in ${E.fmtTime(r.sec)} (${E.fmtTime(E.pace(r))}/km, feel ${r.feel}/5)`).join("; ") : "none"}. Longest ever ${longest} / ${RUN_GOAL_KM} km.
 
-### Body
-- Weight, 7-day average: ${a7 ? r1(a7) + " kg" : "no data"}${a7 && a7p ? ` (${a7 - a7p >= 0 ? "+" : ""}${r1(a7 - a7p)} kg vs last week)` : ""}
-- Latest check: ${checks[0] ? `${E.fmtDate(checks[0].date)}, waist ${checks[0].waist ?? "–"} cm${checks[0].note ? `, "${checks[0].note}"` : ""}` : "none"}
-- Food: ${foodDays.length}/7 days logged${avgK !== null ? `, average ${avgK} kcal${ft.kcalTarget ? " (target " + ft.kcalTarget + ")" : ""} and ${avgP} g protein${ft.proteinTarget ? " (target " + ft.proteinTarget + ")" : ""}` : ""}
-
 ### Money
 ${moneyLines()}
 
-Please review: sessions vs plan, progression, stalls, pain, body trend, money pace. End with "Next week: 3 actions."`;
+Please review: sessions vs plan, progression, stalls, pain, money pace. End with "Next week: 3 actions."`;
 }
 
 function moneyLines() {
@@ -1477,100 +1424,7 @@ function vRuns() {
   <div class="panel">${runs.length ? runs.map(r => `<div class="item row between"><div><b>${r.km} km</b> in ${E.fmtTime(r.sec)} <span class="small muted">· ${E.fmtTime(E.pace(r))}/km · feel ${r.feel}/5${r.pr ? " · PR" : ""}</span><div class="small muted">${E.fmtDate(r.date)}${r.note ? " · " + esc(r.note) : ""}</div></div><button class="btn sm danger" data-act="delrun" data-id="${r.id}" aria-label="Delete run">${ic("x")}</button></div>`).join("") : `<p class="empty">No runs yet.</p>`}</div>`;
 }
 
-/* ================= BODY ================= */
-let foodDate = null, foodForm = null;
-function vBody([sub]) {
-  sub = sub || "weight";
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Body</h1></div>${gear("body")}</header>${bodySeg("body/" + sub)}` + ({ weight: vWeight, food: vFood, care: vCare, check: vCheck }[sub] || vWeight)();
-}
-
-function weightChart() {
-  const s = E.weightSeries().filter(x => x.date > E.addDays(E.today(), -56));
-  if (s.length < 2) return `<p class="small muted">The trend line appears after two entries.</p>`;
-  const W = 600, H = 200, P = 28;
-  const ks = s.flatMap(x => [x.kg, x.avg]); let lo = Math.min(...ks), hi = Math.max(...ks);
-  if (hi - lo < 2) { const m = (hi + lo) / 2; lo = m - 1; hi = m + 1; }
-  const d0 = s[0].date, span = Math.max(1, E.daysBetween(d0, s[s.length - 1].date));
-  const x = d => P + (E.daysBetween(d0, d) / span) * (W - P - 8), y = k => 8 + (1 - (k - lo) / (hi - lo)) * (H - 30);
-  const ticks = [lo, (lo + hi) / 2, hi];
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Weight and 7-day average, last 8 weeks">
-    ${ticks.map(k => `<line class="grid" x1="${P}" x2="${W}" y1="${y(k)}" y2="${y(k)}"/><text x="0" y="${y(k) + 4}">${r1(k)}</text>`).join("")}
-    ${s.map(p => `<circle class="dot" cx="${x(p.date)}" cy="${y(p.kg)}" r="4"/>`).join("")}
-    <polyline class="avg" points="${s.map(p => x(p.date) + "," + y(p.avg)).join(" ")}"/>
-    <text x="${P}" y="${H - 4}">${E.fmtDate(d0)}</text><text x="${W - 90}" y="${H - 4}">${E.fmtDate(s[s.length - 1].date)}</text>
-  </svg><p class="tiny muted">Dots are daily weigh-ins. The line is the 7-day average: judge that, not single days.</p>`;
-}
-
-function vWeight() {
-  const t = E.today(), all = live("bodyweight").sort((a, b) => b.date.localeCompare(a.date));
-  const todays = all.find(x => x.date === t);
-  if (!draft || draft.ex !== "weight") draft = { ex: "weight", kg: todays ? todays.kg : all[0] ? all[0].kg : 78 };
-  const a7 = E.avg7(t), a7p = E.avg7(E.addDays(t, -7));
-  return `<div class="panel">
-    <div class="row between"><div><div class="small muted">7-day average</div><div class="big">${a7 ? r1(a7) : "–"} <span class="small muted">kg</span></div></div>
-    <div style="text-align:right"><div class="small muted">vs last week</div><b>${a7 && a7p ? (a7 - a7p >= 0 ? "+" : "") + r1(a7 - a7p) + " kg" : "–"}</b></div></div>
-    ${weightChart()}
-  </div>
-  <div class="panel">
-    <div class="small muted">Today's weigh-in${todays ? " (saved, tap to change)" : ""}</div>
-    <div class="stepper" style="margin-top:6px"><button data-act="kg" data-step="-0.1" aria-label="Less">−</button><output>${draft.kg.toFixed(1)}<span class="u">kg</span></output><button data-act="kg" data-step="0.1" aria-label="More">+</button></div>
-    <div class="btns"><button class="btn go block" data-act="savekg">${todays ? "Update" : "Save"} today's weight</button></div>
-  </div>
-  ${all.length ? fold("weight-hist", `<b class="grow">History</b><span class="small muted">${all.length}</span>`, all.slice(0, 14).map(e => `<div class="item row between"><span>${E.fmtDate(e.date)}</span><span><b>${e.kg.toFixed(1)}</b> kg <button class="btn sm danger" data-act="delkg" data-id="${e.id}" aria-label="Delete">${ic("x")}</button></span></div>`).join("")) : `<p class="tiny muted">Weigh in each morning, same conditions.</p>`}`;
-}
-
-function vFood() {
-  const d = foodDate || E.today(), f = E.dayFood(d), ft = S.settings.food, saved = live("savedMeals");
-  const low = d < E.today() && f.meals.length && f.kcal > 0 && f.kcal < 1500;
-  return `<div class="panel">
-    <div class="row between"><button class="btn sm" data-act="fday" data-step="-1" aria-label="Previous day">${ic("left")}</button><b>${d === E.today() ? "Today" : E.fmtDate(d)}</b><button class="btn sm" data-act="fday" data-step="1" aria-label="Next day" ${d >= E.today() ? "disabled" : ""}>${ic("right")}</button></div>
-    <div class="row between" style="margin-top:10px"><span>Calories</span><b>${Math.round(f.kcal)}${ft.kcalTarget ? " / " + ft.kcalTarget : ""}</b></div>${ft.kcalTarget ? bar(f.kcal / ft.kcalTarget, "var(--chuo)") : ""}
-    <div class="row between" style="margin-top:6px"><span>Protein</span><b>${r1(f.protein)} g${ft.proteinTarget ? " / " + ft.proteinTarget : ""}</b></div>${ft.proteinTarget ? bar(f.protein / ft.proteinTarget, "var(--train)") : ""}
-    ${!ft.kcalTarget || !ft.proteinTarget ? `<p class="small muted" style="margin-top:6px">Set daily targets with the gear above.</p>` : ""}
-    ${low ? `<div class="flag">Only ${Math.round(f.kcal)} kcal logged. If that's real, it's too low for training and recomposition. If you skipped logging, fill it in.</div>` : ""}
-  </div>
-  ${MEALS.map(([k, label]) => {
-    const meal = f.meals.find(m => m.meal === k), items = meal ? meal.items : [];
-    const kc = items.reduce((a, i) => a + (+i.kcal || 0), 0), pr = items.reduce((a, i) => a + (+i.protein || 0), 0);
-    const open = foodForm === k;
-    if (!items.length && !open) return `<button class="quiet-row meal-q" data-act="foodform" data-id="${k}"><span class="grow">${label}</span><span class="small muted">+ item</span></button>`;
-    return `<div class="panel meal"><h3><span>${label}</span><span class="small muted">${Math.round(kc)} kcal · ${r1(pr)} g</span></h3>
-      ${items.map((it, i) => `<div class="food-item"><span class="grow">${esc(it.name)}</span><span class="small muted">${it.kcal} kcal · ${it.protein} g</span><button class="btn sm danger" data-act="delitem" data-id="${k}" data-i="${i}" aria-label="Remove">${ic("x")}</button></div>`).join("")}
-      ${open ? `<div class="grid" id="itemForm" style="margin-top:8px"><label class="f" style="flex-basis:100%">Item<input data-f="name" placeholder="e.g. Salad chicken" autofocus></label>
-        <label class="f">kcal<input type="number" inputmode="decimal" data-f="kcal"></label><label class="f">Protein (g)<input type="number" inputmode="decimal" data-f="protein"></label></div>
-        <div class="btns"><button class="btn go" data-act="additem" data-id="${k}">Add</button><button class="btn" data-act="foodform" data-id="">Cancel</button></div>`
-        : `<div class="btns"><button class="btn sm" data-act="foodform" data-id="${k}">+ Item</button>${items.length ? `<button class="btn sm" data-act="savemeal" data-id="${k}">Save as quick meal</button>` : ""}</div>`}
-      ${saved.length ? `<div class="chips">${saved.map(s => `<button class="chip" data-act="usemeal" data-id="${s.id}" data-meal="${k}">+ ${esc(s.name)}</button>`).join("")}</div>` : ""}
-    </div>`;
-  }).join("")}
-  ${saved.length ? `<details class="panel"><summary>Manage quick meals</summary>${saved.map(s => `<div class="item row between"><span>${esc(s.name)} <span class="small muted">${s.items.reduce((a, i) => a + (+i.kcal || 0), 0)} kcal · ${s.items.reduce((a, i) => a + (+i.protein || 0), 0)} g</span></span><button class="btn sm danger" data-act="delsaved" data-id="${s.id}">Delete</button></div>`).join("")}</details>` : ""}`;
-}
-
-let pendingPhotos = [];
-function vCheck() {
-  const checks = live("physique").sort((a, b) => b.date.localeCompare(a.date));
-  const a7 = E.avg7();
-  const recent = checks[0] && E.daysBetween(checks[0].date, E.today()) < 7;
-  return `${fold("check-new", `<b class="grow">New weekly check</b><span class="small ${recent ? "muted" : "warn"}">${recent ? "done this week" : "due"}</span>`, `<div>
-    <p class="small muted">Once a week, same day and time. Photos stay on this phone only and are never exported or synced.</p>
-    <div class="grid" id="checkForm">
-      <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
-      <label class="f">Weight (kg)<input type="number" inputmode="decimal" step="0.1" data-f="kg" value="${a7 ? r1(a7) : ""}"></label>
-      <label class="f">Waist (cm)<input type="number" inputmode="decimal" step="0.1" data-f="waist"></label>
-      <label class="f">Chest (cm)<input type="number" inputmode="decimal" step="0.1" data-f="chest"></label>
-      <label class="f">Arms (cm)<input type="number" inputmode="decimal" step="0.1" data-f="arms"></label>
-      <label class="f" style="flex-basis:100%">Note<input data-f="note" placeholder="Short"></label>
-      <label class="f" style="flex-basis:100%">Photos (optional)<input type="file" accept="image/*" multiple data-ch="photos"></label>
-    </div>
-    <div class="small muted" id="photoCount">${pendingPhotos.length ? pendingPhotos.length + " photo(s) ready" : ""}</div>
-    <div class="btns"><button class="btn go block" data-act="savecheck">Save weekly check</button></div>
-  </div>`, !recent, "")}
-  ${checks.length ? fold("check-past", `<b class="grow">Past checks</b><span class="small muted">${checks.length}</span>`, `${checks.map(c => `<div class="item"><div class="row between"><b>${E.fmtDate(c.date)}</b><button class="btn sm danger" data-act="delcheck" data-id="${c.id}" aria-label="Delete">${ic("x")}</button></div>
-    <div class="small">${[c.kg && c.kg + " kg", c.waist && "waist " + c.waist, c.chest && "chest " + c.chest, c.arms && "arms " + c.arms].filter(Boolean).join(" · ")}</div>
-    ${c.note ? `<div class="small muted">${esc(c.note)}</div>` : ""}
-    ${(c.photoIds || []).length ? `<div class="thumbs">${c.photoIds.map(p => `<img data-photo="${p}" alt="Check photo ${E.fmtDate(c.date)}">`).join("")}</div>` : ""}</div>`).join("")}`) : ""}`;
-}
-
+/* ================= IMAGES ================= */
 async function shrink(file) {
   try {
     const bmp = await createImageBitmap(file);
@@ -1595,10 +1449,6 @@ function vMore() {
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">
   </div>
-  <div class="panel"><h3>Food targets</h3>
-    <div class="grid"><label class="f">Calories per day<input type="number" inputmode="numeric" data-ch="kcalTarget" value="${st.food.kcalTarget ?? ""}"></label>
-    <label class="f">Protein per day (g)<input type="number" inputmode="numeric" data-ch="proteinTarget" value="${st.food.proteinTarget ?? ""}"></label></div>
-  </div>
   <div class="panel"><h3>Habit targets per week</h3>
     ${HABITS.map(h => `<div class="row between item"><span>${esc(h.name)}</span><input style="width:80px" type="number" min="0" max="7" data-ch="htarget" data-id="${h.id}" value="${E.habitTarget(h.id)}"></div>`).join("")}
   </div>
@@ -1608,7 +1458,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.3 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.3.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1731,45 +1581,7 @@ document.addEventListener("click", async ev => {
     }
     case "delrun": if (confirm("Delete this run?")) { E.revokeXP(id); remove("runs", id); save(); render(); } return;
 
-    // body
-    case "kg": draft.kg = Math.max(30, +(draft.kg + +el.dataset.step).toFixed(1)); return render();
-    case "savekg": {
-      const t = E.today(), ex = live("bodyweight").find(x => x.date === t);
-      put("bodyweight", { ...(ex || {}), date: t, kg: draft.kg }); save(); toast("Saved " + draft.kg.toFixed(1) + " kg"); return render();
-    }
-    case "delkg": if (confirm("Delete this weigh-in?")) { remove("bodyweight", id); save(); render(); } return;
-    case "fday": foodDate = E.addDays(foodDate || E.today(), +el.dataset.step); if (foodDate >= E.today()) foodDate = null; foodForm = null; return render();
-    case "foodform": foodForm = id || null; render(); if (foodForm) $("#itemForm input")?.focus(); return;
-    case "additem": {
-      const f = readForm("#itemForm"); if (!f.name) return toast("Add an item name");
-      addItems(id, [{ name: f.name, kcal: num(f.kcal) || 0, protein: num(f.protein) || 0 }]); foodForm = null; save(); return render();
-    }
-    case "delitem": {
-      const d = foodDate || E.today(), m = live("meals").find(x => x.date === d && x.meal === id); if (!m) return;
-      m.items.splice(+el.dataset.i, 1);
-      if (m.items.length) put("meals", m); else remove("meals", m.id);
-      save(); return render();
-    }
-    case "savemeal": {
-      const d = foodDate || E.today(), m = live("meals").find(x => x.date === d && x.meal === id); if (!m) return;
-      const name = prompt("Name this quick meal", m.items.map(i => i.name).join(" + ").slice(0, 40)); if (!name) return;
-      put("savedMeals", { name, items: m.items.map(i => ({ ...i })) }); save(); toast("Saved as quick meal"); return render();
-    }
-    case "usemeal": { const s = live("savedMeals").find(x => x.id === id); addItems(el.dataset.meal, s.items.map(i => ({ ...i }))); save(); toast("Added " + s.name); return render(); }
-    case "delsaved": if (confirm("Delete this quick meal? Logged meals stay.")) { remove("savedMeals", id); save(); render(); } return;
-    case "savecheck": {
-      const f = readForm("#checkForm");
-      const rec = { date: f.date || E.today(), kg: num(f.kg), waist: num(f.waist), chest: num(f.chest), arms: num(f.arms), note: f.note, photoIds: [] };
-      if (rec.waist === null && rec.kg === null && !pendingPhotos.length) return toast("Add at least weight or waist");
-      for (const p of pendingPhotos) { const pid = "ph-" + uid(); await photos.put(pid, await shrink(p)); rec.photoIds.push(pid); }
-      pendingPhotos = []; put("physique", rec); save(); toast("Weekly check saved"); return render();
-    }
-    case "delcheck": {
-      const c = live("physique").find(x => x.id === id);
-      if (!c || !confirm("Delete this check and its photos?")) return;
-      for (const p of c.photoIds || []) await photos.del(p).catch(() => {});
-      remove("physique", id); save(); return render();
-    }
+
 
     // money
     case "savemoney": {
@@ -1832,20 +1644,6 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       toast(`Claimed: ${w.name}. Enjoy it, you earned it.`, true); return render();
     }
     case "unbuy": { const w = live("wishlist").find(x => x.id === id); if (!w || !confirm("Undo this purchase? XP and budget come back.")) return; put("wishlist", { ...w, bought: null }); save(); return render(); }
-
-    // care
-    case "care": {
-      const done = careDone(id, E.today());
-      if (done) remove("careLog", done.id); else put("careLog", { item: id, date: E.today() });
-      save(); return render();
-    }
-    case "addcare": {
-      const f = readForm("#careForm"); if (!f.name) return toast("Name it");
-      const days = [...document.querySelectorAll("#cdays [aria-pressed=true]")].map(b => +b.dataset.id);
-      const order = Math.max(0, ...live("care").filter(c => c.slot === f.slot).map(c => c.order || 0)) + 1;
-      put("care", { name: f.name, slot: f.slot, note: f.note, days, order, since: E.today() }); careForm = true; save(); return render();
-    }
-    case "delcare": if (confirm("Remove this from your care list? Past ticks stay in the log.")) { remove("care", id); careForm = true; save(); render(); } return;
 
     // social
     case "personform": personForm = true; sheet = "person"; render(); $("#personForm input")?.focus(); return;
@@ -2059,13 +1857,6 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
   }
 });
 
-function addItems(meal, items) {
-  const d = foodDate || E.today();
-  const m = live("meals").find(x => x.date === d && x.meal === meal) || { date: d, meal, items: [] };
-  m.items = (m.items || []).concat(items); put("meals", m);
-  // Logging food ticks the "Log meals" daily quest (once a day).
-  if (!E.habitDone("meals", d)) { const h = put("habitLog", { date: d, habit: "meals", auto: true }); E.gainXP("habit", h.id, "Log meals"); }
-}
 
 document.addEventListener("input", ev => {
   if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
@@ -2091,7 +1882,6 @@ document.addEventListener("change", async ev => {
     const [lo, hi] = E.range(E.exById(exId)); if (lo > hi) toast("Low is above high");
     save(); return render();
   }
-  if (k === "photos") { pendingPhotos = [...el.files]; $("#photoCount").textContent = pendingPhotos.length + " photo(s) ready"; return; }
   if (k === "billamt") { const b = live("bills").find(x => x.id === el.dataset.id); if (!b) return; b.amount = num(el.value); put("bills", b); save(); return render(); }
   if (k === "moneygoal" || k === "debtstart") { const v = num(el.value); if (v === null || v < 0) return render(); S.settings.money[k === "moneygoal" ? "goal" : "debtStart"] = v; touchSettings(); save(); return render(); }
   if (k === "funmonthly" || k === "funrate") { const v = num(el.value); if (v === null || v < (k === "funrate" ? 1 : 0)) return render(); S.settings.fun[k === "funmonthly" ? "monthly" : "yenPerXp"] = Math.round(v); touchSettings(); save(); return render(); }
@@ -2124,7 +1914,6 @@ document.addEventListener("change", async ev => {
     touchSettings(); save(); return render();
   }
   if (k === "dayStart" || k === "dayEnd") { if (!el.value) return render(); S.settings.plan[k] = el.value; touchSettings(); save(); return render(); }
-  if (k === "kcalTarget" || k === "proteinTarget") { S.settings.food[k] = num(el.value); touchSettings(); save(); return; }
   if (k === "htarget") { S.settings.habitTargets[el.dataset.id] = Math.max(0, Math.min(7, Math.round(num(el.value) || 0))); touchSettings(); save(); return; }
   if (k === "chance") { S.settings.rewardChance = Math.max(0, Math.min(100, num(el.value) || 0)) / 100; touchSettings(); save(); return; }
   if (k === "pool") { S.settings.rewardPool = el.value.split("\n").map(s => s.trim()).filter(Boolean); touchSettings(); save(); return; }
