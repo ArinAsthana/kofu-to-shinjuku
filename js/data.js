@@ -14,6 +14,7 @@ export const HABITS = [
   { id: "news", name: "News and markets", note: "15 min + one line in Obsidian", target: 5, c: "var(--fin)" },
   { id: "case", name: "Case or interview practice", note: "Aloud", target: 2, c: "var(--fin)" },
   { id: "gym", name: "Workout", note: "Ticks itself when you log a workout or run", target: 6, c: "var(--train)" },
+  { id: "meals", name: "Log meals", note: "Ticks itself when you log food", target: 7, c: "var(--train)" },
   // Life skills (v1.14). Charisma grows from these.
   { id: "stranger", name: "Talk to a stranger", note: "Cashier, classmate, someone at the gym. Ask one question, then one follow-up", target: 3, c: "var(--warn)" },
   { id: "friend", name: "Talk to a friend", note: "Call, meet or a real chat, not just a reaction. Ticks itself when you log a hangout", target: 4, c: "var(--warn)" },

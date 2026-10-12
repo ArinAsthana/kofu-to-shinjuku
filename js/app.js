@@ -32,15 +32,26 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-window.addEventListener("hashchange", () => { entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; render(); window.scrollTo(0, 0); });
+// Swipe the day timeline left/right to change day.
+let swipe0 = null;
+document.addEventListener("touchstart", e => { swipe0 = e.target.closest("#dayline") ? [e.touches[0].clientX, e.touches[0].clientY] : null; }, { passive: true });
+document.addEventListener("touchend", e => {
+  if (!swipe0) return; const t = e.changedTouches[0], dx = t.clientX - swipe0[0], dy = t.clientY - swipe0[1]; swipe0 = null;
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const el = $("#dayline"), d = E.addDays(planDate || E.today(), dx < 0 ? 1 : -1);
+  if (d < el.dataset.min || d > el.dataset.max) return;
+  planDate = d === E.today() ? null : d; entering = true; render();
+}, { passive: true });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; render(); window.scrollTo(0, 0); });
 
-// Five tabs. Train, Body and Care share one tab; Money and Skills live under Status.
-const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Body"], ["social", "Social"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", plan: "plan", focus: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
+// Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
+// Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
+const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
+const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", focus: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, focus: vFocus, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, focus: vFocus, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -49,6 +60,7 @@ function render() {
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   $("#overlay").innerHTML = (briefOpen ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "");
+  $("#fab").innerHTML = TAB_OF[tab] === "plan" && !(tab === "social" && rest[0] === "p") ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(briefOpen || sheet));
   hydrate();
   if (tab === "cmd" && !cmd.prop && !cmd.done) $("[data-cmd]")?.focus();
@@ -60,6 +72,11 @@ function hydrate() {
     if (b) img.src = URL.createObjectURL(b);
   });
 }
+
+/* ---------- first-run tips: shown until dismissed (per phone) ---------- */
+const TIP_KEY = "kts-tips";
+const tipsSeen = () => { try { return JSON.parse(localStorage.getItem(TIP_KEY)) || {}; } catch (e) { return {}; } };
+const tip = (key, text) => tipsSeen()[key] ? "" : `<div class="tip"><span class="grow">${text}</span><button class="tipx" data-act="tipx" data-id="${esc(key)}" aria-label="Got it">${ic("x")}</button></div>`;
 
 /* ================= SYSTEM (home) ================= */
 const yen = n => "¥" + Math.round(n || 0).toLocaleString("en-US");
@@ -130,13 +147,14 @@ function vHome() {
   ${fold("quests", `<div class="grow"><div class="row between"><b>Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}<div class="small muted">${next ? "Next: " + esc(next) : "All cleared today."}</div></div>`,
     `${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
      <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
-     <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan/todo">Open to-do</button></div>`)}
+     <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
 
   ${care.items.length ? fold("care", `<div class="grow"><div class="row between"><b>Care</b><span class="mono small">${care.done}/${care.items.length}</span></div>${bar(care.done / care.items.length, "var(--sys)")}<div class="small muted">${careNext.length ? "Next: " + esc(careNext[0].name) : "All done."}</div></div>`,
     `<div class="list">${careRows}</div><div class="btns"><button class="btn sm" data-act="go" data-id="body/care">Edit care list</button></div>`) : ""}
 
   <button class="quiet-row" data-act="go" data-id="body/food">
     <span>${ic("target", "inl")} ${a7 ? r1(a7) + " kg" : "No weight"}</span><span>${food.kcal}${ft.kcalTarget ? "/" + ft.kcalTarget : ""} kcal</span><span>${r1(food.protein)}${ft.proteinTarget ? "/" + ft.proteinTarget : ""} g protein</span><span class="chev">${ic("right")}</span></button>
+  <div class="quiet-links">${[["body/food", "Food"], ["body/weight", "Weight"], ["body/care", "Care"], ["body/check", "Check-in"], ["train", "Training"], ["study", "Study topics"]].map(([k, l]) => `<button data-act="go" data-id="${k}">${l}</button>`).join("")}</div>
   <button class="cmdline dock" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 `;
 }
@@ -148,36 +166,33 @@ function alertStrip() {
 }
 
 function planSettings() {
-  const wd = S.settings.windDown, pl = S.settings.plan, sst = S.settings.study;
+  const wd = S.settings.windDown, pl = S.settings.plan;
   const perm = typeof Notification === "undefined" ? "unsupported" : Notification.permission;
-  return `  <h3>Wind-down</h3>
-  <div class="panel">
-    <label class="row"><input type="checkbox" data-ch="wdon" style="width:auto" ${wd.on !== false ? "checked" : ""}> Remind me before bed</label>
-    <div class="grid" style="margin-top:10px">
-      <label class="f">Minutes before sleep<input type="number" inputmode="numeric" min="15" max="180" step="15" data-ch="wdmins" value="${wd.mins ?? 60}"></label>
-    </div>
-    <p class="small muted" style="margin-top:8px">Bedtime comes from your Sleep blocks. On shift nights there is no wind-down; it would land mid-shift.</p>
-    <h3 style="margin-top:12px">Get it on your phone</h3>
-    <p class="small muted">A web app can't ring at a set time while it's closed. Your calendar can. Add the wind-down there once and set its notification to "At time of event".</p>
-    <div class="btns">${P.windDownLinks().map(l => `<a class="btn sm" href="${esc(l.url)}" target="_blank" rel="noopener">+ Google Calendar · ${P.toHM(l.at)} ${l.days.map(x => P.DAY_NAMES[x]).join(" ")}</a>`).join("") || `<span class="small muted">Turn the reminder on and add a Sleep block first.</span>`}</div>
-    <div class="btns"><button class="btn sm" data-act="ics">Download whole timetable (.ics)</button></div>
-    <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>
-    <h3 style="margin-top:12px">While the app is open</h3>
-    <p class="small muted">${perm === "unsupported" ? "This browser has no notifications." : perm === "denied" ? "Notifications are blocked for this site. Allow them in the browser's site settings." : wd.notify && perm === "granted" ? "On. You'll get a notification at wind-down if the app is still open or in the background." : "Best effort: a notification at wind-down if the app is still open or in the background."}</p>
-    ${perm === "unsupported" || perm === "denied" ? "" : `<div class="btns"><button class="btn sm" data-act="wdnotify">${wd.notify && perm === "granted" ? "Turn off" : "Turn on"}</button></div>`}
-  </div>
-
-  <h3 style="margin-top:14px">Planner window</h3>
-  <div class="panel"><div class="grid">
+  return `${fold("set-schedule", `<b class="grow">Schedule</b>`, `<div class="grid">
     <label class="f">Plan tasks from<input type="time" data-ch="dayStart" value="${esc(pl.dayStart)}"></label>
     <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label>
     <label class="f">Padding around blocks (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="buffer" value="${pl.buffer ?? 10}"></label>
-    <label class="f">Workout opens early / closes late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
+    <label class="f">Quest blocks open early / close late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
     <label class="f">Edit lock before a block (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="lockMins" value="${pl.lockMins ?? 15}"></label></div>
-    <p class="tiny muted">Tasks only go inside this window, outside blocks plus padding, and before wind-down. Today's blocks can't be changed from the lock time until they end.</p></div>
-  <h3 style="margin-top:14px">Pomodoro and penalties</h3><div class="panel"><div class="grid">
+    <p class="tiny muted">Tasks only go inside this window, outside blocks plus padding, and before wind-down. Today's blocks can't be changed from the lock time until they end.</p>`, true)}
+  ${fold("set-wind", `<b class="grow">Wind-down</b><span class="small muted">${wd.on !== false ? (wd.mins ?? 60) + " min before bed" : "off"}</span>`, `
+    <label class="row"><input type="checkbox" data-ch="wdon" style="width:auto" ${wd.on !== false ? "checked" : ""}> Remind me before bed</label>
+    <div class="grid" style="margin-top:10px"><label class="f">Minutes before sleep<input type="number" inputmode="numeric" min="15" max="180" step="15" data-ch="wdmins" value="${wd.mins ?? 60}"></label></div>
+    <p class="tiny muted">Bedtime comes from your Sleep blocks. On shift nights there is no wind-down.</p>
+    <p class="small muted" style="margin-top:8px">${perm === "unsupported" ? "This browser has no notifications." : perm === "denied" ? "Notifications are blocked for this site. Allow them in the browser's site settings." : wd.notify && perm === "granted" ? "Notification at wind-down is on while the app is open or in the background." : "Best effort: a notification at wind-down while the app is open or in the background."}</p>
+    ${perm === "unsupported" || perm === "denied" ? "" : `<div class="btns"><button class="btn sm" data-act="wdnotify">${wd.notify && perm === "granted" ? "Turn off notification" : "Turn on notification"}</button></div>`}`)}
+  ${fold("set-cal", `<b class="grow">Calendar export</b>`, `
+    <p class="small muted">A web app can't ring while it's closed. Your calendar can: add the wind-down there once and set its alert to "At time of event".</p>
+    <div class="btns">${P.windDownLinks().map(l => `<a class="btn sm" href="${esc(l.url)}" target="_blank" rel="noopener">+ Google Calendar · ${P.toHM(l.at)} ${l.days.map(x => P.DAY_NAMES[x]).join(" ")}</a>`).join("") || `<span class="small muted">Turn the reminder on and add a Sleep block first.</span>`}</div>
+    <div class="btns"><button class="btn sm" data-act="ics">Download whole timetable (.ics)</button></div>
+    <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>`)}`;
+}
+// Dungeon gear: pomodoro and penalty rules (they apply to every quest block).
+function dungeonSettings() {
+  const sst = S.settings.study;
+  return `<h3>Pomodoro and penalties</h3><div class="grid">
     ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
-    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p></div>`;
+    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p>`;
 }
 function bodySettings() {
   const st = S.settings;
@@ -202,9 +217,15 @@ function moneySettings() {
 // One gear per tab opens its settings from the bottom, so daily screens stay clean.
 let sheet = null;
 function sheetHtml(k) {
-  const body = { plan: planSettings, status: statusSettings, money: moneySettings, body: bodySettings }[k] || homeSettings;
+  const [kind, arg] = k.split(":");
+  const closeBtn = `<button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button>`;
+  // Edit sheets: forms and actions for the tapped item.
+  const edit = { task: () => arg ? taskActHtml(arg) : taskFormHtml(), block: () => blockFormHtml(blockForm && blockForm !== "new" ? live("blocks").find(b => b.id === blockForm) : blockNew),
+    add: addHtml, person: personFormHtml }[kind];
+  if (edit) return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>`;
+  const body = { plan: planSettings, status: statusSettings, money: moneySettings, body: bodySettings, dungeon: dungeonSettings }[k] || homeSettings;
   return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog" aria-label="Settings">
-    <div class="row between sheet-h"><b>Settings</b><button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button></div>${body()}
+    <div class="row between sheet-h"><b>Settings</b>${closeBtn}</div>${body()}
     <div class="btns"><button class="btn sm" data-act="nav" data-id="more">Backup, sync and all settings</button></div></div>`;
 }
 const gear = k => `<button class="rbtn" data-act="sheet" data-id="${k}" aria-label="Settings">${ic("settings")}</button>`;
@@ -258,8 +279,8 @@ function penaltyBox() {
   const xp = pens.reduce((a, p) => a + (p.xp || 0), 0), at = P.plan().at;
   const lines = pens.map(p => { const k = live("tasks").find(x => x.id === p.task), w = k && at.get(k.id);
     return `<div class="x">Missed ${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}. Penalty quest: ${k ? P.dur(k.mins) + " make-up" : "make-up"}${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`; }).join("");
-  return `<div class="sys pen"><b>[PENALTY]</b> ${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
-    ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan/todo">Open penalty quests</button></div></div>`;
+  return `<div class="sys pen"><b>Penalty</b> ${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
+    ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan">Open penalty quests</button></div></div>`;
 }
 function reportDueBox(fg) {
   if (!fg || !fg.open || !fg.ended) return "";
@@ -268,7 +289,7 @@ function reportDueBox(fg) {
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="focus">Report now</button></div>`);
 }
 function vFocus() {
-  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="plan">${ic("left")} Plan</button>`;
+  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
   if (!g.open) {
     const nx = g.next;
     return `${back}<h1>Study</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
@@ -326,7 +347,7 @@ function tickPomo() {
 }
 function runAssess() {
   const fresh = St.assess();
-  if (fresh.length) { save(); toast(`[PENALTY] ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
+  if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
 
 // Everything the System wants from you. Shown behind the bell on Home.
@@ -341,10 +362,10 @@ function alertList() {
     pens.length && penaltyBox(),
     fg.open && fg.ended && reportDueBox(fg),
     wd && sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done."),
-    od.length && sysBox(`${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.`, od.slice(0, 3).map(p => esc(p.name)).join(", "), btn("social", "Open Social")),
+    od.length && sysBox(`${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.`, od.slice(0, 3).map(p => esc(p.name)).join(", "), btn("social", "Open people")),
     E.moneyDue() && sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now")),
     flags.length && sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio."),
-    unplaced && sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan/todo", "Open to-do")),
+    unplaced && sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan")),
     hasData && (expDays === null || expDays >= 7) && sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("more", "Export now")),
   ].filter(Boolean);
 }
@@ -354,7 +375,7 @@ function vAlerts() {
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
 
-const statusSeg = cur => `<div class="pills">${[["status", "Overview"], ["money", "Money"], ["skills", "Skills"]].map(([k, l]) => `<button class="pill" data-act="nav" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
+const statusSeg = cur => `<div class="pills">${[["status", "Overview"], ["skills", "Skills"]].map(([k, l]) => `<button class="pill" data-act="nav" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
 function vStatus() {
   const t = E.today(), xp = E.xpTotal(), mp = E.moneyPlan(), days = E.daysBetween(t, S.settings.dates.graduation);
   const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
@@ -450,7 +471,7 @@ function vMoney([sub] = []) {
       <label class="f">Debt left (¥)<input type="number" inputmode="numeric" data-f="debt" value="${due ? "" : last ? last.debt : ""}" placeholder="${last ? last.debt : ""}"></label>
     </div>
     <div class="btns"><button class="btn primary block" data-act="savemoney">${due ? "Submit report" : "Update report"}</button></div>`;
-  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Money</h1></div>${gear("money")}</header>${statusSeg("money")}
+  return `<header class="top"><div><div class="hdr">Treasury</div><h1>Store</h1></div>${gear("money")}</header>
   ${due ? `<div class="panel report-due"><h3>Weekly money report is due</h3><p class="small muted">Bank balance and debt left. Takes 20 seconds.</p>${form}</div>` : ""}
 
   <div class="hero">
@@ -512,7 +533,7 @@ function vRewards() {
   open.sort((a, b) => ready(b) - ready(a) || pct(b) - pct(a));
   const icon = k => ic(k === "trip" ? "plane" : k === "exp" ? "star" : "gem", "inl");
   const editing = wishForm && wishForm !== "new" ? all.find(w => w.id === wishForm) : null;
-  return `<button class="back" data-act="nav" data-id="money">${ic("left")} Money</button>
+  return `<button class="back" data-act="nav" data-id="money">${ic("left")} Store</button>
   <header class="top"><div><div class="hdr">Shop</div><h1>Rewards</h1></div></header>
   <div class="carousel">
     <div class="card g-mag"><span class="k">XP to spend</span><div><div class="dm big2">${wallet.toLocaleString("en-US")}</div><div class="small soft">${E.xpTotal().toLocaleString("en-US")} earned · ${E.xpSpent().toLocaleString("en-US")} spent · level unaffected</div></div></div>
@@ -614,7 +635,7 @@ function critRow(c, v, id) {
 }
 function vSelf() {
   const sc = selfScores(), rk = rankScores(sc);
-  return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button>
+  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button>
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>You</h1><div class="small muted">${rk.avg ? `${rk.avg.toFixed(1)} avg` : "unrated"} · same key as everyone else</div></div></div>
   <p class="small muted">Rate where you are today, not where you want to be. Ask a friend if unsure.</p>
   <h2>Assessment</h2><div class="panel">${S.settings.social.criteria.map(c => critRow(c, sc[c] || 0, "me")).join("")}</div>`;
@@ -633,14 +654,20 @@ function vSocial([sub, id]) {
   if (sub === "p" && id) return vPerson(id);
   if (sub === "me") return vSelf();
   sub = sub || "people";
-  const seg = `<div class="pills">${[["people", "People"], ["log", "Hangouts"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="social/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
-  return `<header class="top"><div><div class="hdr">Hunter registry</div><h1>Social</h1></div>
-    <button class="rbtn" data-act="go" data-id="social/log" aria-label="Log a hangout">${ic("plus")}</button></header>${seg}${sub === "log" ? vHangouts() : vPeople()}`;
+  if (sub === "log") return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Hangouts</h1>${vHangouts()}`;
+  return `${planHead("people")}${vPeople()}<button class="quiet-row" data-act="go" data-id="social/log"><span class="grow">Hangout log</span><span class="chev">${ic("right")}</span></button>`;
 }
 function balance() {
   const t = E.today(), hs = live("hangouts").filter(h => E.daysBetween(h.date, t) < 30), ppl = Object.fromEntries(live("people").map(p => [p.id, p]));
   const partnerOnly = hs.filter(h => (h.people || []).length && h.people.every(id => ppl[id] && ppl[id].type === "partner")).length;
   return { total: hs.length, partnerOnly, others: hs.length - partnerOnly };
+}
+function personFormHtml() {
+  return `<h3>New person</h3><div id="personForm"><div class="grid">
+      <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="Name or nickname"></label>
+      <label class="f">Type<select data-f="type">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${k === "friend" ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="f">Where you met<input data-f="where" placeholder="optional"></label></div>
+    <div class="btns"><button class="btn go" data-act="addperson">Add and rate</button><button class="btn" data-act="sheet">Cancel</button></div></div>`;
 }
 function vPeople() {
   const ppl = live("people").map(p => ({ p, st: personState(p), rk: rankOf(p) }));
@@ -656,23 +683,17 @@ function vPeople() {
     ${bl.total >= 3 && bl.partnerOnly / bl.total > 0.7 ? `<p class="small warn" style="margin-top:8px">Over 70% of your time out is just the two of you. Book one friend this week.</p>` : ""}
     <div class="chips" style="margin-top:10px">${counts.map(([r, c, n]) => `<span class="chip" style="min-height:0;padding:3px 10px">${badge({ r, c })} ${n}</span>`).join("")}</div>
   </div>
-  ${personForm ? `<div class="panel" id="personForm"><div class="grid">
-      <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="Name or nickname"></label>
-      <label class="f">Type<select data-f="type">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${k === "friend" ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label class="f">Where you met<input data-f="where" placeholder="optional"></label></div>
-    <div class="btns"><button class="btn go" data-act="addperson">Add and rate</button><button class="btn" data-act="personform">Cancel</button></div></div>`
-    : `<div class="btns"><button class="btn primary" data-act="personform">+ Person</button></div>`}
   <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="social/p/${p.id}">
       ${badge(rk)}<div class="grow"><div class="t">${esc(p.name)}</div>
       <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}${st.ev ? ` · every ${st.ev}d` : ""}${st.overdue ? ` · <span class="warn">overdue</span>` : ""}</div></div><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
-  <p class="tiny muted">Rank is the average of your scores (? left out): S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. Each score has a Key on the person's page. It's your private read, not a verdict on them.</p>`;
+  ${tip("people-rank", "Rank is the average of your scores (? left out): S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. Each score has a Key on the person's page. It's your private read, not a verdict on them.")}`;
 }
 function vPerson(id) {
   const p = live("people").find(x => x.id === id);
-  if (!p) return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button><p class="empty">Not found.</p>`;
+  if (!p) return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><p class="empty">Not found.</p>`;
   const rk = rankOf(p), st = personState(p), crit = S.settings.social.criteria;
   const hs = live("hangouts").filter(h => (h.people || []).includes(id)).sort((a, b) => b.date.localeCompare(a.date));
-  return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button>
+  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button>
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
   <h2>Assessment</h2>
   <div class="panel">${crit.map(c => critRow(c, (p.scores || {})[c] || 0, p.id)).join("")}</div>
@@ -818,17 +839,17 @@ function cmdMic() {
 }
 
 /* ================= PLAN ================= */
-let planDate = null, taskForm = null, blockForm = null;
+let planDate = null, taskForm = null, blockForm = null, blockNew = null;
 const kindChip = k => { const K = P.KINDS[k] || P.KINDS.other; return `<span class="kchip" style="--c:var(--${K.c})">${esc(K.label)}</span>`; };
 const span = (s, e) => `${P.toHM(s)}–${P.toHM(e)}`;
 const dayLabel = d => d === E.today() ? "Today" : d === E.addDays(E.today(), 1) ? "Tomorrow" : E.fmtDate(d);
 
+const planHead = cur => `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>Plan</h1></div>
+    <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button>${gear("plan")}</div></header>
+  <div class="pills">${[["plan", "Day"], ["plan/week", "Week"], ["social", "People"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === l.toLowerCase()}">${l}</button>`).join("")}</div>`;
 function vPlan([sub]) {
-  sub = sub || "day";
-  const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"], ["study", "Study"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
-  const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : sub === "study" ? vStudy() : vDay();
-  return `<header class="top"><div><div class="hdr">Timetable · auto-planner</div><h1>Plan</h1></div>
-    <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button><button class="rbtn" data-act="newtask" aria-label="Add a task">${ic("plus")}</button>${gear("plan")}</div></header>${seg}${body}`;
+  sub = sub === "week" ? "week" : "day";
+  return planHead(sub) + (sub === "week" ? vWeek() : vDay());
 }
 
 function agendaRows(date, p) {
@@ -838,33 +859,41 @@ function agendaRows(date, p) {
     let pre = "";
     if (!marked && r.s > nm) { marked = true; pre = `<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`; }
     if (r.type === "wind") return pre + `<div class="ag wind"><div class="tm">${P.toHM(r.s)}</div><div class="grow"><b>Wind down</b><div class="small muted">Screens off, shower, prep tomorrow. Bed at ${P.toHM(r.w.bed)}.</div></div></div>`;
-    if (r.type === "task") return pre + `<div class="ag task ${r.at.late ? "late" : ""}"><div class="tm">${span(r.s, r.e)}</div>
-      <div class="grow"><b>${esc(r.k.title)}</b><div class="small muted">${P.dur(r.k.mins)}${r.k.energy === "high" ? " · focus" : ""}${r.k.due ? ` · due ${E.fmtDate(r.k.due)}` : ""}${r.at.late ? ` · <span class="warn">after deadline</span>` : ""}${r.at.pinned ? " · pinned" : ""}</div></div>
+    if (r.type === "task") return pre + `<div class="ag task ${r.at.late ? "late" : ""} ${r.k.penalty ? "pen" : ""}"><div class="tm">${span(r.s, r.e)}</div>
+      <button class="grow tbtn" data-act="sheet" data-id="task:${r.k.id}"><b>${esc(r.k.title)}</b><div class="small muted">${P.dur(r.k.mins)}${r.k.energy === "high" ? " · focus" : ""}${r.k.due ? ` · due ${E.fmtDate(r.k.due)}` : ""}${r.at.late ? ` · <span class="warn">after deadline</span>` : ""}${r.at.pinned ? ` · ${ic("pin", "inl")}pinned` : ""}</div></button>
       <button class="bx sm" data-act="taskdone" data-id="${r.k.id}" aria-label="Done: ${esc(r.k.title)}"></button></div>`;
-    const b = r.b, thin = ["sleep", "nap", "work"].includes(b.kind), cur = isToday && r.s <= nm && nm < r.e;
-    if (thin) return pre + `<div class="ag blk thin k-${esc(b.kind)} ${cur ? "cur" : ""}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div><div class="grow small">${esc(b.title)}</div></div>`;
-    return pre + `<div class="ag blk k-${esc(b.kind)} ${cur ? "cur" : ""}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
-      <div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div>${r.tail ? "" : topicLine(b)}</div></div>`;
+    const b = r.b, thin = ["sleep", "nap", "work"].includes(b.kind) || b.locked, cur = isToday && r.s <= nm && nm < r.e;
+    if (thin) return pre + `<button class="ag blk thin tbtn k-${esc(b.kind)} ${cur ? "cur" : ""}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div><div class="grow small">${esc(b.title)} ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}</div></button>`;
+    return pre + `<button class="ag blk tbtn k-${esc(b.kind)} ${cur ? "cur" : ""}" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}"><div class="tm">${r.tail ? ic("arrow", "inl") + P.toHM(r.e) : span(r.s, r.cont ? P.toMin(b.end) : r.e)}</div>
+      <div class="grow"><b>${esc(b.title)}</b><div class="small muted">${kindChip(b.kind)}${r.tail ? " · from last night" : ""}</div>${r.tail ? "" : topicLine(b)}</div></button>`;
   });
   if (!marked) rows.push(`<div class="nowline"><span>now ${P.toHM(nm)}</span></div>`);
   return rows.join("") || `<p class="empty">Nothing on this day.</p>`;
 }
 
+// Day: one timeline (blocks, tasks, wind-down, now-line). Swipe or use the arrows to change day. Unplaced tasks sit in the Backlog.
 function vDay() {
   const t = E.today(), d = planDate || t, p = P.plan();
-  const days = [...Array(7)].map((_, i) => E.addDays(t, i));
-  const free = P.agenda(d, p);
-  const tasksToday = free.filter(r => r.type === "task").reduce((a, r) => a + (r.e - r.s), 0);
-  const wd = P.windDownNow();
-  return `${wd ? sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.") : ""}
-  <div class="pills days">${days.map(x => `<button class="pill" data-act="pday" data-id="${x}" aria-pressed="${x === d}">${x === t ? "Today" : P.DAY_NAMES[E.parse(x).getDay()] + " " + E.parse(x).getDate()}</button>`).join("")}</div>
-  <h2>${esc(dayLabel(d))} <span class="n">${tasksToday ? P.dur(tasksToday) + " of tasks planned" : "no tasks planned"}</span></h2>
-  <div class="panel agenda">${agendaRows(d, p)}</div>
-  ${p.unplaced.length ? sysBox(`<span class="warn">${p.unplaced.length} task${p.unplaced.length === 1 ? "" : "s"} didn't fit in the next 2 weeks.</span>`, "Shorten them, split them, or move a block.", `<div class="btns"><button class="btn sm" data-act="go" data-id="plan/todo">Open to-do</button></div>`) : ""}
-  <p class="tiny muted">Tasks fill free gaps by deadline, then priority. Focus tasks stay out of the 8 hours after a night shift and finish by 22:00. Nothing is placed after wind-down.</p>`;
+  const rows = P.agenda(d, p), tasksMin = rows.filter(r => r.type === "task").reduce((a, r) => a + (r.e - r.s), 0);
+  const wd = P.windDownNow(), min = E.addDays(t, -7), max = E.addDays(t, 13);
+  const backlog = live("tasks").filter(k => !k.done && !p.at.get(k.id)).sort((a, b) => !!b.penalty - !!a.penalty || b.prio - a.prio);
+  const done = live("tasks").filter(k => k.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 20);
+  const taskRow = k => `<div class="q ${k.penalty ? "pen-q" : ""}"><button class="bx" data-act="taskdone" data-id="${k.id}" aria-label="Done: ${esc(k.title)}"></button>
+    <button class="grow tbtn" data-act="sheet" data-id="task:${k.id}"><div class="t">${esc(k.title)}</div><div class="small muted">${P.dur(k.mins)}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""} · no free slot in 2 weeks</div></button><span></span></div>`;
+  return `${wd && d === t ? sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.") : ""}
+  <div class="dayhead"><button class="rbtn" data-act="pday" data-id="${E.addDays(d, -1)}" ${d <= min ? "disabled" : ""} aria-label="Previous day">${ic("left")}</button>
+    <button class="tbtn grow" data-act="pday" data-id="${t}"><b>${esc(dayLabel(d))}</b><div class="small muted">${d === t ? E.fmtDate(d) + " · " : ""}${tasksMin ? P.dur(tasksMin) + " of tasks" : "no tasks planned"}</div></button>
+    <button class="rbtn" data-act="pday" data-id="${E.addDays(d, 1)}" ${d >= max ? "disabled" : ""} aria-label="Next day">${ic("right")}</button></div>
+  <div class="panel agenda" id="dayline" data-min="${min}" data-max="${max}">${agendaRows(d, p)}</div>
+  ${tip("plan-day", "Tasks fill free gaps by deadline, then priority, and re-plan whenever something changes. Tap a task to pin, move or edit it; tap a block to edit it. Swipe to change day.")}
+  ${fold("backlog", `<b class="grow">Backlog</b><span class="small ${backlog.length ? "warn" : "muted"}">${backlog.length}</span>`, `<div class="list">${backlog.map(taskRow).join("") || `<p class="empty">Every task has a slot.</p>`}</div>`, backlog.length > 0)}
+  ${done.length ? fold("done-tasks", `<b class="grow">Done</b><span class="small muted">${done.length}</span>`, done.map(k => `<div class="item row between"><span class="small grow">${esc(k.title)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(k.doneAt || Date.now())))}</span></span><button class="btn sm" data-act="taskundo" data-id="${k.id}">Undo</button></div>`).join("")) : ""}`;
 }
 
 let topicEdit = null; // subject whose topic list is open for editing
+function vStudyPage() {
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Study</h1></div>${gear("dungeon")}</header>${vStudy()}`;
+}
 function vStudy() {
   const sst = S.settings.study, fg = St.focusGate();
   const subj = Object.keys(SUBJECTS).map(k => {
@@ -904,26 +933,28 @@ function taskFormHtml(k) {
   </div>`;
 }
 
-function vTodo() {
-  const p = P.plan(), open = live("tasks").filter(k => !k.done);
-  const when = k => p.at.get(k.id);
-  open.sort((a, b) => { const x = when(a), y = when(b); return x && y ? (x.date + String(x.s).padStart(4, "0")).localeCompare(y.date + String(y.s).padStart(4, "0")) : x ? -1 : y ? 1 : 0; });
-  const done = live("tasks").filter(k => k.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
-  const editing = taskForm && taskForm !== "new" ? live("tasks").find(k => k.id === taskForm) : null;
-  open.sort((a, b) => !!b.penalty - !!a.penalty);
-  return `${taskForm === "new" ? taskFormHtml() : editing ? "" : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="newtask">+ Task</button></div>`}
-  <h2>Open <span class="n">${open.length} · ${P.dur(open.reduce((a, k) => a + k.mins, 0) || 0)}</span></h2>
-  <div class="list">${open.map(k => {
-    if (editing && editing.id === k.id) return taskFormHtml(k);
-    const at = when(k);
-    return `<div class="q ${at && at.late ? "late" : ""} ${k.penalty ? "pen-q" : ""}">
-      <button class="bx" data-act="taskdone" data-id="${k.id}" aria-label="Done: ${esc(k.title)}"></button>
-      <button class="grow tbtn" data-act="taskform" data-id="${k.id}"><div class="t">${esc(k.title)}</div>
-        <div class="small muted">${at ? `<span class="${at.late ? "warn" : ""}">${esc(dayLabel(at.date))} ${span(at.s, at.e)}</span>` : `<span class="warn">No slot in 2 weeks</span>`} · ${P.dur(k.mins)}${k.prio === 3 ? " · high" : k.prio === 1 ? " · low" : ""}${k.energy === "high" ? " · focus" : ""}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""}</div></button>
-      ${at ? `<button class="btn sm" data-act="${at.pinned ? "unpin" : "pin"}" data-id="${k.id}" aria-label="${at.pinned ? "Unpin" : "Pin to this slot"}">${at.pinned ? ic("pin") : "Pin"}</button>` : ""}</div>`;
-  }).join("") || `<p class="empty">Nothing open. Add a task above and the System finds it a slot.</p>`}</div>
-  <p class="tiny muted">Pin keeps a task in its slot even when new tasks arrive. Unpinned tasks re-plan every time you open this screen.</p>
-  ${done.length ? `<details class="panel"><summary>Done (${done.length})</summary>${done.slice(0, 30).map(k => `<div class="item row between"><span class="small">${esc(k.title)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(k.doneAt || Date.now())))}</span></span><button class="btn sm" data-act="taskundo" data-id="${k.id}">Undo</button></div>`).join("")}</details>` : ""}`;
+// Task actions, in a sheet from the tapped task: done, pin, edit, delete.
+function taskActHtml(id) {
+  const k = live("tasks").find(x => x.id === id); if (!k) return `<p class="empty">Task not found.</p>`;
+  const at = P.plan().at.get(id);
+  if (taskForm === id) return taskFormHtml(k);
+  return `<h3>${esc(k.title)}</h3>
+    <p class="small muted">${at ? `${esc(dayLabel(at.date))} ${span(at.s, at.e)}${at.pinned ? " · pinned" : ""}${at.late ? ` · <span class="warn">after deadline</span>` : ""}` : `<span class="warn">No free slot in the next 2 weeks</span>`} · ${P.dur(k.mins)}${k.prio === 3 ? " · high" : k.prio === 1 ? " · low" : ""}${k.energy === "high" ? " · focus" : ""}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""}</p>
+    <div class="actlist">
+      <button class="act" data-act="taskdone" data-id="${k.id}">${ic("check")}<span>Done</span></button>
+      ${at ? `<button class="act" data-act="${at.pinned ? "unpin" : "pin"}" data-id="${k.id}">${ic("pin")}<span>${at.pinned ? "Unpin (let it move)" : "Pin to this slot"}</span></button>` : ""}
+      <button class="act" data-act="taskform" data-id="${k.id}">${ic("edit")}<span>Edit or move</span></button>
+      ${k.penalty ? "" : `<button class="act danger" data-act="deltask" data-id="${k.id}">${ic("x")}<span>Delete</span></button>`}
+    </div>`;
+}
+// The + button: one place to add anything on the Plan tab.
+function addHtml() {
+  return `<h3>Add</h3><div class="actlist">
+    <button class="act" data-act="newtask">${ic("check")}<span>Task<small>The System finds it a slot</small></span></button>
+    <button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, quest block, anything fixed</small></span></button>
+    <button class="act" data-act="personform">${ic("user")}<span>Person<small>Add to your registry</small></span></button>
+    <button class="act" data-act="go" data-id="social/log">${ic("users")}<span>Hangout<small>Log time with people</small></span></button>
+  </div>`;
 }
 
 function blockFormHtml(b) {
@@ -954,8 +985,8 @@ function weekGrid() {
     const blocks = P.segments(d).map(g => { const K = P.KINDS[g.b.kind] || P.KINDS.other, h = (g.e - g.s) / 60 * H;
       return `<button class="wg-b k-${esc(g.b.kind)}" style="top:${px(g.s)}px;height:${Math.max(12, h - 1).toFixed(1)}px;--c:var(--${K.c})" data-act="blockform" data-id="${g.b.id}" aria-label="${esc(g.b.title)} ${P.toHM(g.s)} to ${P.toHM(g.e)}">${h >= 18 ? `<span>${esc(g.b.title)}</span>` : ""}${h >= 34 ? `<i>${P.toHM(g.tail ? 0 : g.s)}</i>` : ""}</button>`; }).join("");
     const tasks = live("tasks").filter(k => !k.done).map(k => ({ k, at: p.at.get(k.id) })).filter(x => x.at && x.at.date === d)
-      .map(({ k, at }) => `<button class="wg-b wg-task" style="top:${px(at.s)}px;height:${Math.max(12, (at.e - at.s) / 60 * H - 1).toFixed(1)}px" data-act="go" data-id="plan/todo" aria-label="Task ${esc(k.title)}"><span>${esc(k.title)}</span></button>`).join("");
-    return `<div class="wg-col ${d === t ? "today" : ""}">${blocks}${tasks}${d === t ? `<div class="wg-now" style="top:${px(nm)}px"></div>` : ""}</div>`;
+      .map(({ k, at }) => `<button class="wg-b wg-task" style="top:${px(at.s)}px;height:${Math.max(12, (at.e - at.s) / 60 * H - 1).toFixed(1)}px" data-act="sheet" data-id="task:${k.id}" aria-label="Task ${esc(k.title)}"><span>${esc(k.title)}</span></button>`).join("");
+    return `<div class="wg-col ${d === t ? "today" : ""}" data-act="newblockat" data-id="${d}">${blocks}${tasks}${d === t ? `<div class="wg-now" style="top:${px(nm)}px"></div>` : ""}</div>`;
   };
   return `<div class="wgrid panel">
     <div class="wg-head"><span></span>${days.map(d => `<span class="${d === t ? "today" : ""}">${P.DAY_NAMES[E.parse(d).getDay()]}<b>${E.parse(d).getDate()}</b></span>`).join("")}</div>
@@ -966,16 +997,7 @@ function weekGrid() {
 }
 
 function vWeek() {
-  const bl = live("blocks");
-  const editing = blockForm && blockForm !== "new" ? bl.find(b => b.id === blockForm) : null;
-  const oneOff = bl.filter(b => b.date && b.date >= E.today()).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
-  const row = b => editing && editing.id === b.id ? blockFormHtml(b) : `<button class="ag blk tbtn" style="--c:var(--${(P.KINDS[b.kind] || P.KINDS.other).c})" data-act="blockform" data-id="${b.id}">
-      <div class="tm">${esc(b.start)}–${esc(b.end)}</div><div class="grow"><b>${esc(b.title)}</b> ${b.locked ? `<span class="lk" aria-label="locked">${ic("lock")}</span>` : ""}<div class="small muted">${kindChip(b.kind)}</div></div><span class="chev">${ic("right")}</span></button>`;
-  return `${blockForm === "new" ? blockFormHtml() : editing && !editing.date ? blockFormHtml(editing) : `<div class="btns" style="margin-top:0"><button class="btn primary" data-act="blockform" data-id="new">+ Block</button></div>`}
-  <h2>This week <span class="n">tap a block to edit</span></h2>
-  ${weekGrid()}
-  ${oneOff.length ? `<h2>One-off</h2><div class="panel agenda">${oneOff.map(b => row(b).replace(`<b>`, `<span class="small muted">${E.fmtDate(b.date)}</span> <b>`)).join("")}</div>` : ""}
-`;
+  return `${weekGrid()}${tip("plan-week", "Tap an empty slot to add a block at that time. Tap a block to edit it.")}`;
 }
 
 // Fires the wind-down as a notification while the app is open or backgrounded. The calendar covers the rest.
@@ -1435,7 +1457,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.0 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1675,7 +1697,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "delcare": if (confirm("Remove this from your care list? Past ticks stay in the log.")) { remove("care", id); careForm = true; save(); render(); } return;
 
     // social
-    case "personform": personForm = !personForm; render(); if (personForm) $("#personForm input")?.focus(); return;
+    case "personform": personForm = true; sheet = "person"; render(); $("#personForm input")?.focus(); return;
     case "addperson": {
       const f = readForm("#personForm"); if (!f.name) return toast("Add a name");
       const p = put("people", { name: f.name, type: f.type, where: f.where, scores: {}, every: null, note: "" });
@@ -1714,7 +1736,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "delhang": if (confirm("Delete this hangout?")) { E.revokeXP("hang:" + id); remove("hangouts", id); save(); render(); } return;
 
     // shell: settings sheet, morning brief, backgrounds
-    case "sheet": sheet = id && sheet !== id ? id : null; return render();
+    case "sheet": sheet = id && sheet !== id ? id : null; if (!sheet) { taskForm = null; blockForm = null; blockNew = null; personForm = false; } return render();
     case "brief": briefOpen = true; return render();
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
     case "glass": {
@@ -1759,40 +1781,44 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
 
     // plan
-    case "pday": planDate = id === E.today() ? null : id; return render();
+    case "pday": planDate = id === E.today() ? null : id; entering = true; return render();
     case "taskdone": {
       const k = live("tasks").find(x => x.id === id); if (!k) return;
+      if (sheet && sheet.startsWith("task")) sheet = null;
       put("tasks", { ...k, done: true, doneAt: Date.now() });
       if (k.penalty) { save(); toast(St.openPenalties().length ? "Penalty quest cleared" : "Penalty cleared. Shop unlocked."); return render(); }
       const ref = "task:" + id, gains = live("xpEvents").some(e => e.ref === ref) ? [] : [E.gainXP("task", ref, k.title)];
       save(); announce(gains); if (!gains.length) toast("Done"); return render();
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return; E.revokeXP("task:" + id); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
-    case "newtask": {
-      const show = () => { taskForm = "new"; render(); $("#taskForm input")?.focus(); };
-      if (route().join("/") === "plan/todo") return show();
-      go("plan/todo"); return setTimeout(show, 60);
+    case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
+    case "taskform": if (!id) { taskForm = null; sheet = null; return render(); } taskForm = id; sheet = "task:" + id; return render();
+    case "tipx": { const t = tipsSeen(); t[id] = 1; try { localStorage.setItem(TIP_KEY, JSON.stringify(t)); } catch (e) {} return render(); }
+    case "newblockat": {
+      const r = el.getBoundingClientRect(), m = Math.max(0, Math.min(23 * 60, Math.floor((ev.clientY - r.top) / 26 * 2) * 30));
+      const st = P.toHM(m), en = P.toHM(Math.min(23 * 60 + 59, m + 60));
+      blockNew = { title: "", kind: "other", days: [], date: id, start: st, end: en, locked: false };
+      blockForm = "new"; sheet = "block"; return render();
     }
-    case "taskform": taskForm = id && taskForm !== id ? id : null; return render();
     case "savetask": {
       const f = readForm("#taskForm"); if (!f.title) { toast("Name the task"); return $("#taskForm input")?.focus(); }
       const old = id ? live("tasks").find(x => x.id === id) : null;
       const k = put("tasks", { ...(old || { done: false, created: Date.now(), pin: null }), title: f.title, mins: +f.mins, prio: +f.prio, energy: f.energy, due: f.due || null });
       if (old && old.mins !== k.mins && k.pin) { k.pin = null; put("tasks", k); }
-      taskForm = null; save();
+      taskForm = null; sheet = null; save();
       const at = P.plan().at.get(k.id);
       toast(at ? `Planned: ${dayLabel(at.date)} ${P.toHM(at.s)}${at.late ? " (after deadline)" : ""}` : "No free slot in the next 2 weeks");
       return render();
     }
     case "deltask": if (live("tasks").find(x => x.id === id)?.penalty) return toast("Penalty quests can't be deleted. Do it to clear it.");
-      if (confirm("Delete this task?")) { remove("tasks", id); taskForm = null; save(); render(); } return;
+      if (confirm("Delete this task?")) { remove("tasks", id); taskForm = null; sheet = null; save(); render(); } return;
     case "pin": case "unpin": {
       const k = live("tasks").find(x => x.id === id); if (!k) return;
       const at = a === "pin" ? P.plan().at.get(id) : null;
-      put("tasks", { ...k, pin: at ? { date: at.date, start: P.toHM(at.s) } : null }); save(); toast(at ? "Pinned to " + dayLabel(at.date) + " " + P.toHM(at.s) : "Unpinned"); return render();
+      put("tasks", { ...k, pin: at ? { date: at.date, start: P.toHM(at.s) } : null }); sheet = null; save(); toast(at ? "Pinned to " + dayLabel(at.date) + " " + P.toHM(at.s) : "Unpinned"); return render();
     }
     case "blockform": { const lk = id && id !== "new" && blockForm !== id && P.editLock(live("blocks").find(x => x.id === id)); if (lk) return toast(`Locked: starts or runs ${P.toHM(lk.s)}–${P.toHM(lk.e)}. Edit after ${P.toHM(lk.until)}.`); }
-      blockForm = id && blockForm !== id ? id : null; render(); if (blockForm) document.querySelector("#blockForm")?.scrollIntoView({ block: "center" }); return;
+      blockForm = id || null; blockNew = null; sheet = blockForm ? "block" : null; return render();
     case "bday": el.setAttribute("aria-pressed", el.getAttribute("aria-pressed") !== "true"); return;
     case "saveblock": {
       const f = readForm("#blockForm"), locked = $("#blockForm [data-f=locked]").checked;
@@ -1804,13 +1830,13 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       if (P.editLock(old)) return toast("Locked until this block ends");
       if (old && old.locked && !confirm(`"${old.title}" is locked. Change it anyway?`)) return;
       put("blocks", { ...(old || {}), title: f.title, kind: f.kind, days: f.date ? [] : days, date: f.date || null, start: f.start, end: f.end, locked });
-      blockForm = null; save(); toast("Timetable updated. Tasks re-planned."); return render();
+      blockForm = null; sheet = null; save(); toast("Timetable updated. Tasks re-planned."); return render();
     }
     case "delblock": {
       const b = live("blocks").find(x => x.id === id); if (!b) return;
       if (P.editLock(b)) return toast("Locked until this block ends");
       if (!confirm(b.locked ? `"${b.title}" is locked. Delete it anyway?` : `Delete "${b.title}"?`)) return;
-      remove("blocks", id); blockForm = null; save(); return render();
+      remove("blocks", id); blockForm = null; sheet = null; save(); return render();
     }
     case "ics": { await download("kofu-to-shinjuku.ics", P.ics(), "text/calendar"); return toast("Calendar file ready"); }
     case "wdnotify": {
@@ -1836,6 +1862,8 @@ function addItems(meal, items) {
   const d = foodDate || E.today();
   const m = live("meals").find(x => x.date === d && x.meal === meal) || { date: d, meal, items: [] };
   m.items = (m.items || []).concat(items); put("meals", m);
+  // Logging food ticks the "Log meals" daily quest (once a day).
+  if (!E.habitDone("meals", d)) { const h = put("habitLog", { date: d, habit: "meals", auto: true }); E.gainXP("habit", h.id, "Log meals"); }
 }
 
 document.addEventListener("input", ev => {
@@ -1901,7 +1929,7 @@ document.addEventListener("change", async ev => {
 });
 
 /* ---------- boot ---------- */
-// v2.0: the "Style" criterion became "Taste". Scores move across; nothing is dropped.
+// v1.15: the "Style" criterion became "Taste". Scores move across; nothing is dropped.
 function renameStyle() {
   const so = S.settings.social, i = so.criteria.indexOf("Style");
   if (i < 0 || so.criteria.includes("Taste")) return;
@@ -1927,7 +1955,7 @@ function renameStyle() {
     runAssess();
     if (!briefOpen && document.visibilityState === "visible" && briefDue()) { briefOpen = true; render(); }
     const busy = document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
-    if (document.visibilityState === "visible" && !busy && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0]) && !topicEdit) render();
+    if (document.visibilityState === "visible" && !busy && !sheet && !taskForm && !blockForm && !personForm && ["home", "plan"].includes(route()[0]) && !topicEdit) render();
   }, 60000);
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
     // A new release takes over and reloads the page once, so updates show without a second restart.
