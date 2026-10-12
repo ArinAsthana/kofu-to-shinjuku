@@ -19,7 +19,8 @@ export const dur = m => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? " " + (m % 6
 const dow = date => E.parse(date).getDay();
 const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 
-const blockOn = (b, date) => b.date ? b.date === date : (b.days || []).includes(dow(date));
+// `skip` lists dates a weekly block is off (a one-day move puts a dated copy elsewhere).
+const blockOn = (b, date) => b.date ? b.date === date : (b.days || []).includes(dow(date)) && !(b.skip || []).includes(date);
 
 // Every stretch a block covers on this date, including the tail of yesterday's overnight block.
 export function segments(date) {
@@ -140,7 +141,7 @@ export function ics() {
   for (const b of live("blocks")) {
     if (b.date) { ev("block-" + b.id, b.title, b.date, toMin(b.start), toMin(b.end)); continue; }
     if (!(b.days || []).length) continue;
-    ev("block-" + b.id, b.title, firstOn(t, b.days), toMin(b.start), toMin(b.end), ["RRULE:FREQ=WEEKLY;BYDAY=" + b.days.map(d => ICS_DAY[d]).join(",")]);
+    ev("block-" + b.id, b.title, firstOn(t, b.days), toMin(b.start), toMin(b.end), ["RRULE:FREQ=WEEKLY;BYDAY=" + b.days.map(d => ICS_DAY[d]).join(","), ...(b.skip || []).map(d => "EXDATE;TZID=Asia/Tokyo:" + icsDT(d, toMin(b.start)))]);
   }
   // Wind-down: one recurring event per distinct time, so it keeps working after this week.
   const byTime = {};

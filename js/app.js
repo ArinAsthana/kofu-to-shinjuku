@@ -5,6 +5,7 @@ import * as E from "./engine.js";
 import * as Sync from "./sync.js";
 import * as P from "./planner.js";
 import { ic } from "./icons.js";
+import * as C from "./command.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -33,11 +34,11 @@ window.addEventListener("hashchange", () => { entering = true; draft = null; tas
 
 // Five tabs. Train, Body and Care share one tab; Money and Skills live under Status.
 const TABS = [["home", "System"], ["plan", "Plan"], ["train", "Body"], ["social", "Social"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", plan: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", plan: "plan", train: "train", body: "train", social: "social", status: "status", money: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, body: vBody, money: vMoney, skills: vSkills, more: vMore };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -46,6 +47,7 @@ function render() {
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   hydrate();
+  if (tab === "cmd" && !cmd.prop && !cmd.done) $("[data-cmd]")?.focus();
 }
 // Async bits after render (photo thumbnails).
 function hydrate() {
@@ -79,6 +81,7 @@ function vHome() {
     <button class="rbtn" data-act="nav" data-id="more" aria-label="Settings and backup">${ic("settings")}</button></div></header>
   <button class="strip" data-act="nav" data-id="status">
     <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${E.streak()}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
+  <button class="cmdline" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 
   <h2>Now <span class="n">${P.toHM(new Date().getHours() * 60 + new Date().getMinutes())}</span></h2>
   <button class="panel row between ${wd ? "winding" : ""}" style="width:100%;text-align:left" data-act="nav" data-id="plan">
@@ -468,6 +471,113 @@ function vHangouts() {
     <textarea data-ch="criteria" rows="6">${esc(S.settings.social.criteria.join("\n"))}</textarea></details>`;
 }
 
+/* ================= COMMAND BAR ================= */
+// Type or say a change; the System shows what it understood and nothing is saved until Apply.
+const cmd = { text: "", prop: null, done: null, undo: null, listening: false };
+const dayName = d => d === E.today() ? "today" : d === E.addDays(E.today(), 1) ? "tomorrow" : P.DAY_NAMES[E.parse(d).getDay()] + " " + E.parse(d).getDate();
+// Blocks that would overlap a proposed time on a date (the moved block itself excluded).
+function clashNote(date, start, end, except) {
+  const s = P.toMin(start); let e = P.toMin(end); if (e <= s) e += 1440;
+  const hit = P.segments(date).filter(g => g.b.id !== except && g.b.from !== except && g.s < e && s < g.e);
+  return hit.length ? `<div class="small warn" style="margin-top:8px">Overlaps ${hit.map(g => `${esc(g.b.title)} ${P.toHM(g.s)}–${P.toHM(g.e)}`).join(", ")}</div>` : "";
+}
+function cmdCard(p) {
+  if (!p) return "";
+  if (p.error) return sysBox(esc(p.error), p.hint ? `Try: “${esc(p.hint)}”` : "");
+  const time = (f, v) => `<label class="f">${f === "start" ? "Start" : "End"}<input type="time" data-f="${f}" value="${esc(v)}"></label>`;
+  let body = "", title = "";
+  if (p.type === "move") {
+    const b = p.block, DN = P.DAY_NAMES[E.parse(p.date).getDay()];
+    title = `Move ${esc(b.title)}`;
+    body = `<div class="small muted">Now ${esc(b.start)}–${esc(b.end)}${b.locked ? ` · <span class="warn">${ic("lock", "inl")} locked block</span>` : ""}</div>
+      <div class="grid" style="margin-top:8px">${time("start", p.start)}${time("end", p.end)}</div>${clashNote(p.date, p.start, p.end, b.id)}
+      ${p.weekly ? `<div class="chips" style="margin-top:10px"><button class="chip" data-act="cmdscope" data-id="day" aria-pressed="${p.scope === "day"}">Only ${esc(dayName(p.date))}</button><button class="chip" data-act="cmdscope" data-id="week" aria-pressed="${p.scope === "week"}">Every ${DN}</button></div>` : `<div class="small muted" style="margin-top:8px">${esc(E.fmtDate(p.date))}</div>`}`;
+  } else if (p.type === "block") {
+    title = "Add to timetable";
+    body = `<div class="grid"><label class="f" style="flex-basis:100%">Name<input data-f="title" value="${esc(p.title)}"></label>
+      <label class="f">Type<select data-f="kind">${Object.entries(P.KINDS).map(([k, v]) => `<option value="${k}" ${p.kind === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+      ${p.days.length ? `<label class="f">Every<input readonly value="${P.DAY_NAMES[p.days[0]]}"></label>` : `<label class="f">Date<input type="date" data-f="date" value="${esc(p.date)}"></label>`}
+      ${time("start", p.start)}${time("end", p.end)}</div>${p.date ? clashNote(p.date, p.start, p.end) : ""}`;
+  } else if (p.type === "task") {
+    title = "Add to-do";
+    body = `<div class="grid"><label class="f" style="flex-basis:100%">Task<input data-f="title" value="${esc(p.title)}"></label>
+      <label class="f">Length<select data-f="mins">${P.TASK_LEN.map(m => `<option value="${m}" ${p.mins === m ? "selected" : ""}>${P.dur(m)}</option>`).join("")}</select></label>
+      <label class="f">Energy<select data-f="energy"><option value="high" ${p.energy === "high" ? "selected" : ""}>Focus</option><option value="low" ${p.energy === "low" ? "selected" : ""}>Light</option></select></label>
+      <label class="f">Due (optional)<input type="date" data-f="due" value="${esc(p.due || "")}"></label></div>
+      <div class="small muted" style="margin-top:8px">The planner picks the slot.</div>`;
+  } else if (p.type === "wish") {
+    title = "Add to wishlist";
+    body = `<div class="grid"><label class="f" style="flex-basis:100%">What<input data-f="name" value="${esc(p.name)}"></label>
+      <label class="f">Price (¥)<input type="number" inputmode="numeric" data-f="price" value="${p.price ?? ""}" placeholder="needed"></label>
+      <label class="f">Type<select data-f="kind">${[["item", "Item"], ["trip", "Trip"], ["exp", "Experience"]].map(([k, l]) => `<option value="${k}" ${p.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="f" style="flex-basis:100%">Link${p.shop ? ` (${esc(p.shop)} search)` : ""}<input type="url" data-f="link" value="${esc(p.link)}"></label></div>
+      <div class="small muted" style="margin-top:8px">${p.price ? `Costs ${E.suggestXp(p.price).toLocaleString("en-US")} XP at ¥${S.settings.fun.yenPerXp} per XP.` : "Add the price and the XP cost is set from it."}</div>`;
+  }
+  return `<div class="panel" id="cmdCard"><div class="hdr">[System] Confirm</div><h3>${title}</h3>${body}
+    <div class="btns"><button class="btn go" data-act="cmdapply">Apply</button><button class="btn" data-act="cmdcancel">Cancel</button></div></div>`;
+}
+function vCmd() {
+  const mic = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>
+  <header class="top"><div><div class="hdr">Command</div><h1>Tell the System</h1></div></header>
+  <div class="panel cmdbar"><div class="row" style="gap:8px">
+    <input data-cmd value="${esc(cmd.text)}" placeholder="move the gym up an hour" enterkeyhint="go" autocomplete="off" autocapitalize="off">
+    ${mic ? `<button class="rbtn ${cmd.listening ? "live" : ""}" data-act="cmdmic" aria-label="${cmd.listening ? "Stop listening" : "Speak a command"}">${ic("mic")}</button>` : ""}
+    <button class="btn go" data-act="cmdrun">Run</button></div>
+    ${mic ? "" : `<p class="tiny muted" style="margin:8px 0 0">To speak, tap the mic on your keyboard.</p>`}</div>
+  ${cmd.done ? sysBox(esc(cmd.done), "", cmd.undo ? `<div class="btns"><button class="btn sm" data-act="cmdundo">Undo</button></div>` : "") : ""}
+  ${cmdCard(cmd.prop)}
+  <h2>Things it understands</h2>
+  <div class="list">${C.EXAMPLES.map(x => `<button class="panel tbtn small cmdex" style="margin:0;text-align:left;width:100%" data-act="cmdex" data-id="${esc(x)}">${ic("cmd", "inl")}<span>${esc(x)}</span></button>`).join("")}</div>
+  <p class="tiny muted">Works offline with set phrasings: move, push, add, add task, add … to my wishlist. Add “every week” to change a weekly block for good; otherwise only that day moves.</p>`;
+}
+function cmdRun(text) {
+  cmd.text = text; cmd.prop = C.parse(text); cmd.done = null; render();
+  $("#cmdCard input")?.focus({ preventScroll: true });
+}
+function cmdApply() {
+  const p = cmd.prop; if (!p || p.error) return;
+  const f = readForm("#cmdCard"), undo = [];
+  const keep = (k, id) => { const old = live(k).find(x => x.id === id); undo.push({ k, id, old: old ? JSON.parse(JSON.stringify(old)) : null }); };
+  const add = (k, rec) => { const r = put(k, rec); undo.push({ k, id: r.id, old: null }); return r; };
+  let msg;
+  if (p.type === "move") {
+    if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
+    const b = live("blocks").find(x => x.id === p.block.id); if (!b) return toast("That block is gone");
+    keep("blocks", b.id);
+    if (p.weekly && p.scope === "day") {
+      put("blocks", { ...b, skip: [...new Set([...(b.skip || []), p.date])].filter(d => d >= E.addDays(E.today(), -60)) });
+      add("blocks", { title: b.title, kind: b.kind, days: [], date: p.date, start: f.start, end: f.end, locked: b.locked, from: b.id });
+      msg = `${b.title} moved to ${f.start}–${f.end} ${dayName(p.date)} only.`;
+    } else { put("blocks", { ...b, start: f.start, end: f.end }); msg = `${b.title} now ${f.start}–${f.end}${p.weekly ? " every week" : ""}.`; }
+  } else if (p.type === "block") {
+    if (!f.title) return toast("Name the block"); if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
+    add("blocks", { title: f.title, kind: f.kind, days: p.days, date: p.days.length ? null : f.date || E.today(), start: f.start, end: f.end, locked: false });
+    msg = `${f.title} added, ${p.days.length ? "every " + P.DAY_NAMES[p.days[0]] : dayName(f.date || E.today())} ${f.start}–${f.end}.`;
+  } else if (p.type === "task") {
+    if (!f.title) return toast("Name the task");
+    const k = add("tasks", { title: f.title, mins: +f.mins, prio: f.due ? 3 : 2, energy: f.energy, due: f.due || null, done: false, created: Date.now(), pin: null });
+    const at = P.plan().at.get(k.id);
+    msg = `${f.title}: ${at ? `planned ${dayName(at.date)} ${P.toHM(at.s)}${at.late ? " (after deadline)" : ""}` : "no free slot in the next 2 weeks"}.`;
+  } else if (p.type === "wish") {
+    const price = num(f.price); if (!f.name) return toast("Name it"); if (price === null || price < 0) return toast("Add the price");
+    const xp = E.suggestXp(price);
+    add("wishlist", { name: f.name, price: Math.round(price), xp, kind: f.kind, link: f.link, bought: null });
+    msg = `${f.name} on the wishlist: ${yen(price)}, ${xp.toLocaleString("en-US")} XP.`;
+  }
+  save(); cmd.prop = null; cmd.text = ""; cmd.done = msg; cmd.undo = undo; toast("Applied"); render();
+}
+let recog = null;
+function cmdMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return toast("Use the mic on your keyboard");
+  if (recog) { recog.stop(); return; }
+  recog = new SR(); recog.lang = "en-US"; recog.interimResults = false; recog.maxAlternatives = 1;
+  recog.onresult = e => { const t = e.results[0][0].transcript; recog = null; cmd.listening = false; cmdRun(t); };
+  recog.onerror = e => { toast(e.error === "not-allowed" ? "Microphone not allowed" : "Didn't hear that"); };
+  recog.onend = () => { recog = null; if (cmd.listening) { cmd.listening = false; render(); } };
+  cmd.listening = true; render(); recog.start();
+}
+
 /* ================= PLAN ================= */
 let planDate = null, taskForm = null, blockForm = null;
 const kindChip = k => { const K = P.KINDS[k] || P.KINDS.other; return `<span class="kchip" style="--c:var(--${K.c})">${esc(K.label)}</span>`; };
@@ -479,7 +589,7 @@ function vPlan([sub]) {
   const seg = `<div class="pills">${[["day", "Day"], ["todo", "To-do"], ["week", "Timetable"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="plan/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
   const body = sub === "todo" ? vTodo() : sub === "week" ? vWeek() : vDay();
   return `<header class="top"><div><div class="hdr">Timetable · auto-planner</div><h1>Plan</h1></div>
-    <button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">${ic("plus")}</button></header>${seg}${body}`;
+    <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button><button class="rbtn" data-act="go" data-id="plan/todo" aria-label="Add a task">${ic("plus")}</button></div></header>${seg}${body}`;
 }
 
 function agendaRows(date, p) {
@@ -1037,7 +1147,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.9 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.10 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1196,6 +1306,18 @@ document.addEventListener("click", async ev => {
       put("bills", b); save(); return render();
     }
 
+    // command bar
+    case "cmdrun": return cmdRun($("[data-cmd]")?.value || "");
+    case "cmdex": return cmdRun(id);
+    case "cmdscope": cmd.prop.scope = id; return render();
+    case "cmdapply": return cmdApply();
+    case "cmdcancel": cmd.prop = null; return render();
+    case "cmdmic": return cmdMic();
+    case "cmdundo": {
+      for (const x of (cmd.undo || []).slice().reverse()) x.old ? put(x.k, { ...x.old }) : remove(x.k, x.id);
+      save(); cmd.undo = null; cmd.done = "Undone."; return render();
+    }
+
     // rewards
     case "wishform": wishForm = id && wishForm !== id ? id : null; render(); if (wishForm) $("#wishForm")?.scrollIntoView({ block: "center" }); return;
     case "savewish": {
@@ -1336,6 +1458,8 @@ function addItems(meal, items) {
   m.items = (m.items || []).concat(items); put("meals", m);
 }
 
+document.addEventListener("input", ev => { if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
+document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-cmd]")) { ev.preventDefault(); cmdRun(ev.target.value); } });
 document.addEventListener("change", async ev => {
   const el = ev.target.closest("[data-ch]"); if (!el) return;
   const k = el.dataset.ch;
