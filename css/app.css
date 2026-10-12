@@ -267,3 +267,21 @@ nav button{transition:background .25s,color .25s}
 .toast.reward.show{animation:glowr 1.2s ease-in-out 2}
 @keyframes glowr{50%{box-shadow:0 0 24px rgba(224,53,154,.55)}}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* icons */
+.ic{width:20px;height:20px;flex:none;display:inline-block;vertical-align:middle}
+.rbtn .ic{width:21px;height:21px}
+.chev{display:inline-grid;place-items:center}
+.chev .ic{width:20px;height:20px}
+.back{display:inline-flex;align-items:center;gap:2px}
+.back .ic{width:18px;height:18px;margin-left:-4px}
+.bx .ic{width:22px;height:22px;stroke-width:3}
+.bx.sm .ic{width:18px;height:18px}
+.btn .ic{width:16px;height:16px}
+.ic.inl{width:15px;height:15px;margin:-2px 4px 0 0}
+.ic.fire{width:16px;height:16px;color:var(--org)}
+.lk{display:inline-flex;color:var(--soft);vertical-align:-2px}
+.lk .ic{width:14px;height:14px}
+.lv .ic{width:18px;height:18px}
+.lockbox{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--dim);color:var(--soft)}
+.lockbox .ic{width:18px;height:18px}
