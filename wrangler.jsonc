@@ -5,5 +5,7 @@
   "name": "kts-connector",
   "main": "connector/worker.js",
   "compatibility_date": "2026-10-01",
-  "workers_dev": true
+  "workers_dev": true,
+  // Keep variables set in the dashboard. Without this, each Git deploy wipes plain-text (non-secret) variables.
+  "keep_vars": true
 }

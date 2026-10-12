@@ -267,7 +267,8 @@ export default {
     const url = new URL(req.url), path = url.pathname.replace(/\/+$/, "");
     // The token works with or without the /mcp/ prefix.
     const tok = String(env.PATH_TOKEN || "").trim(); // pasted secrets often carry a trailing space or newline
-    if (!tok || (path !== "/mcp/" + tok && path !== "/" + tok)) return new Response("Not found. Check the URL ends with /mcp/<PATH_TOKEN>.", { status: 404 });
+    if (!tok) return new Response("Not set up: PATH_TOKEN is missing. Add it in Cloudflare → Settings → Variables and secrets as type Secret.", { status: 404 });
+    if (path !== "/mcp/" + tok && path !== "/" + tok) return new Response("Not found. Check the URL ends with /mcp/<PATH_TOKEN>.", { status: 404 });
     if (req.method === "GET" && !(req.headers.get("accept") || "").includes("text/event-stream")) return selfCheck(env);
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
     let body; try { body = await req.json(); } catch { return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, { status: 400 }); }
