@@ -1,5 +1,5 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS } from "./data.js";
+import { HABITS, AREAS, SLOTS, MEALS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, CARE_SLOTS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
@@ -573,10 +573,51 @@ function vCare() {
 
 /* ================= SOCIAL ================= */
 const ptype = k => PERSON_TYPES.find(x => x[0] === k) || PERSON_TYPES[2];
-function rankOf(p) {
-  const v = Object.values(p.scores || {}).filter(x => x > 0); if (!v.length) return { r: "?", c: "dim", avg: null };
+// Scores: 1–5, or -1 for "don't know" (shown as ?, left out of the average).
+function rankOf(p) { return rankScores(p.scores); }
+function rankScores(sc) {
+  const crit = S.settings.social.criteria, v = crit.map(c => (sc || {})[c]).filter(x => x > 0); if (!v.length) return { r: "?", c: "dim", avg: null };
   const avg = v.reduce((a, b) => a + b, 0) / v.length, R = RANKS.find(([, min]) => avg >= min);
   return { r: R[0], c: R[2], avg };
+}
+const selfScores = () => S.settings.social.self || {};
+// Rival ladder: the next opponent is the person ranked just above you. Match their average to clear them.
+function ladder() {
+  const me = rankScores(selfScores()), ppl = live("people").map(p => ({ p, rk: rankOf(p) })).filter(x => x.rk.avg != null);
+  if (me.avg == null) return { me, ppl, cleared: [], ahead: [], opp: null };
+  const cleared = ppl.filter(x => x.rk.avg <= me.avg).sort((a, b) => b.rk.avg - a.rk.avg);
+  const ahead = ppl.filter(x => x.rk.avg > me.avg).sort((a, b) => a.rk.avg - b.rk.avg);
+  return { me, ppl, cleared, ahead, opp: ahead[0] || null };
+}
+function gaps(opp) {
+  const me = selfScores();
+  return S.settings.social.criteria.map(c => ({ c, me: me[c] > 0 ? me[c] : null, them: (opp.p.scores || {})[c] > 0 ? opp.p.scores[c] : null }))
+    .filter(g => g.them != null && (g.me == null || g.them > g.me)).map(g => ({ ...g, d: g.them - (g.me || 0) })).sort((a, b) => b.d - a.d);
+}
+function rivalBox() {
+  const L = ladder(), s1 = n => n.toFixed(1);
+  if (L.me.avg == null) return sysBox(`Rate yourself to start the rival ladder.`, "Score yourself on the same key you use for others. Your next opponent is the person ranked just above you; match their stats to clear them, then face the next.", `<div class="btns"><button class="btn sm primary" data-act="go" data-id="social/me">Rate yourself</button></div>`);
+  if (!L.opp) return sysBox(`Ladder cleared. You're at or above everyone you've rated.`, `You: ${L.me.r} ${s1(L.me.avg)}. Add someone you look up to as your next opponent.`, `<div class="btns"><button class="btn sm" data-act="go" data-id="social/me">Re-rate yourself</button></div>`);
+  const g = gaps(L.opp), o = L.opp;
+  return `<div class="panel rival"><div class="row between"><span class="k">Next opponent</span><span class="mono small muted">${L.cleared.length} cleared · ${L.ahead.length} to go</span></div>
+    <button class="q tbtn person" data-act="go" data-id="social/p/${o.p.id}" style="margin-top:8px">${badge(o.rk)}<div class="grow"><div class="t">${esc(o.p.name)}</div><div class="small muted">${s1(o.rk.avg)} vs your ${s1(L.me.avg)} · gap ${s1(o.rk.avg - L.me.avg)}</div></div><span class="chev">${ic("right")}</span></button>
+    <div class="small" style="margin-top:8px">${g.length ? `Close the gap: ${g.slice(0, 3).map(x => `<b>${esc(x.c)}</b> ${x.me ?? "?"}→${x.them}`).join(" · ")}` : "No single stat behind; lift your average anywhere."}</div>
+    <div class="btns"><button class="btn sm" data-act="go" data-id="social/me">Re-rate yourself</button></div>
+    <p class="tiny muted">Re-rate yourself monthly, honestly. ${S.settings.social.selfAt ? `Last: ${E.fmtDate(S.settings.social.selfAt)}.` : ""}</p></div>`;
+}
+// One criterion row: 1–5, ? (don't know), and a fold-out key on how to read it.
+function critRow(c, v, id) {
+  const k = SOCIAL_KEY[c];
+  return `<div class="item"><div class="row between"><b>${esc(c)}</b><span class="mono small muted">${v > 0 ? v + "/5" : v === -1 ? "don't know" : "–"}</span></div>
+    <div class="seg" style="margin-top:6px">${[1, 2, 3, 4, 5].map(n => `<button data-act="score" data-id="${id}" data-c="${esc(c)}" data-n="${n}" aria-pressed="${v === n}">${n}</button>`).join("")}<button data-act="score" data-id="${id}" data-c="${esc(c)}" data-n="-1" aria-pressed="${v === -1}" aria-label="Don't know">?</button></div>
+    ${k ? `<details class="key"><summary>Key</summary><p class="small soft">${esc(k.read)}</p><ol class="small">${k.lv.map((t, i) => `<li><b>${i + 1}</b> ${esc(t)}</li>`).join("")}</ol><p class="tiny muted">Not seen enough to judge? Tap ?. It doesn't count toward the rank.</p></details>` : ""}</div>`;
+}
+function vSelf() {
+  const sc = selfScores(), rk = rankScores(sc);
+  return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button>
+  <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>You</h1><div class="small muted">${rk.avg ? `${rk.avg.toFixed(1)} avg` : "unrated"} · same key as everyone else</div></div></div>
+  <p class="small muted">Rate where you are today, not where you want to be. Ask a friend if unsure.</p>
+  <h2>Assessment</h2><div class="panel">${S.settings.social.criteria.map(c => critRow(c, sc[c] || 0, "me")).join("")}</div>`;
 }
 const lastSeen = id => live("hangouts").filter(h => (h.people || []).includes(id)).reduce((a, h) => h.date > a ? h.date : a, "");
 const every = p => p.every === undefined || p.every === null || p.every === "" ? ptype(p.type)[2] : +p.every || null;
@@ -590,6 +631,7 @@ let personForm = false, hangSel = null;
 
 function vSocial([sub, id]) {
   if (sub === "p" && id) return vPerson(id);
+  if (sub === "me") return vSelf();
   sub = sub || "people";
   const seg = `<div class="pills">${[["people", "People"], ["log", "Hangouts"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="social/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
   return `<header class="top"><div><div class="hdr">Hunter registry</div><h1>Social</h1></div>
@@ -606,6 +648,7 @@ function vPeople() {
   const od = ppl.filter(x => x.st.overdue), bl = balance();
   const counts = RANKS.map(([r, , c]) => [r, c, ppl.filter(x => x.rk.r === r).length]);
   return `${od.length ? sysBox(`<span class="warn">${od.length} ${od.length === 1 ? "person is" : "people are"} overdue for a catch-up.</span>`, od.slice(0, 4).map(x => esc(x.p.name)).join(", ") + (od.length > 4 ? "…" : "") + ". One message counts as a start.") : ""}
+  ${rivalBox()}
   <div class="panel">
     <div class="row between"><span class="k">Last 30 days</span><span class="mono small muted">${bl.total} hangouts</span></div>
     <div class="row between" style="margin-top:6px"><div><div class="dm big2">${bl.others}</div><div class="small muted">with friends and others</div></div>
@@ -622,7 +665,7 @@ function vPeople() {
   <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="social/p/${p.id}">
       ${badge(rk)}<div class="grow"><div class="t">${esc(p.name)}</div>
       <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}${st.ev ? ` · every ${st.ev}d` : ""}${st.overdue ? ` · <span class="warn">overdue</span>` : ""}</div></div><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
-  <p class="tiny muted">Rank is the average of your scores: S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. It's your private read, not a verdict on them.</p>`;
+  <p class="tiny muted">Rank is the average of your scores (? left out): S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. Each score has a Key on the person's page. It's your private read, not a verdict on them.</p>`;
 }
 function vPerson(id) {
   const p = live("people").find(x => x.id === id);
@@ -632,8 +675,7 @@ function vPerson(id) {
   return `<button class="back" data-act="nav" data-id="social">${ic("left")} Social</button>
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
   <h2>Assessment</h2>
-  <div class="panel">${crit.map(c => { const v = (p.scores || {})[c] || 0; return `<div class="item"><div class="row between"><b>${esc(c)}</b><span class="mono small muted">${v || "–"}/5</span></div>
-    <div class="seg" style="margin-top:6px">${[1, 2, 3, 4, 5].map(n => `<button data-act="score" data-id="${p.id}" data-c="${esc(c)}" data-n="${n}" aria-pressed="${v === n}">${n}</button>`).join("")}</div></div>`; }).join("")}</div>
+  <div class="panel">${crit.map(c => critRow(c, (p.scores || {})[c] || 0, p.id)).join("")}</div>
   <h2>Keep in touch</h2>
   <div class="panel"><div class="grid">
     <label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -1393,7 +1435,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.14 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v1.15 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1640,6 +1682,13 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       personForm = false; save(); return go("social/p/" + p.id);
     }
     case "score": {
+      if (id === "me") {
+        const c = el.dataset.c, n = +el.dataset.n, sc = { ...selfScores() }, L0 = ladder();
+        if (sc[c] === n) delete sc[c]; else sc[c] = n;
+        S.settings.social.self = sc; S.settings.social.selfAt = E.today(); touchSettings(); save();
+        const L1 = ladder(); if (L0.opp && L1.cleared.some(x => x.p.id === L0.opp.p.id)) toast(`Cleared ${L0.opp.p.name}. ${L1.opp ? `Next opponent: ${L1.opp.p.name}` : "Ladder cleared."}`);
+        return render();
+      }
       const p = live("people").find(x => x.id === id); if (!p) return;
       const c = el.dataset.c, n = +el.dataset.n, sc = { ...(p.scores || {}) };
       if (sc[c] === n) delete sc[c]; else sc[c] = n;
@@ -1852,8 +1901,19 @@ document.addEventListener("change", async ev => {
 });
 
 /* ---------- boot ---------- */
+// v1.15: the "Style" criterion became "Taste". Scores move across; nothing is dropped.
+function renameStyle() {
+  const so = S.settings.social, i = so.criteria.indexOf("Style");
+  if (i < 0 || so.criteria.includes("Taste")) return;
+  so.criteria[i] = "Taste";
+  if (so.self && so.self.Style !== undefined) { so.self.Taste = so.self.Style; delete so.self.Style; }
+  touchSettings();
+  for (const p of live("people")) if (p.scores && p.scores.Style !== undefined) { const sc = { ...p.scores, Taste: p.scores.Style }; delete sc.Style; p.scores = sc; put("people", p); }
+  save();
+}
 (async function boot() {
   await load();
+  renameStyle();
   briefOpen = briefDue();
   entering = true; render();
   G.applyPhoto();
