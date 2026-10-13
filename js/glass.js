@@ -38,7 +38,7 @@ const lowBattery = b => b && !b.charging && b.level < 0.2;
 function onBattery() { if (lowBattery(bat)) stopGlass("Glass mode off: battery under 20%"); }
 
 // The status bar takes the colour of the top of the picture, so it blends in when full screen isn't on.
-// The status bar colour; the page has a light and a dark one (index.html), both overridden while Glass mode runs.
+// The status bar colour (index.html), overridden while Glass mode runs.
 const metas = () => document.querySelectorAll('meta[name="theme-color"]');
 const meta = () => ({ setAttribute: (k, v) => metas().forEach(m => { if (!m.dataset.orig) m.dataset.orig = m.content; m.setAttribute(k, v === "reset" ? m.dataset.orig : v); }) });
 function sample() {
