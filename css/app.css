@@ -28,13 +28,16 @@ html{-webkit-text-size-adjust:100%;background:linear-gradient(180deg,var(--bg) 0
 body{margin:0;color:var(--fg);text-shadow:0 1px 2px rgba(60,40,20,.16);font:16px/1.45 var(--sans);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;letter-spacing:-.005em;
   background:transparent;min-height:100vh}
 /* soft warm lights behind the glass, like lamps through frosted panes */
-body::before{content:"";position:fixed;inset:-40px;z-index:-1;pointer-events:none;filter:blur(14px) hue-rotate(var(--hue));
-  background:radial-gradient(circle at 86% 9%,rgba(255,252,244,.7) 0 2.5vmax,rgba(244,226,196,.55) 6.5vmax,rgba(244,226,196,0) 12vmax),
-    radial-gradient(circle at 96% 46%,rgba(255,250,240,.65) 0 2vmax,rgba(236,214,180,.5) 6vmax,rgba(236,214,180,0) 11vmax),
-    radial-gradient(circle at 16% 62%,rgba(255,250,240,0) 0 4vmax,rgba(255,250,240,.6) 5.5vmax,rgba(232,206,166,.45) 8vmax,rgba(232,206,166,0) 12.5vmax),
+body::before{content:"";position:fixed;inset:-40px;z-index:-1;pointer-events:none;filter:blur(2px) hue-rotate(var(--hue));
+  background:radial-gradient(circle at 84% 11%,rgba(255,253,247,.95) 0 2.2vmax,rgba(240,218,184,.85) 5.6vmax,rgba(240,218,184,0) 6.4vmax),
+    radial-gradient(circle at 97% 46%,rgba(255,251,244,.9) 0 1.6vmax,rgba(232,206,166,.8) 4.6vmax,rgba(232,206,166,0) 5.3vmax),
+    radial-gradient(circle at 14% 62%,rgba(255,250,240,0) 0 4vmax,rgba(255,250,240,.85) 4.6vmax,rgba(226,196,152,.7) 7vmax,rgba(226,196,152,0) 7.8vmax),
+    radial-gradient(circle at 70% 78%,rgba(255,250,240,.75) 0 1.4vmax,rgba(228,200,160,.65) 3.8vmax,rgba(228,200,160,0) 4.5vmax),
+    radial-gradient(circle at 64% 27%,rgba(255,250,240,.55) 0 2vmax,rgba(232,206,166,.45) 5vmax,rgba(232,206,166,0) 5.7vmax),
+    radial-gradient(circle at 30% 47%,rgba(150,116,80,.4) 0 3vmax,rgba(150,116,80,0) 3.7vmax),
     radial-gradient(circle at 48% 34%,rgba(240,222,194,.28) 0,rgba(240,222,194,0) 22vmax),
-    radial-gradient(circle at 62% 90%,rgba(120,92,62,.45) 0,rgba(120,92,62,0) 20vmax),
-    radial-gradient(circle at 8% 14%,rgba(250,240,222,.7) 0,rgba(250,240,222,0) 16vmax)}
+    radial-gradient(circle at 62% 92%,rgba(120,92,62,.45) 0,rgba(120,92,62,0) 20vmax),
+    radial-gradient(circle at 8% 14%,rgba(250,240,222,.6) 0,rgba(250,240,222,0) 16vmax)}
 body.has-bg::before{display:none}
 main{max-width:560px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(110px + env(safe-area-inset-bottom,0px))}
 h1,h2,h3{margin:0;line-height:1.2}
@@ -110,7 +113,7 @@ button.panel{font:inherit;text-align:left;width:100%}
 
 /* stat cards */
 .card{border-radius:var(--r-card);padding:16px;border:1px solid var(--rule);position:relative;overflow:hidden;color:var(--fg);text-align:left;font:inherit;box-shadow:var(--shadow);
-  background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--c,var(--acc)) 16%,var(--panel-solid)),var(--panel))}
+  background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--c,var(--acc)) 16%,var(--panel)),var(--panel))}
 .g-mag{--c:var(--mag)} .g-ind{--c:var(--ind)} .g-org{--c:var(--org)} .g-cyan{--c:var(--cyan)}
 .card .bar{background:color-mix(in srgb,var(--c,var(--acc)) 15%,transparent)}
 .card .bar i{background:var(--c,var(--acc))!important}
@@ -173,7 +176,7 @@ span.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;mi
 .unl .lv{grid-row:span 2;font-size:20px;font-weight:700;align-self:center;min-width:40px;text-align:center}
 .unl .need{font-size:12px;color:var(--soft)}
 .unl.lock{opacity:.6}
-.combo{border-radius:var(--r-card);padding:14px 16px;border:1px solid var(--rule);color:var(--fg);box-shadow:var(--shadow);background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--c,var(--acc)) 14%,var(--panel-solid)),var(--panel))}
+.combo{border-radius:var(--r-card);padding:14px 16px;border:1px solid var(--rule);color:var(--fg);box-shadow:var(--shadow);background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--c,var(--acc)) 14%,var(--panel)),var(--panel))}
 .combo.dimmed{opacity:.6;filter:saturate(.4)}
 .combo .chips{margin-bottom:8px}
 .combo .chip{font-size:11px;font-weight:600;padding:2px 9px;min-height:0;background:none}
@@ -292,8 +295,8 @@ details.key li b{display:inline-block;width:18px;color:var(--acc)}
 .panel.winding{border-color:color-mix(in srgb,var(--ind) 45%,transparent)}
 .panel.winding b{color:var(--ind)}
 .now-t{font-size:23px;font-weight:700;line-height:1.15;margin-bottom:2px;letter-spacing:-.015em}
-.hero{margin-top:12px;padding:18px;border-radius:24px;background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--acc) 14%,var(--panel-solid)),var(--panel))}
-.hero.winding{background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--ind) 14%,var(--panel-solid)),var(--panel))}
+.hero{margin-top:12px;padding:18px;border-radius:24px;background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--acc) 14%,var(--panel)),var(--panel))}
+.hero.winding{background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--ind) 14%,var(--panel)),var(--panel))}
 .hero .now-t{font-size:26px;margin:4px 0 2px}
 .hero .bar{height:6px;margin:12px 0 4px}
 .hero .bar i{transition:width .6s}
@@ -399,7 +402,7 @@ body.has-bg{background:transparent}
 html:has(body.has-bg){background:#1B1613}
 /* over a picture, the page text sits on the dark image, so headings switch to light ink; cards stay frosted ivory */
 body.has-bg header.top h1,body.has-bg header.top .hdr,body.has-bg h2,body.has-bg .quiet-row,body.has-bg .back,body.has-bg main>.tiny{color:#F6EFE4}
-body.has-bg .panel,body.has-bg .q,body.has-bg .fold,body.has-bg .strip,body.has-bg .sys,body.has-bg .unl,body.has-bg .hero{background:color-mix(in srgb,var(--panel-solid) 72%,transparent)}
+body.has-bg .panel,body.has-bg .q,body.has-bg .fold,body.has-bg .strip,body.has-bg .sys,body.has-bg .unl,body.has-bg .hero{background:var(--grain),color-mix(in srgb,var(--panel-solid) calc(30% + var(--glass-a) * 100%),transparent)}
 
 /* glass tuning sliders */
 .tune{display:grid;gap:10px;margin-top:8px}
@@ -432,7 +435,7 @@ body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150p
 
 /* v2.2 dungeon */
 .dgate h3{font-size:20px}
-.dgate.open{background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--acc) 16%,var(--panel-solid)),var(--panel));border-color:color-mix(in srgb,var(--acc) 40%,transparent)}
+.dgate.open{background:var(--grain),linear-gradient(160deg,color-mix(in srgb,var(--acc) 16%,var(--panel)),var(--panel));border-color:color-mix(in srgb,var(--acc) 40%,transparent)}
 .dgate .btn{flex:none}
 
 /* motion: subtle springs; off when the phone asks for reduced motion */
