@@ -2,8 +2,9 @@
    The System / manhwa names stay; only the style changed. */
 :root{
   color-scheme:light;
-  --bg:#C2AC8F; --bg2:#9F8769; --fg:#FFFCF6; --soft:rgba(255,250,240,.74); --dim:rgba(255,250,240,.4); --rule:rgba(255,250,240,.22); --on-fg:#3A2E22;
-  --panel:rgba(255,248,236,.09); --panel-solid:#A88F71; --raise:rgba(255,250,240,.16); --field:rgba(255,250,240,.14); --track:rgba(255,250,240,.22);
+  --hue:0deg; --glass-a:.09; --frost:28px; /* set by the Glass look sliders */
+  --bg:hsl(calc(34deg + var(--hue)) 29% 66%); --bg2:hsl(calc(33deg + var(--hue)) 22% 52%); --fg:#FFFCF6; --soft:rgba(255,250,240,.74); --dim:rgba(255,250,240,.4); --rule:rgba(255,250,240,.22); --on-fg:#3A2E22;
+  --panel:rgba(255,248,236,var(--glass-a)); --panel-solid:hsl(calc(33deg + var(--hue)) 24% 55%); --raise:rgba(255,250,240,.16); --field:rgba(255,250,240,.14); --track:rgba(255,250,240,.22);
   --shadow:0 1px 2px rgba(60,40,20,.08),0 10px 28px rgba(60,40,20,.14);
   --acc:#F6E2BE; --acc-ink:#3A2E22; --acc-soft:rgba(246,226,190,.22);
   /* categories, muted */
@@ -18,7 +19,7 @@
   /* frosted glass: film grain, a light sheen from the top left, a bright rim */
   --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .29 0 0 0 0 .21 .55 0 0 0 -.18'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --sheen:linear-gradient(140deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.06) 45%,rgba(255,255,255,0) 70%,rgba(255,255,255,.08) 100%);
-  --rim:rgba(255,255,255,.42); --panel-dense:rgba(140,114,86,.78);
+  --rim:rgba(255,255,255,.42); --panel-dense:hsl(calc(31deg + var(--hue)) 24% 44% / calc(.6 + var(--glass-a) * 2));
   --glass-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 0 0 1px rgba(255,255,255,.1),0 2px 6px rgba(60,40,20,.08),0 18px 40px -8px rgba(60,40,20,.22);
 }
 
@@ -27,7 +28,7 @@ html{-webkit-text-size-adjust:100%;background:linear-gradient(180deg,var(--bg) 0
 body{margin:0;color:var(--fg);text-shadow:0 1px 2px rgba(60,40,20,.16);font:16px/1.45 var(--sans);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;letter-spacing:-.005em;
   background:transparent;min-height:100vh}
 /* soft warm lights behind the glass, like lamps through frosted panes */
-body::before{content:"";position:fixed;inset:-40px;z-index:-1;pointer-events:none;filter:blur(14px);
+body::before{content:"";position:fixed;inset:-40px;z-index:-1;pointer-events:none;filter:blur(14px) hue-rotate(var(--hue));
   background:radial-gradient(circle at 86% 9%,rgba(255,252,244,.7) 0 2.5vmax,rgba(244,226,196,.55) 6.5vmax,rgba(244,226,196,0) 12vmax),
     radial-gradient(circle at 96% 46%,rgba(255,250,240,.65) 0 2vmax,rgba(236,214,180,.5) 6vmax,rgba(236,214,180,0) 11vmax),
     radial-gradient(circle at 16% 62%,rgba(255,250,240,0) 0 4vmax,rgba(255,250,240,.6) 5.5vmax,rgba(232,206,166,.45) 8vmax,rgba(232,206,166,0) 12.5vmax),
@@ -84,7 +85,7 @@ header.top h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-siz
 
 /* glass surfaces */
 .panel,.q,.strip,.fold,.unl,.hero,.sys{background-color:var(--panel);background-image:var(--grain),var(--sheen);border:1px solid var(--rim);box-shadow:var(--glass-shadow);
-  -webkit-backdrop-filter:blur(28px) saturate(1.35);backdrop-filter:blur(28px) saturate(1.35)}
+  -webkit-backdrop-filter:blur(var(--frost)) saturate(1.35);backdrop-filter:blur(var(--frost)) saturate(1.35)}
 .panel{border-radius:var(--r-card);padding:14px 16px;margin-top:10px;color:inherit}
 button.panel{font:inherit;text-align:left;width:100%}
 .item{border-top:1px solid var(--rule);padding:12px 0}
@@ -457,7 +458,7 @@ body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150p
 .fc-img{display:block;width:100%;max-height:38vh;object-fit:contain;border-radius:14px;margin:0 0 12px;background:var(--raise)}
 .fc audio,#cardForm audio{height:36px;max-width:100%}
 .opts{display:grid;gap:8px;margin-top:4px}
-.opt{border:1px solid var(--rim);background:var(--grain),var(--sheen),var(--panel);box-shadow:var(--glass-shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:var(--r-btn);padding:14px 16px;min-height:52px;text-align:left;font-size:16px;line-height:1.35;color:var(--fg);transition:transform .18s cubic-bezier(.2,.9,.3,1.3),background .2s,border-color .2s}
+.opt{border:1px solid var(--rim);background:var(--grain),var(--sheen),var(--panel);box-shadow:var(--glass-shadow);backdrop-filter:blur(calc(var(--frost) / 2));-webkit-backdrop-filter:blur(calc(var(--frost) / 2));border-radius:var(--r-btn);padding:14px 16px;min-height:52px;text-align:left;font-size:16px;line-height:1.35;color:var(--fg);transition:transform .18s cubic-bezier(.2,.9,.3,1.3),background .2s,border-color .2s}
 .opt:active{transform:scale(.98)}
 .opt.right{background:color-mix(in srgb,var(--lime) 22%,var(--panel-solid));border-color:var(--lime)}
 .opt.wrong{background:color-mix(in srgb,var(--bad) 18%,var(--panel-solid));border-color:var(--bad)}
