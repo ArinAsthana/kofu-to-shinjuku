@@ -233,7 +233,7 @@ function homeSettings() {
   const lk = G.look();
   return `<h3>Glass look</h3>
     <p class="small muted">Applies right away and stays on this phone.</p>
-    <div class="tune">${[["hue", "Hue", -180, 180, 1, "°"], ["clear", "Transparency", 50, 100, 1, "%"], ["frost", "Frost", 0, 40, 1, "px"]].map(([k, l, lo, hi, st, u]) =>
+    <div class="tune">${[["hue", "Hue", -180, 180, 1, "°"], ["clear", "Transparency", 50, 100, 1, "%"], ["frost", "Frost", 0, 40, 1, "px"], ["grain", "Grain", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
       `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${lk[k]}" data-look="${k}"><output>${lk[k]}${u}</output></label>`).join("")}</div>
     <div class="btns"><button class="btn sm" data-act="lookreset">Reset glass look</button></div>
     <h3 style="margin-top:14px">Background</h3>
@@ -1690,7 +1690,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.6.3 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.6.4 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2166,7 +2166,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
 
 
 document.addEventListener("input", ev => {
-  if (ev.target.matches("[data-look]")) { const k = ev.target.dataset.look, v = +ev.target.value; G.setLook({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ hue: "°", clear: "%", frost: "px" }[k] || ""); return; }
+  if (ev.target.matches("[data-look]")) { const k = ev.target.dataset.look, v = +ev.target.value; G.setLook({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ hue: "°", clear: "%", frost: "px", grain: "%" }[k] || ""); return; }
   if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
 document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-cmd]")) { ev.preventDefault(); cmdRun(ev.target.value); } });
 document.addEventListener("change", async ev => {

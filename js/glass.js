@@ -23,14 +23,17 @@ export function tune(c = cfg()) {
   bg.style.setProperty("--bgy", c.y + "%");
 }
 
-// Glass look (per phone): hue shift of the background in degrees, glass transparency in %, frost (blur) in px.
+// Glass look (per phone): hue shift of the background in degrees, glass transparency in %, frost (blur) in px, grain in %.
 const LK = "kts-look";
-export const LOOK = { hue: 0, clear: 91, frost: 28 };
+export const LOOK = { hue: 0, clear: 91, frost: 28, grain: 40 };
+// Film grain as SVG noise; k scales how strongly the specks show (1 = the default look).
+const grainUri = k => `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .29 0 0 0 0 .21 ${(.55 * k).toFixed(3)} 0 0 0 ${(-.18 * k).toFixed(3)}'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
 export function look() { try { return { ...LOOK, ...JSON.parse(localStorage.getItem(LK)) }; } catch (e) { return { ...LOOK }; } }
 export function setLook(patch) { const l = patch ? { ...look(), ...patch } : { ...LOOK }; try { localStorage.setItem(LK, JSON.stringify(l)); } catch (e) {} applyLook(l); return l; }
 export function applyLook(l = look()) {
   const r = document.documentElement.style;
   r.setProperty("--hue", l.hue + "deg"); r.setProperty("--glass-a", (1 - l.clear / 100).toFixed(2)); r.setProperty("--frost", l.frost + "px");
+  r.setProperty("--grain", l.grain > 0 ? grainUri(l.grain / 40) : "none");
 }
 
 export async function applyPhoto() {
