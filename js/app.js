@@ -230,7 +230,13 @@ function sheetHtml(k) {
 const gear = k => `<button class="rbtn" data-act="sheet" data-id="${k}" aria-label="Settings">${ic("settings")}</button>`;
 function homeSettings() {
   const c = G.cfg();
-  return `<h3>Background</h3>
+  const lk = G.look();
+  return `<h3>Glass look</h3>
+    <p class="small muted">Applies right away and stays on this phone.</p>
+    <div class="tune">${[["hue", "Hue", -180, 180, 1, "°"], ["clear", "Transparency", 50, 100, 1, "%"], ["frost", "Frost", 0, 40, 1, "px"]].map(([k, l, lo, hi, st, u]) =>
+      `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${lk[k]}" data-look="${k}"><output>${lk[k]}${u}</output></label>`).join("")}</div>
+    <div class="btns"><button class="btn sm" data-act="lookreset">Reset glass look</button></div>
+    <h3 style="margin-top:14px">Background</h3>
     <p class="small muted">A photo of your choice, blurred and darkened behind the cards. It stays on this phone.</p>
     <div class="btns"><label class="btn sm">${c.photo ? "Change photo" : "Pick a photo"}<input type="file" accept="image/*" data-ch="bgphoto" hidden></label>${c.photo ? `<button class="btn sm" data-act="bgclear">Remove</button>` : ""}</div>
     <h3 style="margin-top:14px">Glass mode</h3>
@@ -1684,7 +1690,7 @@ function vMore() {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
   </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.6.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.6.3 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1923,6 +1929,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "glasslens": await G.nextLens(); return render();
     case "bgclear": await G.clearPhoto(); return render();
+    case "lookreset": G.setLook(null); return render();
     case "glassreset": { const d = G.DEFAULTS; G.setCfg({ blur: d.blur, dim: d.dim, zoom: d.zoom, y: d.y }); return render(); }
 
     // study blocks
@@ -2159,6 +2166,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
 
 
 document.addEventListener("input", ev => {
+  if (ev.target.matches("[data-look]")) { const k = ev.target.dataset.look, v = +ev.target.value; G.setLook({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ hue: "°", clear: "%", frost: "px" }[k] || ""); return; }
   if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
 document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-cmd]")) { ev.preventDefault(); cmdRun(ev.target.value); } });
 document.addEventListener("change", async ev => {

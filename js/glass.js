@@ -23,7 +23,18 @@ export function tune(c = cfg()) {
   bg.style.setProperty("--bgy", c.y + "%");
 }
 
+// Glass look (per phone): hue shift of the background in degrees, glass transparency in %, frost (blur) in px.
+const LK = "kts-look";
+export const LOOK = { hue: 0, clear: 91, frost: 28 };
+export function look() { try { return { ...LOOK, ...JSON.parse(localStorage.getItem(LK)) }; } catch (e) { return { ...LOOK }; } }
+export function setLook(patch) { const l = patch ? { ...look(), ...patch } : { ...LOOK }; try { localStorage.setItem(LK, JSON.stringify(l)); } catch (e) {} applyLook(l); return l; }
+export function applyLook(l = look()) {
+  const r = document.documentElement.style;
+  r.setProperty("--hue", l.hue + "deg"); r.setProperty("--glass-a", (1 - l.clear / 100).toFixed(2)); r.setProperty("--frost", l.frost + "px");
+}
+
 export async function applyPhoto() {
+  applyLook();
   tune();
   const img = el("img"); if (!img) return;
   const b = cfg().photo ? await photos.get("bg").catch(() => null) : null;
