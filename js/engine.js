@@ -251,7 +251,8 @@ export function moneyPlan() {
     debtWeek: Math.max(0, debt) / wl,
   };
 }
-export const bills = () => live("bills").sort((a, b) => (a.kind === "insurance") - (b.kind === "insurance") || a.name.localeCompare(b.name));
+// The loan EMI (v3.3, from job start) comes first: it's paid before anything else.
+export const bills = () => live("bills").sort((a, b) => (b.kind === "loan") - (a.kind === "loan") || (a.kind === "insurance") - (b.kind === "insurance") || a.name.localeCompare(b.name));
 export const billMonthly = b => b.amount == null ? 0 : b.freq === "year" ? b.amount / 12 : b.amount;
 export const billsMonthly = () => bills().reduce((a, b) => a + billMonthly(b), 0);
 export const monthKey = (s = today()) => s.slice(0, 7);

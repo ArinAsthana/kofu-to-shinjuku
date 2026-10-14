@@ -119,12 +119,14 @@ const REVEALS = [
   { id: "loot", text: "Quest blocks can drop loot.", sub: "Finish the block. Sometimes there's more than the base XP." },
   { id: "comeback", text: "Missed a day? The next one starts with a comeback quest.", sub: "Clear any one quest for a bonus. No pile-up." },
   { id: "gates", text: "Locked gates have appeared on Status.", sub: "They open in order. Only the current Act matters." },
+  { id: "loan", when: () => loanLive(), text: "New area unlocked: Treasury.", sub: "Your education loan is yours now: one fixed monthly bill, paid before anything goes to the Store." },
 ];
 export function revealToday(t = E.today()) {
   const x = sys();
   const shown = Object.entries(x.revealed).find(([, d]) => d === t);
   if (shown) return REVEALS.find(r => r.id === shown[0]) ? { ...REVEALS.find(r => r.id === shown[0]), today: true } : null;
-  return REVEALS.find(r => !x.revealed[r.id]) || null;
+  // Event reveals (like the loan at takeover) jump the queue; the rest come in order.
+  return REVEALS.find(r => r.when && !x.revealed[r.id] && r.when()) || REVEALS.find(r => !r.when && !x.revealed[r.id]) || null;
 }
 // Called when the reveal is on screen: it's spent for today.
 export function markReveal(id, t = E.today()) { const x = sys(); if (!x.revealed[id]) { x.revealed[id] = t; touch(); } }
@@ -141,6 +143,27 @@ const INSIGHTS = [
   "Tax-free investing (NISA) becomes available with the first salary. The Treasury will open then.",
 ];
 export const insightFor = (t = E.today()) => INSIGHTS[Math.max(0, Math.floor(E.daysBetween("2026-10-12", E.weekStart(t)) / 7)) % INSIGHTS.length];
+
+/* ---------- the education loan (hidden until takeover) ---------- */
+// Dad pays the EMI until Arin's job starts. From that date the EMI is one fixed monthly bill, shown with no balance
+// or interest; the full numbers are only in the Archives. Balance is as of LOAN.asOf, amortised monthly from there.
+export const LOAN = { inr: 1463000, rate: 0.105, emi: 23450, yenPerInr: 1.7, asOf: "2026-10-14", takeover: null };
+export const loanCfg = () => { const s = S.settings; s.loan = { ...LOAN, ...(s.loan || {}) }; return s.loan; };
+export function setLoan(patch) { Object.assign(loanCfg(), patch); touch(); }
+export const loanLive = (t = E.today()) => { const l = loanCfg(); return !!(l.takeover && t >= l.takeover); };
+export const emiYen = () => { const l = loanCfg(); return Math.round(l.emi * l.yenPerInr / 100) * 100; };
+export function loanState(t = E.today()) {
+  const l = loanCfg(), r = l.rate / 12, months = Math.max(0, Math.floor(E.daysBetween(l.asOf, t) / 30.44));
+  let bal = l.inr; for (let i = 0; i < months && bal > 0; i++) bal = Math.max(0, bal * (1 + r) - l.emi);
+  const left = bal > 0 && l.emi > bal * r ? Math.ceil(-Math.log(1 - r * bal / l.emi) / Math.log(1 + r)) : bal > 0 ? Infinity : 0;
+  return { bal: Math.round(bal), left, yen: Math.round(bal * l.yenPerInr), interest: Math.round(bal * r), emiYen: emiYen() };
+}
+// At takeover the EMI becomes a normal bill record (fixed id, so phones never duplicate it). Returns true if added.
+export function ensureLoanBill() {
+  if (!loanLive() || S.bills.some(b => b.id === "loan-emi")) return false;
+  put("bills", { id: "loan-emi", name: "Education loan", amount: emiYen(), freq: "month", kind: "loan", paid: {} });
+  return true;
+}
 
 /* ---------- archives ---------- */
 // The full plan, shown only in Settings → System Archives.
