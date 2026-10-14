@@ -38,6 +38,7 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
+let afterNav = null; // runs once after the next route change (e.g. open a form on the new screen)
 // Swipes: the day header on Plan changes the day; anywhere else changes tab. Alerts close with their red dot.
 // Sliders, fields and anything that scrolls sideways keep their own swipe.
 let swipe0 = null;
@@ -66,7 +67,7 @@ document.addEventListener("touchend", e => {
   const T = openTabs(), cur = T.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = T[cur + (dx < 0 ? 1 : -1)];
   if (next) go(next[0]);
 }, { passive: true });
-window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (!location.hash.startsWith("#classes/q")) dq = null; chEdit = false; trialForm = null; battle = null; apForm = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (!location.hash.startsWith("#classes/q")) dq = null; chEdit = false; trialForm = null; battle = null; apForm = null; momentForm = null; if (recorder) recorder.stop(); if (afterNav) { afterNav(); afterNav = null; } render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
@@ -98,8 +99,8 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : milestoneHtml(cer.ms)) : "");
-  $("#fab").innerHTML = TAB_OF[tab] === "plan" ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : milestoneHtml(cer.ms)) : "");
+  $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
   hydrate();
@@ -317,7 +318,7 @@ function sheetHtml(k) {
   const closeBtn = `<button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button>`;
   // Edit sheets: forms and actions for the tapped item.
   const edit = { task: () => arg ? taskActHtml(arg) : taskFormHtml(), block: () => blockFormHtml(blockForm && blockForm !== "new" ? live("blocks").find(b => b.id === blockForm) : blockNew),
-    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg) }[kind];
+    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg), moment: momentHtml, rate: () => rateHtml(arg), offer: offerHtml }[kind];
   return edit ? `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>` : "";
 }
 // Every gear opens the one Settings page, at the section for the screen it sits on.
@@ -328,8 +329,15 @@ function ceremony() {
   if (ceremonyDone) return null;
   if (Sy.has(1) && ["study", "body"].includes(homeState().k)) return null; // never during a Dungeon
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
-  const m = Sy.nextMilestone(); return m ? { ms: m } : null;
+  const m = Sy.nextMilestone(); if (m) return { ms: m };
+  if (Sy.has(2) && E.parse(E.today()).getDay() === 0 && E.moneyDue() && lsGet(MONEYWIN_KEY) !== E.today()) return { money: true };
+  return null;
 }
+const MONEYWIN_KEY = "kts-moneywin";
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const moneyWinHtml = () => `<div class="milestone" role="dialog" aria-label="Money check-in"><div class="ms-in">
+  <div class="hdr">System · Sunday</div>${px("coin", "ms-px")}<h2 class="ms-t">Money check-in</h2><p class="muted">Bank balance and debt left. Twenty seconds, then the week is counted.</p>
+  <button class="btn primary block" data-act="moneywin" data-id="money">Open Store</button><button class="btn block" style="margin-top:8px" data-act="moneywin">Later</button></div></div>`;
 const unlockHtml = u => `<div class="milestone" role="dialog" aria-label="New area unlocked: ${esc(u.area)}"><div class="ms-in">
   <div class="hdr">System · New area unlocked</div>${px({ Dungeon: "sword", Store: "coin", Study: "scroll", People: "people", Tower: "trophy" }[u.area] || "star", "ms-px")}<h2 class="ms-t">${esc(u.area)}</h2><p class="muted">${esc(u.text)}</p>
   <button class="btn primary block" data-act="unlock" data-id="${u.tab || ""}">${u.tab ? "Open " + esc(u.area) : "Continue"}</button></div></div>`;
@@ -555,6 +563,7 @@ function vMoney([sub] = []) {
     </div>
     <div class="btns"><button class="btn primary block" data-act="savemoney">${due ? "Submit report" : "Update report"}</button></div>`;
   return `<header class="top"><div><div class="hdr">Treasury</div><h1>Store</h1></div>${gear("money")}</header>
+  ${live("wishlist").length ? "" : win("First quest", `<b>Add one wishlist item you can afford.</b><div class="x">Something small you'd actually buy this month. XP and the store fund unlock it.</div><div class="btns"><button class="btn sm primary" data-act="firstwish">Add an item</button></div>`, "", "flag")}
   ${due ? `<div class="panel report-due"><h3>Weekly money report is due</h3><p class="small muted">Bank balance and debt left. Takes 20 seconds.</p>${form}</div>` : ""}
 
   <div class="hero">
@@ -709,11 +718,40 @@ function vSocial([sub, id]) {
   if (sub === "p" && id) return vPerson(id);
   if (sub === "me") return vSelf();
   sub = sub || "people";
-  if (sub === "log") return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><h1>Hangouts</h1>${vHangouts()}`;
+  if (sub === "log") return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><h1>Moment log</h1>${vHangouts()}`;
   if (sub === "habits") return vHabits();
   if (sub === "battle") return vBattle();
   if (sub === "appraise") return vAppraise(id);
-  return `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>People</h1></div></header>${trialsPanel()}${vPeople()}<button class="quiet-row" data-act="go" data-id="people/log"><span class="grow">Hangout log</span><span class="chev">${ic("right")}</span></button>`;
+  const n = live("people").length;
+  return `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>People</h1></div></header>
+  ${n ? "" : win("First quest", `<b>Add your Rival.</b><div class="x">Someone a step ahead of you socially: a classmate, a senpai, a friend you look up to. You'll rate them and yourself on the same traits.</div><div class="btns"><button class="btn sm primary" data-act="personform">Add your Rival</button></div>`, "", "flag")}
+  ${trialHero()}
+  <button class="btn primary block bigbtn" data-act="moment">${px("people")} Log a moment</button>
+  ${fold("ppl-rival", `<b class="grow">Rival</b><span class="small muted">${(() => { const L = ladder(); return L.opp ? esc(L.opp.p.name) : L.me.avg == null ? "rate yourself" : "cleared"; })()}</span>`, rivalBox())}
+  ${fold("ppl-list", `<b class="grow">People and ranks</b><span class="small muted">${n}</span>`, `${vPeople()}<div class="btns"><button class="btn sm" data-act="personform">+ Person</button></div>`)}
+  ${fold("ppl-more", `<b class="grow">Trials, habits and log</b>`, `<div class="btns" style="margin-top:0">${Sy.has(5) ? `<button class="btn sm" data-act="sheet" data-id="trial">New trial</button>` : ""}<button class="btn sm" data-act="go" data-id="people/habits">Habit library</button><button class="btn sm" data-act="go" data-id="people/battle">Battle log</button>${Sy.has(5) ? `<button class="btn sm" data-act="go" data-id="people/appraise">Appraisal</button>` : ""}<button class="btn sm" data-act="go" data-id="people/log">Moment log</button></div>
+    ${Soc.openTrials().length > 1 ? `<div class="list" style="margin-top:10px">${Soc.openTrials().slice(1, 6).map(k => trialRow(k, false)).join("")}</div>` : ""}`)}`;
+}
+// This week's Trial: the oldest open one, or one tap to take the week's Trial (Rival at stage 4, the next Tower floor from stage 5).
+function weeklyPick() {
+  if (Sy.has(5)) { const fl = Soc.towerNext(); return { type: "tower", title: `Floor ${fl}: ${TOWER[fl - 1]}`, floor: fl, label: `Fear Tower · floor ${fl}` }; }
+  const L = ladder();
+  if (L.opp) { const g = gaps(L.opp)[0], c = g ? g.c : S.settings.social.criteria[0]; return { type: "rival", title: `${c} vs ${L.opp.p.name}: ${RIVAL_ACT[c] || "Practise " + c + " on purpose twice this week."}`, trait: c, person: L.opp.p.id, label: "Rival Trial" }; }
+  return { type: "taste", title: TRIAL_TASTE, label: "Show your taste" };
+}
+const TRIAL_TASTE = "Show one thing you're into: wear it, play it or recommend it, and say why";
+function trialHero() {
+  const k = Soc.openTrials()[0], sun = E.parse(E.today()).getDay() === 0;
+  if (k) {
+    const floor = k.trial === "tower" ? `Fear Tower · floor ${k.floor || 1}` : TRIALS[k.trial]?.name || "Trial";
+    return `<div class="hero trial-hero"><div class="row between"><span class="hdr">${px("flame")} This week's Trial</span><span class="hdr">+${Soc.xpFor(k)} XP</span></div>
+      <div class="small muted" style="margin-top:4px">${esc(floor)} · ${esc(trialDue(k))}</div><div class="now-t">${esc(k.title)}</div>
+      <div class="btns"><button class="btn go" data-act="taskdone" data-id="${k.id}">Done</button>${k.snoozed ? "" : `<button class="btn" data-act="trialnotyet" data-id="${k.id}">Not yet</button>`}</div></div>`;
+  }
+  const w = weeklyPick();
+  return `<div class="hero trial-hero"><div class="row between"><span class="hdr">${px("flame")} This week's Trial</span>${sun ? `<span class="hdr">Sunday</span>` : ""}</div>
+    <div class="small muted" style="margin-top:4px">${esc(w.label)}</div><div class="now-t">${esc(w.title)}</div>
+    <div class="btns"><button class="btn go" data-act="weeklytrial">Accept</button></div></div>`;
 }
 function balance() {
   const t = E.today(), hs = live("hangouts").filter(h => E.daysBetween(h.date, t) < 30), ppl = Object.fromEntries(live("people").map(p => [p.id, p]));
@@ -751,23 +789,18 @@ function vPerson(id) {
   if (!p) return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><p class="empty">Not found.</p>`;
   const rk = rankOf(p), st = personState(p), crit = S.settings.social.criteria;
   const hs = live("hangouts").filter(h => (h.people || []).includes(id)).sort((a, b) => b.date.localeCompare(a.date));
+  const sc = p.scores || {}, notes = live("fieldNotes").filter(n => n.person === p.id), mom = h => `<div class="item small"><b>${E.fmtDate(h.date)}</b> ${esc(h.what || "")}${h.note ? `<div class="muted">${esc(h.note)}</div>` : ""}</div>`;
   return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button>
-  <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
-  <h2>Assessment</h2>
-  <div class="panel">${crit.map(c => critRow(c, (p.scores || {})[c] || 0, p.id)).join("")}</div>
-  <h2>Hangouts</h2>
-  <div class="panel"><div class="grid">
-    <label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
-    <p class="small muted" style="margin-top:8px">${st.since === null ? "No hangouts logged yet." : `Last seen ${E.fmtDate(st.ls)} (${st.since}d ago).`}</p>
-    <div class="btns"><button class="btn go" data-act="hangwith" data-id="${p.id}">Log a hangout with ${esc(p.name)}</button></div></div>
-  <h2>Field notes <span class="n">habits worth copying</span></h2>
-  <div class="panel">${live("fieldNotes").filter(n => n.person === p.id).map(n => `<div class="item small"><b>${esc(n.trait)}</b> · ${esc(n.habit)}${n.status ? ` <span class="muted">· ${n.status === "notme" ? "not me" : n.status}</span>` : ""}</div>`).join("") || `<p class="empty">Nothing yet. What do they do that works?</p>`}
-    <div class="btns"><button class="btn sm" data-act="go" data-id="people/habits">Add in Habit library</button></div></div>
-  <h2>Notes</h2>
-  <div class="panel"><label class="f">Where you met<input data-ch="pwhere" data-id="${p.id}" value="${esc(p.where || "")}"></label>
-    <label class="f" style="margin-top:8px">Notes (birthday, interests, what you talked about)<textarea data-ch="pnote" data-id="${p.id}" rows="4">${esc(p.note || "")}</textarea></label></div>
-  <h2>History <span class="n">${hs.length}</span></h2>
-  <div class="panel">${hs.map(h => `<div class="item small"><b>${E.fmtDate(h.date)}</b> ${esc(h.what || "")}${h.note ? `<div class="muted">${esc(h.note)}</div>` : ""}</div>`).join("") || `<p class="empty">Nothing yet.</p>`}</div>
+  <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}${st.since === null ? "" : ` · seen ${st.since ? st.since + "d ago" : "today"}`}</div></div></div>
+  <div class="panel"><span class="k">Last moments</span>${hs.slice(0, 3).map(mom).join("") || `<p class="empty">No moments yet.</p>`}
+    <div class="btns"><button class="btn go" data-act="moment" data-id="${p.id}">Log a moment with ${esc(p.name)}</button></div></div>
+  <div class="panel"><span class="k">Known traits</span><div class="traits">${crit.map(c => `<span class="trait"><span>${esc(c)}</span><b class="mono">${sc[c] > 0 ? sc[c] : "?"}</b></span>`).join("")}</div>
+    ${notes.length ? `<div style="margin-top:8px">${notes.map(n => `<div class="item small"><b>${esc(n.trait)}</b> · ${esc(n.habit)}${n.status ? ` <span class="muted">· ${n.status === "notme" ? "not me" : n.status}</span>` : ""}</div>`).join("")}</div>` : ""}</div>
+  ${fold("per-rate", `<b class="grow">Rate traits</b>`, crit.map(c => critRow(c, sc[c] || 0, p.id)).join(""), !crit.some(c => sc[c] > 0))}
+  ${fold("per-notes", `<b class="grow">Notes</b>`, `<div class="grid"><label class="f">Type<select data-ch="ptype" data-id="${p.id}">${PERSON_TYPES.map(([k, l]) => `<option value="${k}" ${p.type === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+    <label class="f" style="margin-top:8px">Where you met<input data-ch="pwhere" data-id="${p.id}" value="${esc(p.where || "")}"></label>
+    <label class="f" style="margin-top:8px">Notes (birthday, interests, what you talked about)<textarea data-ch="pnote" data-id="${p.id}" rows="4">${esc(p.note || "")}</textarea></label>`)}
+  ${hs.length > 3 ? fold("per-hist", `<b class="grow">All moments</b><span class="small muted">${hs.length}</span>`, hs.map(mom).join("")) : ""}
   <div class="btns"><button class="btn danger" data-act="delperson" data-id="${p.id}">Delete ${esc(p.name)}</button></div>`;
 }
 function vHangouts() {
@@ -781,10 +814,10 @@ function vHangouts() {
       <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
       <label class="f">What<input data-f="what" placeholder="e.g. Izakaya, study, date night"></label>
       <label class="f" style="flex-basis:100%">Note<input data-f="note" placeholder="optional"></label></div>
-    <div class="btns"><button class="btn go" data-act="addhang">Log hangout</button></div></div>
+    <div class="btns"><button class="btn go" data-act="addhang">Log it</button></div></div>
   <h2>History <span class="n">${hs.length}</span></h2>
   <div class="panel">${hs.map(h => `<div class="item row between"><div class="grow small"><b>${E.fmtDate(h.date)}</b> ${esc(h.what || "")}<div class="muted">${(h.people || []).map(id => byId[id] ? esc(byId[id].name) : "?").join(", ")}${h.note ? " · " + esc(h.note) : ""}</div></div>
-    <button class="btn sm danger" data-act="delhang" data-id="${h.id}" aria-label="Delete hangout">${ic("x")}</button></div>`).join("") || `<p class="empty">No hangouts logged.</p>`}</div>
+    <button class="btn sm danger" data-act="delhang" data-id="${h.id}" aria-label="Delete hangout">${ic("x")}</button></div>`).join("") || `<p class="empty">No moments logged.</p>`}</div>
   <details class="panel"><summary>Rating criteria</summary>
     <p class="small muted">One per line. Renaming one drops its old scores.</p>
     <textarea data-ch="criteria" rows="6">${esc(S.settings.social.criteria.join("\n"))}</textarea></details>`;
@@ -1187,7 +1220,7 @@ function trialsPanel() {
 }
 // The new-trial sheet: pick a type, then a pre-filled form.
 function trialSheetHtml(type) {
-  if (!type) return `<h3>New trial</h3><div class="actlist">${Object.entries(TRIALS).filter(([k]) => k !== "prep").map(([k, t]) =>
+  if (!type) return `<h3>New trial</h3><div class="actlist">${Object.entries(TRIALS).filter(([k]) => k !== "prep" && (Sy.has(5) || !["tower", "boss", "appraisal", "invasion"].includes(k))).map(([k, t]) =>
     `<button class="act" data-act="trialtype" data-id="${k}">${ic(k === "tower" ? "flame" : k === "boss" ? "star" : k === "invasion" ? "users" : "target")}<span>${esc(t.name)}${k === "tower" ? ` · floor ${Soc.towerNext()}` : ""}<small>${esc(t.note)}</small></span></button>`).join("")}</div>`;
   const f = trialForm || (trialForm = { type, fear: null });
   if (f.type !== type) Object.assign(f, { type, fear: null, title: null });
@@ -1312,17 +1345,43 @@ function taskActHtml(id) {
       ${k.penalty ? "" : `<button class="act danger" data-act="deltask" data-id="${k.id}">${ic("x")}<span>Delete</span></button>`}
     </div>`;
 }
-// The + button: one place to add anything on the Plan tab.
+// The one + button: To-do, Block, Moment, with the current tab's most likely pick first.
 function addHtml() {
-  return `<h3>Add</h3><div class="actlist">
-    <button class="act" data-act="newtask">${ic("check")}<span>Task<small>The System finds it a slot</small></span></button>
-    <button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, study or workout time</small></span></button>
-    <button class="act" data-act="personform">${ic("user")}<span>Person<small>Add to your registry</small></span></button>
-    <button class="act" data-act="go" data-id="people/log">${ic("users")}<span>Hangout<small>Log time with people</small></span></button>
-    <button class="act trial" data-act="sheet" data-id="trial">${ic("flame")}<span>Trial<small>A social quest with a Battle Log</small></span></button>
-    <button class="act" data-act="go" data-id="people/habits">${ic("edit")}<span>Field note<small>A habit you saw someone do well</small></span></button>
-  </div>`;
+  const o = {
+    todo: `<button class="act" data-act="newtask">${ic("check")}<span>To-do<small>The System finds it a slot</small></span></button>`,
+    block: `<button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, study or workout time</small></span></button>`,
+    moment: Sy.has(4) ? `<button class="act" data-act="moment">${ic("users")}<span>Moment<small>Time with someone, and what you saw</small></span></button>` : "",
+  };
+  const order = TAB_OF[route()[0]] === "people" ? ["moment", "todo", "block"] : ["todo", "block", "moment"];
+  return `<h3>Add</h3><div class="actlist">${order.map(k => o[k]).join("")}</div>`;
 }
+/* ---------- Log a moment: one sheet makes the hangout, the field note and the Battle Log at once ---------- */
+let momentForm = null; // { who: [ids], trial: null|true|false, line, habit, trait, name }
+function momentTrial(f) { const open = Soc.openTrials(); return open.find(k => k.person && f.who.includes(k.person)) || open[0] || null; }
+function momentHtml() {
+  const f = momentForm || (momentForm = { who: [], trial: null, line: "", habit: "", trait: "", name: "" });
+  const ppl = live("people").sort((a, b) => a.name.localeCompare(b.name)), crit = S.settings.social.criteria;
+  const k = momentTrial(f), match = k && k.person && f.who.includes(k.person), tr = f.trial ?? !!match;
+  return `<h3>Log a moment</h3><div id="momentForm">
+    <div class="small muted">Who</div>
+    <div class="chips">${ppl.map(p => `<button class="chip" data-act="mwho" data-id="${p.id}" aria-pressed="${f.who.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div>
+    <label class="f" style="margin-top:8px">${ppl.length ? "Or someone new" : "Name"}<input data-f="name" value="${esc(f.name)}" placeholder="Name or nickname"></label>
+    <label class="f" style="margin-top:8px">What happened<input data-f="line" value="${esc(f.line)}" placeholder="One line" maxlength="140"></label>
+    <details class="key" ${f.habit ? "open" : ""}><summary>A habit worth copying? (optional)</summary>
+      <div class="grid"><label class="f">Trait<select data-f="trait">${crit.map(c => `<option ${f.trait === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+      <label class="f" style="flex-basis:100%">What they did<input data-f="habit" value="${esc(f.habit)}" placeholder="Asked a second question; used my name"></label></div></details>
+    ${k ? `<div style="margin-top:12px"><div class="small">Was it a Trial?</div><div class="tiny muted">${esc(k.title)}</div><div class="seg" style="margin-top:6px"><button data-act="mtrial" data-id="yes" aria-pressed="${tr}">Yes</button><button data-act="mtrial" data-id="no" aria-pressed="${!tr}">No</button></div></div>` : ""}
+    <div class="btns"><button class="btn go block" data-act="momentsave">Save</button></div></div>`;
+}
+// After the 3rd moment with someone, the System asks for one trait you haven't rated.
+function rateHtml(pid) {
+  const p = live("people").find(x => x.id === pid); if (!p) return `<p class="empty">Not found.</p>`;
+  const c = S.settings.social.criteria.find(c => !((p.scores || {})[c] > 0)); if (!c) return `<p class="small">All rated.</p>`;
+  return win("System", `Third moment with <b>${esc(p.name)}</b>. Rate one trait.${critRow(c, 0, p.id)}<div class="btns"><button class="btn" data-act="sheet">Later</button></div>`, "", "people");
+}
+// After an application Boss Raid is cleared.
+const offerHtml = () => win("System", `Raid cleared. <b>Did you get an offer?</b><div class="x">Log it and Act I counts it. You can also log it later in Profile.</div>
+  <div class="btns"><button class="btn primary" data-act="offer">I got an offer</button><button class="btn" data-act="sheet">Not yet</button></div>`, "", "crown");
 
 function blockFormHtml(b) {
   b = b || { title: "", kind: "other", days: [], start: "09:00", end: "10:00", locked: false, date: null };
@@ -1746,6 +1805,7 @@ function vSettings([sec] = []) {
     <p class="tiny muted">Used for the greeting on the System screen.</p>`, esc(st.name || "Arin"))}
   ${planSettings()}
   ${sx("dungeon", "Dungeon", dungeonSettings())}
+  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
   ${sx("money", "Money and Store", moneySettings())}
   ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
@@ -1762,7 +1822,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.3 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1950,6 +2010,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       put("wishlist", { ...w, bought: { date: E.today(), xp: cost, yen: w.price } }); save();
       toast(`Claimed: ${w.name}. Enjoy it, you earned it.`, true); return render();
     }
+    case "firstwish": afterNav = () => { wishForm = "new"; }; return go("money/rewards");
     case "unbuy": { const w = live("wishlist").find(x => x.id === id); if (!w || !confirm("Undo this purchase? XP and budget come back.")) return; put("wishlist", { ...w, bought: null }); save(); return render(); }
 
     // social
@@ -1973,6 +2034,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       if (sc[c] === n) delete sc[c]; else sc[c] = n;
       const before = rankOf(p).r; p.scores = sc; put("people", p); save();
       const after = rankOf(p).r; if (after !== before && after !== "?") toast(`${p.name}: rank ${after}`);
+      if (sheet && sheet.startsWith("rate:")) { sheet = null; if (after === before || after === "?") toast("Rated. One more read on " + p.name); }
       return render();
     }
     case "delperson": {
@@ -1980,6 +2042,29 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       remove("people", id); save(); return go("people");
     }
     case "hangwith": hangSel = [id]; return go("people/log");
+    case "moment": momentForm = { who: id ? [id] : [], trial: null, line: "", habit: "", trait: "", name: "" }; sheet = "moment"; return render();
+    case "mwho": { Object.assign(momentForm, readForm("#momentForm")); const w = momentForm.who; momentForm.who = w.includes(id) ? w.filter(x => x !== id) : [...w, id]; momentForm.trial = null; return render(); }
+    case "mtrial": Object.assign(momentForm, readForm("#momentForm")); momentForm.trial = id === "yes"; return render();
+    case "momentsave": {
+      const f = momentForm; if (!f) return; Object.assign(f, readForm("#momentForm"));
+      const name = (f.name || "").trim(), line = (f.line || "").trim();
+      if (!f.who.length && !name) return toast("Who was it?");
+      if (!line) return toast("What happened? One line");
+      const k = momentTrial(f), tr = k && (f.trial ?? !!(k.person && f.who.includes(k.person)));
+      const who = [...f.who]; if (name) who.push(put("people", { name, type: "friend", where: "", scores: {}, every: null, note: "" }).id);
+      const mid = uid(), h = put("hangouts", { date: E.today(), people: who, what: line, note: "", moment: mid });
+      if ((f.habit || "").trim()) put("fieldNotes", { person: who[0], trait: f.trait || S.settings.social.criteria[0], habit: f.habit.trim(), status: null, date: E.today(), moment: mid });
+      const ppl = live("people"), social = who.some(i => { const p = ppl.find(x => x.id === i); return p && p.type !== "partner"; });
+      const gains = social ? [E.gainXP("social", "hang:" + h.id, "Moment")] : [];
+      momentForm = null; sheet = null;
+      // Third moment with someone who still has an unrated trait: ask for one.
+      const third = who.find(i => { const p = ppl.find(x => x.id === i); return p && live("hangouts").filter(x => (x.people || []).includes(i)).length === 3 && S.settings.social.criteria.some(c => !((p.scores || {})[c] > 0)); });
+      if (tr) { battle = { id: k.id, actual: null, asked: null, turned: null, ended: null, result: null, what: line, react: "", next: "", moment: mid }; sheet = "battle:" + k.id; }
+      else if (third) sheet = "rate:" + third;
+      save(); announce(gains); if (!gains.length) toast("Logged"); return render();
+    }
+    case "weeklytrial": { const w = weeklyPick(), { label, ...x } = w, t = E.today(), dw = E.parse(t).getDay(), due = E.addDays(t, dw === 0 ? 7 : 7 - dw); Soc.addTrial(w.type, { ...x, due }); save(); toast("Trial accepted. Due " + dayLabel(due) + "."); return render(); }
+    case "trialnotyet": { const k = live("tasks").find(x => x.id === id); if (!k) return; const d = E.addDays(k.due && k.due > E.today() ? k.due : E.today(), 1); put("tasks", { ...k, due: d, snoozed: true }); save(); toast("Moved to " + dayLabel(d) + ". One push per Trial."); return render(); }
     case "addhang": {
       const f = readForm("#hangForm"), ids = [...document.querySelectorAll("#hpeople [aria-pressed=true]")].map(b => b.dataset.id);
       if (!ids.length) return toast("Pick who you were with");
@@ -2020,10 +2105,11 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "offer": {
       const on = !(S.settings.system || {}).offerAt;
       if (!confirm(on ? "Log a job offer in one of your target roles?" : "Remove the logged offer?")) return;
-      Sy.logOffer(on);
+      Sy.logOffer(on); if (sheet === "offer") sheet = null;
       if (on) { const d = prompt("Job start date (YYYY-MM-DD)? Leave empty if you don't know yet; you can set it in Settings → System Archives.", ""); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) Sy.setLoan({ takeover: d.trim() }); }
       save(); return render();
     }
+    case "moneywin": try { localStorage.setItem(MONEYWIN_KEY, E.today()); } catch (e) {} ceremonyDone = true; if (id) { entering = true; return go(id); } return render();
     case "milestone": Sy.seeMilestone(id); ceremonyDone = true; save(); return render();
     case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
     case "skipstage": { const n = +($("#skipStage") || {}).value; if (!confirm(`Set the System to stage ${n}? Use this for testing.`)) return; Sy.skipTo(n); save(); toast("Stage " + n); return render(); }
@@ -2201,7 +2287,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const k = live("tasks").find(x => x.id === battle.id); if (!k) return;
       if (!battle.actual) return toast("Rate how scary it was");
       const { id: _i, ...log } = battle; const gains = Soc.logBattle(k, log);
-      battle = null; sheet = null; save(); announce(gains); if (!gains.length) toast("Logged"); return render();
+      battle = null; sheet = k.trial === "boss" && !(S.settings.system || {}).offerAt && /interview|applic|apply|offer|recruit|job|career|OB|OG|internship|ES\b/i.test(k.title) ? "offer" : null;
+      save(); announce(gains); if (!gains.length) toast("Logged"); return render();
     }
     case "trialundo": { const k = live("tasks").find(x => x.id === id); if (!k) return; Soc.undoTrial(k); sheet = null; save(); return render(); }
     case "trialdel": { const k = live("tasks").find(x => x.id === id); if (!k || !confirm("Drop this trial? If it's overdue, its penalty stays.")) return; remove("tasks", id); battle = null; sheet = null; save(); return render(); }
