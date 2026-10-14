@@ -6,7 +6,7 @@ import * as Sync from "./sync.js";
 import * as P from "./planner.js";
 import { ic } from "./icons.js";
 import * as St from "./study.js";
-import * as G from "./glass.js";
+import { px } from "./px.js";
 import * as K from "./cards.js";
 import { STARTER } from "./decks.js";
 import * as J from "./jlpt.js";
@@ -38,39 +38,25 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-// Swipes: an alert sideways dismisses it; the day header on Plan changes the day; anywhere else changes tab.
+// Swipes: the day header on Plan changes the day; anywhere else changes tab. Alerts close with their red dot.
 // Sliders, fields and anything that scrolls sideways keep their own swipe.
 let swipe0 = null;
 function scrollsX(el) {
   for (; el && el !== document.body; el = el.parentElement) {
-    if (el.matches("input,textarea,select,.tune,.pills,.chips,.carousel,[data-noswipe]")) return true;
+    if (el.matches("input,textarea,select,.pills,.chips,.carousel,[data-noswipe]")) return true;
     if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true;
   }
   return false;
 }
 document.addEventListener("touchstart", e => {
   swipe0 = null; if (e.touches.length !== 1 || document.body.classList.contains("modal-open")) return;
-  const x = e.touches[0].clientX, y = e.touches[0].clientY, al = e.target.closest(".al");
-  if (al) swipe0 = { kind: "alert", el: al, x, y };
-  else if (e.target.closest("#dayline")) swipe0 = { kind: "day", x, y };
+  const x = e.touches[0].clientX, y = e.touches[0].clientY;
+  if (e.target.closest("#dayline")) swipe0 = { kind: "day", x, y };
   else if (e.target.closest("#app") && !scrollsX(e.target)) swipe0 = { kind: "tab", x, y };
-}, { passive: true });
-document.addEventListener("touchmove", e => {
-  if (!swipe0 || swipe0.kind !== "alert") return;
-  const dx = e.touches[0].clientX - swipe0.x, dy = e.touches[0].clientY - swipe0.y;
-  if (!swipe0.drag && Math.abs(dy) > Math.abs(dx)) { swipe0 = null; return; }
-  swipe0.drag = true; swipe0.el.style.transition = "none";
-  swipe0.el.style.transform = `translateX(${dx}px)`; swipe0.el.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 300));
 }, { passive: true });
 document.addEventListener("touchend", e => {
   if (!swipe0) return; const s0 = swipe0, t = e.changedTouches[0], dx = t.clientX - s0.x, dy = t.clientY - s0.y; swipe0 = null;
   const horiz = Math.abs(dx) >= 60 && Math.abs(dx) >= Math.abs(dy) * 1.5;
-  if (s0.kind === "alert") {
-    const el = s0.el; el.style.transition = "transform .2s, opacity .2s";
-    if (!horiz || Math.abs(dx) < 90) { el.style.transform = ""; el.style.opacity = ""; return; }
-    el.style.transform = `translateX(${dx < 0 ? -110 : 110}%)`; el.style.opacity = "0";
-    dismiss(el.dataset.akey); setTimeout(render, 200); return;
-  }
   if (!horiz) return;
   if (s0.kind === "day") {
     const el = $("#dayline"), d = E.addDays(planDate || E.today(), dx < 0 ? 1 : -1);
@@ -85,14 +71,18 @@ window.addEventListener("hashchange", () => { if (location.hash === "#plan/peopl
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
+const TAB_PX = { home: "eye", plan: "cal", money: "coin", status: "chart" };
+// The pixel icon in front of each screen's title.
+const HEAD_PX = { home: "eye", alerts: "bell", settings: "gear", more: "gear", dungeon: "gate", focus: "sword", cards: "scroll", jlpt: "flag", classes: "crown", study: "scroll", train: "sword", body: "flame", plan: "cal", social: "people", money: "coin", status: "chart", skills: "chart" };
 const TAB_OF = { home: "home", alerts: "home", more: "home", settings: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", classes: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
   const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, study: vStudyPage, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vStatus, more: vSettings, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
-  $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
+  $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(TAB_PX[k])}${l}</button>`).join("");
   document.body.dataset.tab = tab;
+  const h1 = $("#app header.top h1") || $("#app > h1"); if (h1) h1.insertAdjacentHTML("afterbegin", px(HEAD_PX[tab] || "eye", "hpx"));
   const app = $("#app"), entering0 = entering;
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
   else app.classList.remove("enter");
@@ -119,7 +109,9 @@ const tip = (key, text) => tipsSeen()[key] ? "" : `<div class="tip"><span class=
 
 /* ================= SYSTEM (home) ================= */
 const yen = n => "¥" + Math.round(n || 0).toLocaleString("en-US");
-const sysBox = (body, sub, act) => `<div class="sys"><b>System</b> · ${body}${sub ? `<div class="x">${sub}</div>` : ""}${act || ""}</div>`;
+// A System window: a titlebar with three dots (the red one closes alerts) and the message under it.
+const win = (title, inner, cls = "", icon = "eye") => `<div class="sys win ${cls}"><div class="tb"><span class="tl"><i></i><i></i><i></i></span><span class="tt">${title}</span>${px(icon, "tpx")}</div><div class="wb">${inner}</div></div>`;
+const sysBox = (body, sub, act) => win("System", `${body}${sub ? `<div class="x">${sub}</div>` : ""}${act || ""}`);
 
 // Drop-downs remember whether you left them open (per phone).
 const FOLD_KEY = "kts-fold";
@@ -175,11 +167,11 @@ function vHome() {
   <button class="strip" data-act="nav" data-id="status">
     <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${Sy.streak().n}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
   ${alertStrip()}
-  <button class="panel act" data-act="nav" data-id="status"><div class="row between"><span class="hdr">Act I · Escape Kofu</span><span class="chev">${ic("right")}</span></div>
+  <button class="panel act" data-act="nav" data-id="status"><div class="row between"><span class="hdr">${px("crown")} Act I · Escape Kofu</span><span class="chev">${ic("right")}</span></div>
     ${bar(a1.shown, "var(--acc)")}<div class="small muted">${a1.parts.filter(x => !x.done).map(x => esc(x.label)).join(" · ")}${a1.week > 0 ? ` · this week: put away ${yen(a1.week)}` : ""}</div></button>
 
   <div class="hero now ${wd ? "winding" : ""}">
-    <div class="row between"><span class="hdr">Now · ${P.toHM(nm)}</span>${cur && !wd ? `<span class="hdr">${P.dur(Math.max(0, cur.e - nm))} left</span>` : ""}</div>
+    <div class="row between"><span class="hdr">${px("bolt")} Now · ${P.toHM(nm)}</span>${cur && !wd ? `<span class="hdr">${P.dur(Math.max(0, cur.e - nm))} left</span>` : ""}</div>
     <div class="now-t">${esc(nowTitle)}</div>
     ${wd ? `<div class="small muted">Bed at ${P.toHM(wd.bed)}. Screens off, shower, set out tomorrow's clothes.</div>` : cur && cur.type === "block" ? topicLine(cur.b) : ""}
     ${cur && !wd ? `<div class="bar"><i style="width:${pct * 100}%;background:var(--sys)"></i></div>` : ""}
@@ -187,7 +179,7 @@ function vHome() {
       <button class="btn sm ${into !== "plan" || (fg.open && fg.ended) ? "primary" : ""}" data-act="nav" data-id="${into}">${act}</button></div>
   </div>
 
-  ${fold("quests", `<div class="grow"><div class="row between"><b>Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}${top3.length ? `<ul class="top3">${top3.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}</div>`,
+  ${fold("quests", `<div class="grow"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}${top3.length ? `<ul class="top3">${top3.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}</div>`,
     `${cb ? `<div class="q ${cb.claimed ? "done" : ""}"><span class="lockbox">${ic(cb.claimed ? "check" : "flame")}</span><div class="grow"><div class="t">Comeback quest</div><div class="small muted">Yesterday was empty. Clear any one quest today.</div></div><div class="xp">+${Sy.COMEBACK_XP}</div></div>` : ""}${q.trials.length ? `<div class="qsec trial">Trials <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
      <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
      <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
@@ -263,26 +255,10 @@ function sheetHtml(k) {
 }
 // Every gear opens the one Settings page, at the section for the screen it sits on.
 const gear = k => `<button class="rbtn" data-act="nav" data-id="settings/${k}" aria-label="Settings">${ic("settings")}</button>`;
-function lookSettings() {
-  const c = G.cfg();
-  const lk = G.look();
-  return `<h3>Glass look</h3>
-    <p class="small muted">Applies right away and stays on this phone.</p>
-    <div class="tune">${[["hue", "Hue", -180, 180, 1, "°"], ["clear", "Transparency", 50, 100, 1, "%"], ["frost", "Frost", 0, 40, 1, "px"], ["grain", "Grain", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
-      `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${lk[k]}" data-look="${k}"><output>${lk[k]}${u}</output></label>`).join("")}</div>
-    <div class="btns"><button class="btn sm" data-act="lookreset">Reset glass look</button></div>
-    <h3 style="margin-top:14px">Background</h3>
-    <p class="small muted">A photo of your choice, blurred and darkened behind the cards. It stays on this phone.</p>
-    <div class="btns"><label class="btn sm">${c.photo ? "Change photo" : "Pick a photo"}<input type="file" accept="image/*" data-ch="bgphoto" hidden></label>${c.photo ? `<button class="btn sm" data-act="bgclear">Remove</button>` : ""}</div>
-    ${c.photo ? `<div class="tune">${[["blur", "Blur", 0, 20, 1, "px"], ["dim", "Brightness", 0.15, 1, 0.05, ""], ["zoom", "Zoom", 1, 1.8, 0.02, "×"], ["y", "Crop height", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
-      `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${c[k]}" data-tune="${k}"><output>${c[k]}${u}</output></label>`).join("")}</div>
-    <div class="btns"><button class="btn sm" data-act="glassreset">Reset photo</button></div>` : ""}`;
-}
-
 /* ---------- milestone window ---------- */
 // Full screen, for big moments only (Act steps, gates). Routine ticks stay quiet.
 const milestoneHtml = m => `<div class="milestone" role="dialog" aria-label="${esc(m.title)}"><div class="ms-in">
-  <div class="hdr">System · Milestone</div><h2 class="ms-t">${esc(m.title)}</h2><p class="muted">${esc(m.text)}</p>
+  <div class="hdr">System · Milestone</div>${px("trophy", "ms-px")}<h2 class="ms-t">${esc(m.title)}</h2><p class="muted">${esc(m.text)}</p>
   <button class="btn primary block" data-act="milestone" data-id="${esc(m.id)}">Continue</button></div></div>`;
 
 /* ---------- morning brief ---------- */
@@ -318,8 +294,8 @@ function penaltyBox() {
   const lines = pens.map(p => { const k = live("tasks").find(x => x.id === p.task), w = k && at.get(k.id);
     if (p.trial) return `<div class="x">Missed trial: ${esc(p.title)}, due ${esc(dayLabel(p.date))}. Clear it late to lift the penalty.</div>`;
     return `<div class="x">Missed ${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}. Penalty quest: ${k ? P.dur(k.mins) + " make-up" : "make-up"}${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`; }).join("");
-  return `<div class="sys pen"><b>Penalty</b> ${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
-    ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan">Open penalty quests</button></div></div>`;
+  return win("Penalty", `${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
+    ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan">Open penalty quests</button></div>`, "pen", "skull");
 }
 function reportDueBox(fg) {
   if (!fg || !fg.open || !fg.ended) return "";
@@ -400,7 +376,7 @@ function alertList() {
   const unplaced = P.plan().unplaced.length;
   const btn = (id, l) => `<div class="btns"><button class="btn sm" data-act="go" data-id="${id}">${l}</button></div>`;
   const pens = St.openPenalties(), fg = St.focusGate();
-  // Each alert has a key that changes when its condition does, so a swiped-away alert comes back only when something new happens.
+  // Each alert has a key that changes when its condition does, so a dismissed alert comes back only when something new happens.
   const gone = dismissed(), rv = Sy.revealToday(t);
   if (rv && !gone["reveal:" + rv.id]) Sy.markReveal(rv.id, t);
   return [
@@ -412,9 +388,9 @@ function alertList() {
     flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
     unplaced && ["unplaced:" + unplaced, sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan"))],
     hasData && (expDays === null || expDays >= 7) && ["export:" + (lastExp || "never"), sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("settings/sync", "Export now"))],
-  ].filter(a => a && !gone[a[0]]).map(([k, h]) => `<div class="al" data-akey="${esc(k)}">${h}</div>`);
+  ].filter(a => a && !gone[a[0]]).map(([k, h]) => `<div class="al" data-akey="${esc(k)}">${h.replace('<span class="tl"><i></i>', `<span class="tl"><button class="xdot" data-act="dismiss" data-id="${esc(k)}" aria-label="Dismiss"></button>`)}</div>`);
 }
-// Swiped-away alerts (per phone). Old keys are pruned when the list grows.
+// Dismissed alerts (per phone). Old keys are pruned when the list grows.
 const DISMISS_KEY = "kts-dismiss";
 function dismissed() { try { return JSON.parse(localStorage.getItem(DISMISS_KEY)) || {}; } catch (e) { return {}; } }
 function dismiss(key) {
@@ -425,7 +401,7 @@ function dismiss(key) {
 function vAlerts() {
   const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
   return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Notifications</h1>
-  ${list.length ? `<p class="tiny muted" style="margin:10px 4px 0">Swipe an alert sideways to dismiss it. It comes back if something changes.</p>` : ""}
+  ${list.length ? `<p class="tiny muted" style="margin:10px 4px 0">Tap the red dot to dismiss an alert. It comes back if something changes.</p>` : ""}
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
 
@@ -447,13 +423,13 @@ function vStatus() {
 // The current Act in full, later Acts as locked, unnamed gates, and the Final Gate as a bar with no number.
 function actPanel() {
   const a = Sy.act1(), off = !!(S.settings.system || {}).offerAt;
-  return `<div class="panel act-full"><div class="hdr">Act I · now to first job</div><h3 class="dot-h">Escape Kofu</h3>
+  return `<div class="panel act-full"><div class="hdr">${px("crown")} Act I · now to first job</div><h3 class="dot-h">Escape Kofu</h3>
     ${bar(a.shown, "var(--acc)")}
     <div class="list" style="margin-top:6px">${a.parts.map(x => `<div class="row between small"><span class="row" style="gap:8px">${x.done ? ic("check", "inl") : `<span class="pdot"></span>`}${esc(x.label)}</span><span class="muted mono">${x.id === "offer" ? (x.done ? "done" : "") : Math.round(x.p * 100) + "%"}</span></div>`).join("")}</div>
     ${a.week > 0 ? `<p class="small muted" style="margin-top:8px">This week: put away ${yen(a.week)} (savings plus debt).</p>` : ""}
     <div class="btns"><button class="btn sm" data-act="offer">${off ? "Undo offer" : "I got an offer"}</button></div></div>
-  <div class="gates">${Sy.ACTS.slice(1).map(() => `<div class="gate">${ic("lock", "inl")}<span>Locked gate</span></div>`).join("")}
-    <div class="gate final"><span class="hdr">Final Gate</span>${bar(Math.max(0.02, Sy.gateProgress()), "var(--soft)")}</div></div>`;
+  <div class="gates">${Sy.ACTS.slice(1).map(() => `<div class="gate">${px("lock")}<span>Locked gate</span></div>`).join("")}
+    <div class="gate final"><span class="hdr">${px("gate")} Final Gate</span>${bar(Math.max(0.02, Sy.gateProgress()), "var(--soft)")}</div></div>`;
 }
 
 /* ================= MONEY ================= */
@@ -1667,14 +1643,13 @@ function archivesHtml() {
 }
 
 // The one Settings page: every setting in the app, in folding sections. Gears elsewhere land on their section.
-const SET_SECTIONS = { home: "look", plan: "schedule", dungeon: "dungeon", body: "habits", money: "money", status: "report" };
+const SET_SECTIONS = { home: "profile", plan: "schedule", dungeon: "dungeon", body: "habits", money: "money", status: "report" };
 function vSettings([sec] = []) {
   const st = S.settings, rh = live("rewardHistory").sort((a, b) => b.ts - a.ts);
   const sx = (k, title, body, sub = "") => fold("set-" + k, `<b class="grow">${title}</b>${sub ? `<span class="small muted">${sub}</span>` : ""}`, body, false, "set");
   return `<header class="top"><div><button class="back" data-act="back">${ic("left")} Back</button><h1>Settings</h1></div></header>
   ${sx("profile", "Profile", `<div class="grid"><label class="f">Your name<input data-ch="profname" value="${esc(st.name || "Arin")}" maxlength="24"></label></div>
     <p class="tiny muted">Used for the greeting on the System screen.</p>`, esc(st.name || "Arin"))}
-  ${sx("look", "Look and background", lookSettings())}
   ${planSettings()}
   ${sx("dungeon", "Dungeon", dungeonSettings())}
   ${sx("habits", "Daily quests", bodySettings())}
@@ -1693,7 +1668,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.3 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.4 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1957,9 +1932,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "milestone": Sy.seeMilestone(id); save(); return render();
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
-    case "bgclear": await G.clearPhoto(); return render();
-    case "lookreset": G.setLook(null); return render();
-    case "glassreset": { const d = G.DEFAULTS; G.setCfg({ blur: d.blur, dim: d.dim, zoom: d.zoom, y: d.y }); return render(); }
+    case "dismiss": dismiss(id); return render();
 
     // study blocks
     case "pomo": {
@@ -2195,9 +2168,6 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
 });
 
 
-document.addEventListener("input", ev => {
-  if (ev.target.matches("[data-look]")) { const k = ev.target.dataset.look, v = +ev.target.value; G.setLook({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ hue: "°", clear: "%", frost: "px", grain: "%" }[k] || ""); return; }
-  if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } });
 document.addEventListener("change", async ev => {
   const sel = ev.target.closest("[data-act-ch]");
   if (sel && trialForm) { Object.assign(trialForm, readForm("#trialForm")); trialForm[sel.dataset.actCh === "trialnote" ? "note" : "person"] = sel.value; trialForm.title = null; trialForm.keepTitle = false; return render(); }
@@ -2235,7 +2205,6 @@ document.addEventListener("change", async ev => {
   if (k === "criteria") { const list = el.value.split("\n").map(x => x.trim()).filter(Boolean); if (!list.length) return render(); S.settings.social.criteria = [...new Set(list)]; touchSettings(); save(); return render(); }
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
-  if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
   if (k === "loan") {
     const f = el.dataset.id, v = f === "takeover" ? (el.value || null) : num(el.value);
     if (f !== "takeover" && (v === null || v <= 0)) return render();
@@ -2288,7 +2257,6 @@ function renameStyle() {
   if (Soc.migrateTraits()) save();
   briefOpen = briefDue();
   entering = true; render();
-  G.applyPhoto();
   fullOnTap();
   Sync.init({ render, toast });
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
