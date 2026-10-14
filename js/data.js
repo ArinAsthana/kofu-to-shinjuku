@@ -6,7 +6,7 @@ export const SCHEMA_VERSION = 9;
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
 // Habit IDs match the old planner so its backup imports cleanly in v2.
-export const HABITS = [
+export const HABIT_DEFS = [
   { id: "anki", name: "Clear due flashcards", note: "Ticks itself when the due pile hits zero in a study block", target: 7, c: "var(--jp)" },
   { id: "jp", name: "Japanese grammar or reading", note: "25–40 min", target: 6, c: "var(--jp)" },
   { id: "fin", name: "Finance block", note: "90 min", target: 5, c: "var(--fin)" },
@@ -14,11 +14,12 @@ export const HABITS = [
   { id: "news", name: "News and markets", note: "15 min + one line in Obsidian", target: 5, c: "var(--fin)" },
   { id: "case", name: "Case or interview practice", note: "Aloud", target: 2, c: "var(--fin)" },
   { id: "gym", name: "Workout", note: "Ticks itself when you log a workout or run", target: 6, c: "var(--train)" },
-  // Life skills (v1.14). Charisma grows from these.
-  { id: "stranger", name: "Talk to a stranger", note: "Cashier, classmate, someone at the gym. Ask one question, then one follow-up", target: 3, c: "var(--warn)" },
-  { id: "friend", name: "Talk to a friend", note: "Call, meet or a real chat, not just a reaction. Ticks itself when you log a hangout", target: 4, c: "var(--warn)" },
-  { id: "speak", name: "Speak up", note: "Ask a question in class, give an opinion, or start the conversation", target: 2, c: "var(--warn)" },
+  // Life skills (v1.14), retired in v3: no longer shown or targeted, their past ticks stay in the data.
+  { id: "stranger", retired: true, name: "Talk to a stranger", note: "Cashier, classmate, someone at the gym. Ask one question, then one follow-up", target: 3, c: "var(--warn)" },
+  { id: "friend", retired: true, name: "Talk to a friend", note: "Call, meet or a real chat, not just a reaction. Ticks itself when you log a hangout", target: 4, c: "var(--warn)" },
+  { id: "speak", retired: true, name: "Speak up", note: "Ask a question in class, give an opinion, or start the conversation", target: 2, c: "var(--warn)" },
 ];
+export const HABITS = HABIT_DEFS.filter(h => !h.retired);
 
 export const XP = {
   habit: 10, topic: 25, genki: 25, grammar: 15, test: 50, outreach: 15, reply: 20,

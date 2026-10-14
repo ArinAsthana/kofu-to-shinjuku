@@ -181,7 +181,7 @@ export function ics() {
   }
   const p = plan();
   for (const k of live("tasks").filter(x => !x.done)) { const at = p.at.get(k.id); if (at) ev("task-" + k.id + "-" + at.date + "-" + at.s, k.title, at.date, at.s, at.e); }
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kofu to Shinjuku//Planner//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Kofu to Shinjuku", "X-WR-TIMEZONE:Asia/Tokyo",
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kofu to Shinjuku//Planner//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Timetable", "X-WR-TIMEZONE:Asia/Tokyo",
     "BEGIN:VTIMEZONE", "TZID:Asia/Tokyo", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0900", "TZOFFSETTO:+0900", "TZNAME:JST", "END:STANDARD", "END:VTIMEZONE",
     ...L, "END:VCALENDAR"].join("\r\n");
 }
