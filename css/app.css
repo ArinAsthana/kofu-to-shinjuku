@@ -545,3 +545,28 @@ input[type=checkbox],input[type=radio]{accent-color:var(--acc);width:auto}
 /* v4: Profile's sealed next stage */
 .silhouette{display:flex;align-items:center;gap:14px}
 .q-mark{font:800 44px/1 var(--dot);color:var(--dim);width:48px;text-align:center}
+
+/* v4 Home */
+.hname{font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;min-height:0;padding:0}
+.actline{padding:12px 14px}
+.actline .bar{height:6px;margin:8px 0 2px}
+.actline .link{min-height:32px;padding:0}
+.hero.pen{box-shadow:inset 3px 0 0 var(--bad)}
+.hero.pen .hdr{color:var(--bad)}
+.quests .top3 li{display:flex;align-items:center;gap:8px;white-space:normal}
+.quests .top3 li .grow{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{flex:none;font:700 10px var(--mono);text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;border:1px solid var(--rule);color:var(--soft);display:inline-flex;align-items:center;gap:4px}
+.tag .px{height:9px}
+.tag.t-trial{color:var(--ind);border-color:color-mix(in srgb,var(--ind) 50%,transparent)}
+.tag.t-pen{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 50%,transparent)}
+.qall{margin-top:10px}
+.lvbadge{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:12px 15px;border:0;background:var(--ink);color:var(--soft);font:600 12px var(--mono);text-transform:uppercase;letter-spacing:.06em;--fg:var(--paper);--soft:rgba(242,239,232,.7)}
+.lvbadge b{color:var(--paper);font:800 18px var(--dot)}
+.dungeon{margin-top:4px}
+.dbar{position:fixed;left:0;right:0;bottom:calc(62px + env(safe-area-inset-bottom,0px));z-index:11;display:flex;align-items:center;gap:8px;max-width:560px;margin:0 auto;padding:8px 12px;background:var(--ink);border-top:2px solid #FF3B2F;
+  --fg:var(--paper);--soft:rgba(242,239,232,.7);--acc:#FF3B2F;--acc-ink:#fff;color:var(--paper)}
+.dbar .grow{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-family:var(--mono)}
+body[data-tab="home"] main{padding-bottom:calc(170px + env(safe-area-inset-bottom,0px))}
+.actline .link{white-space:nowrap}
+.actline .hdr{min-width:0}
+body.has-dbar .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
