@@ -182,13 +182,14 @@ function vHome() {
   const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
   const dungeon = hs.k === "study" || hs.k === "body";
   return `
-  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1><button class="tbtn hname" data-act="nav" data-id="profile">Hi, ${esc(S.settings.name || "Arin")}</button></h1>${Cl.identity() ? `<button class="ident" data-act="nav" data-id="profile">${esc(Cl.identity())}</button>` : ""}</div>
+  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}</div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
     ${gear("home")}</div></header>
   ${dungeon ? "" : actLine(a1)}
   ${homeHero(hs, t)}
   ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
-  ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></button>`}
+  ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><span class="lvrow"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></span>
+    <span class="lvbar" role="progressbar" aria-label="Level ${E.level()} progress" aria-valuenow="${Math.round(E.levelProgress() * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${E.levelProgress() * 100}%"></i></span><span class="lvnext">${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to LV ${E.level() + 1}</span></button>`}
   ${dungeon ? dungeonBar(hs) : ""}`;
 }
 // Act I as one line, with its own money check-in so it works before the Store opens.
@@ -1822,7 +1823,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.3 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.3.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
