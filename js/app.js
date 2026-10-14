@@ -11,6 +11,7 @@ import * as K from "./cards.js";
 import { STARTER } from "./decks.js";
 import * as J from "./jlpt.js";
 import * as Soc from "./social.js";
+import * as Sy from "./system.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -25,6 +26,7 @@ function toast(msg, reward = false) {
 }
 function announce(gains) {
   gains = gains.filter(Boolean);
+  if (gains.length) { const cb = Sy.claimComeback(); if (cb) gains.push(cb); }
   if (!gains.length) return;
   const reward = gains.find(g => g.reward);
   const xp = gains.reduce((a, g) => a + g.xp, 0);
@@ -94,9 +96,10 @@ function render() {
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
-  $("#overlay").innerHTML = (briefOpen ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "");
+  const ms = !briefOpen && !sheet ? Sy.nextMilestone() : null;
+  $("#overlay").innerHTML = (briefOpen ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (ms ? milestoneHtml(ms) : "");
   $("#fab").innerHTML = TAB_OF[tab] === "plan" && !(tab === "social" && rest[0] === "p") ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
-  document.body.classList.toggle("modal-open", !!(briefOpen || sheet));
+  document.body.classList.toggle("modal-open", !!(briefOpen || sheet || ms));
   hydrate();
   if (tab === "settings" && rest[0] && entering0) { const d = document.querySelector(`[data-fold="set-${SET_SECTIONS[rest[0]] || rest[0]}"]`); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 0); } }
 }
@@ -159,15 +162,20 @@ function vHome() {
   const nm = new Date().getHours() * 60 + new Date().getMinutes();
   const cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
   const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Enter dungeon") : into === "train" ? "Enter dungeon" : "Open plan";
-  const q = todayQuests(t), next = q.trials.find(e => !e.done)?.k.title || q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
+  const q = todayQuests(t), cb = Sy.comeback(t), a1 = Sy.act1();
+  // Choice reduction: at most three quests are highlighted; the rest fold away.
+  const top3 = [...(cb && !cb.claimed ? ["Comeback quest: clear any one quest (+" + Sy.COMEBACK_XP + " XP)"] : []), ...q.trials.filter(e => !e.done).map(e => e.k.title),
+    ...q.events.filter(e => !e.done).map(e => e.k.title), ...q.habits.filter(x => !x.on).map(x => x.h.name)].slice(0, 3);
   const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
   return `
   <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1></div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
     ${gear("home")}</div></header>
   <button class="strip" data-act="nav" data-id="status">
-    <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${E.streak()}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
+    <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${Sy.streak().n}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
   ${alertStrip()}
+  <button class="panel act" data-act="nav" data-id="status"><div class="row between"><span class="hdr">Act I · Escape Kofu</span><span class="chev">${ic("right")}</span></div>
+    ${bar(a1.shown, "var(--acc)")}<div class="small muted">${a1.parts.filter(x => !x.done).map(x => esc(x.label)).join(" · ")}${a1.week > 0 ? ` · this week: put away ${yen(a1.week)}` : ""}</div></button>
 
   <div class="hero now ${wd ? "winding" : ""}">
     <div class="row between"><span class="hdr">Now · ${P.toHM(nm)}</span>${cur && !wd ? `<span class="hdr">${P.dur(Math.max(0, cur.e - nm))} left</span>` : ""}</div>
@@ -178,8 +186,8 @@ function vHome() {
       <button class="btn sm ${into !== "plan" || (fg.open && fg.ended) ? "primary" : ""}" data-act="nav" data-id="${into}">${act}</button></div>
   </div>
 
-  ${fold("quests", `<div class="grow"><div class="row between"><b>Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}<div class="small muted">${next ? "Next: " + esc(next) : "All cleared today."}</div></div>`,
-    `${q.trials.length ? `<div class="qsec trial">Trials <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
+  ${fold("quests", `<div class="grow"><div class="row between"><b>Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}${top3.length ? `<ul class="top3">${top3.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}</div>`,
+    `${cb ? `<div class="q ${cb.claimed ? "done" : ""}"><span class="lockbox">${ic(cb.claimed ? "check" : "flame")}</span><div class="grow"><div class="t">Comeback quest</div><div class="small muted">Yesterday was empty. Clear any one quest today.</div></div><div class="xp">+${Sy.COMEBACK_XP}</div></div>` : ""}${q.trials.length ? `<div class="qsec trial">Trials <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
      <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
      <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
 
@@ -269,6 +277,12 @@ function lookSettings() {
       `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${c[k]}" data-tune="${k}"><output>${c[k]}${u}</output></label>`).join("")}</div>
     <div class="btns"><button class="btn sm" data-act="glassreset">Reset photo</button></div>` : ""}`;
 }
+
+/* ---------- milestone window ---------- */
+// Full screen, for big moments only (Act steps, gates). Routine ticks stay quiet.
+const milestoneHtml = m => `<div class="milestone" role="dialog" aria-label="${esc(m.title)}"><div class="ms-in">
+  <div class="hdr">System · Milestone</div><h2 class="ms-t">${esc(m.title)}</h2><p class="muted">${esc(m.text)}</p>
+  <button class="btn primary block" data-act="milestone" data-id="${esc(m.id)}">Continue</button></div></div>`;
 
 /* ---------- morning brief ---------- */
 // First open of each day (from 04:00): a System window listing today's quests. Shown once per day per phone.
@@ -385,8 +399,10 @@ function alertList() {
   const btn = (id, l) => `<div class="btns"><button class="btn sm" data-act="go" data-id="${id}">${l}</button></div>`;
   const pens = St.openPenalties(), fg = St.focusGate();
   // Each alert has a key that changes when its condition does, so a swiped-away alert comes back only when something new happens.
-  const gone = dismissed();
+  const gone = dismissed(), rv = Sy.revealToday(t);
+  if (rv && !gone["reveal:" + rv.id]) Sy.markReveal(rv.id, t);
   return [
+    rv && ["reveal:" + rv.id, sysBox(esc(rv.text), esc(rv.sub))],
     pens.length && ["pen:" + pens.map(p => p.id).join(","), penaltyBox()],
     fg.open && fg.ended && ["report:" + St.occKey(fg.o), reportDueBox(fg)],
     wd && ["wind:" + t, sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.")],
@@ -412,9 +428,10 @@ function vAlerts() {
 }
 
 function vStatus() {
-  const t = E.today(), xp = E.xpTotal(), mp = E.moneyPlan(), days = E.daysBetween(t, S.settings.dates.graduation);
+  const t = E.today(), xp = E.xpTotal(), sk = Sy.streak(), days = E.daysBetween(t, S.settings.dates.graduation);
   const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
   return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div>${gear("status")}</header>
+  ${actPanel()}
   <div class="carousel">
     <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
       <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "var(--mag)")}
@@ -422,8 +439,19 @@ function vStatus() {
     <div class="card g-ind"><span class="k">Days to graduation</span>
       <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
     <div class="card g-cyan"><span class="k">Streak</span>
-      <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
+      <div><div class="dm huge">${String(sk.n).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done · shield ${sk.shieldUsed ? "used this week" : "ready"}</div></div></div>
   </div>`;
+}
+// The current Act in full, later Acts as locked, unnamed gates, and the Final Gate as a bar with no number.
+function actPanel() {
+  const a = Sy.act1(), off = !!(S.settings.system || {}).offerAt;
+  return `<div class="panel act-full"><div class="hdr">Act I · now to first job</div><h3 class="dot-h">Escape Kofu</h3>
+    ${bar(a.shown, "var(--acc)")}
+    <div class="list" style="margin-top:6px">${a.parts.map(x => `<div class="row between small"><span class="row" style="gap:8px">${x.done ? ic("check", "inl") : `<span class="pdot"></span>`}${esc(x.label)}</span><span class="muted mono">${x.id === "offer" ? (x.done ? "done" : "") : Math.round(x.p * 100) + "%"}</span></div>`).join("")}</div>
+    ${a.week > 0 ? `<p class="small muted" style="margin-top:8px">This week: put away ${yen(a.week)} (savings plus debt).</p>` : ""}
+    <div class="btns"><button class="btn sm" data-act="offer">${off ? "Undo offer" : "I got an offer"}</button></div></div>
+  <div class="gates">${Sy.ACTS.slice(1).map(() => `<div class="gate">${ic("lock", "inl")}<span>Locked gate</span></div>`).join("")}
+    <div class="gate final"><span class="hdr">Final Gate</span>${bar(Math.max(0.02, Sy.gateProgress()), "var(--soft)")}</div></div>`;
 }
 
 /* ================= MONEY ================= */
@@ -789,7 +817,7 @@ function vStudy() {
   <h2>Topics <span class="n">one per study block</span></h2>${subj}
   ${fold("study-reports", `<b class="grow">Reports</b><span class="small muted">${logs.length}</span>`, `${logs.map(r => `<div class="item row between"><div class="grow small"><b>${esc(r.title)}</b> · ${esc(dayLabel(r.date))}<div class="muted">${r.done ? "Done" : r.gain || r.poms ? `+${r.gain}% · ${r.poms} round${r.poms === 1 ? "" : "s"}` : "Not done"}${r.topic && r.subj ? " · " + esc((St.topics(r.subj).find(t => t.id === r.topic) || {}).t || "") : ""}</div></div>
     <button class="btn sm" data-act="delreport" data-id="${r.id}">Delete</button></div>`).join("") || `<p class="empty">No reports yet. They show up after each study block.</p>`}`)}
-  ${fold("study-pens", `<b class="grow">Penalties</b><span class="small ${open.size ? "bad-t" : "muted"}">${open.size} open</span>`, `${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}`, open.size > 0)}`;
+  ${fold("study-pens", `<b class="grow">Penalties</b><span class="small ${open.size ? "bad-t" : "muted"}">${open.size} open</span>`, `${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">${p.waived ? "waived (one open at a time)" : `−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}`}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}`, open.size > 0)}`;
 }
 
 /* ================= FLASHCARDS ================= */
@@ -1233,6 +1261,7 @@ function weeklyReport() {
   const longest = Math.max(0, ...live("runs").map(r => r.km));
   return `## Weekly report, ${E.isoWeek(t)} (week of ${E.fmtDate(wk[0])})
 Level ${E.level()}, ${E.xpTotal()} XP (+${xpWeek} this week).
+System insight to reveal this week (one only): ${Sy.insightFor(t)}
 
 ### Habits
 ${HABITS.map(h => `- ${h.name}: ${E.habitWeekCount(h.id, t)}/${E.habitTarget(h.id)}`).join("\n")}
@@ -1527,6 +1556,19 @@ async function shrink(file) {
 }
 
 /* ================= MORE ================= */
+// System Archives: the full plan, for when Arin deliberately wants it. Never linked from Home.
+function archivesHtml() {
+  const a = Sy.archive();
+  return `<p class="small muted">Everything the System keeps off the main screens. You don't need any of this day to day.</p>
+    <h3 style="margin-top:12px">Final goal</h3>
+    <p class="small">Retire by 45 (14 Jan 2049, ${a.yearsLeft} years from now) with plenty of money, one child, living in Japan, Southeast Asia or Bulgaria.</p>
+    <p class="small">Target: ${yen(a.target)} invested (yearly family spending × 25). That takes about ${yen(a.perYear)} invested a year on average at ~${a.realReturn * 100}% real return, so income needs to reach ¥10M+ a year by the early 30s, with heavy NISA use.</p>
+    <h3 style="margin-top:12px">Acts</h3>
+    <div class="list">${Sy.ACTS.map(x => `<div class="small item"><b>Act ${x.id}: ${esc(x.name)}</b> <span class="muted">· ${esc(x.when)}</span><div class="muted">${esc(x.objective)}</div></div>`).join("")}
+    <div class="small item"><b>Final Gate: Retirement</b> <span class="muted">· 14 Jan 2049</span></div></div>
+    <p class="tiny muted" style="margin-top:8px">Estimates, not advice. The target is rechecked once a country is chosen.</p>`;
+}
+
 // The one Settings page: every setting in the app, in folding sections. Gears elsewhere land on their section.
 const SET_SECTIONS = { home: "look", plan: "schedule", dungeon: "dungeon", body: "habits", money: "money", status: "report" };
 function vSettings([sec] = []) {
@@ -1545,6 +1587,7 @@ function vSettings([sec] = []) {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>`)}
   ${sx("report", "Weekly report", statusSettings())}
+  ${sx("archives", "System Archives", archivesHtml(), "", "")}
   ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
     <h3 style="margin-top:14px">Export</h3>
     <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Flashcard images and recordings are in the file; check-in photos and the copied text leave media out.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
@@ -1553,7 +1596,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.0 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1785,6 +1828,12 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     // shell: settings sheet, morning brief, backgrounds
     case "sheet": sheet = id && sheet !== id ? id : null; if (!sheet) { taskForm = null; blockForm = null; blockNew = null; personForm = false; } return render();
     case "brief": briefOpen = true; return render();
+    case "offer": {
+      const on = !(S.settings.system || {}).offerAt;
+      if (!confirm(on ? "Log a job offer in one of your target roles?" : "Remove the logged offer?")) return;
+      Sy.logOffer(on); save(); return render();
+    }
+    case "milestone": Sy.seeMilestone(id); save(); return render();
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
     case "bgclear": await G.clearPhoto(); return render();
     case "lookreset": G.setLook(null); return render();
@@ -1807,6 +1856,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const done = id === "done", gain = id === "rest" ? rest : done ? 0 : +id;
       if (!done && !gain && !p.n && !confirm("Report this block as not done? It counts as skipped: penalty.")) return;
       const r = St.report(o, { subj, topic: top ? top.id : null, gain, poms: p.n, done });
+      if (gain > 0 || p.n > 0 || done) r.gains.push(Sy.rollLoot(o.date, o.b.id));
       save(); announce(r.gains); if (!r.gains.filter(Boolean).length) toast("Reported"); return render();
     }
     case "delreport": if (confirm("Delete this report? If the block is still within the last week, it'll count as skipped.")) { remove("blockLog", id); save(); render(); } return;

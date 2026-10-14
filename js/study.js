@@ -99,7 +99,10 @@ export function assess() {
       const end = absMs(d, o.e);
       if (end <= from || now < end + grace) continue;
       const id = "pen-" + d + "-" + o.b.id, ex = S.penalties.find(r => r.id === id), done = completed(o);
-      if (!ex && !done) {
+      if (!ex && !done && openPenalties().length) {
+        // Cap: one open penalty quest at a time. Further misses are recorded, waived (no XP, no make-up task).
+        put("penalties", { id, date: d, block: o.b.id, title: o.b.title, s: o.s, xp: 0, task: null, waived: true });
+      } else if (!ex && !done) {
         const subj = subjectOf(o.b), top = subj ? current(subj) : null, half = (o.e - o.s) / 2;
         const mins = LENS.reduce((a, m) => Math.abs(m - half) < Math.abs(a - half) ? m : a, 30), task = "pentask-" + d + "-" + o.b.id;
         put("tasks", { id: task, title: "Penalty quest: make up " + o.b.title + (top ? " · " + top.t : ""), mins, prio: 3, energy: "high", due: E.addDays(t, 1), done: false, created: now, pin: null, penalty: id });

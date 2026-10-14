@@ -53,6 +53,8 @@ export function assess() {
   for (const k of openTrials()) {
     if (!k.due || k.due >= t) continue;
     const id = "pen-tr-" + k.id; if (S.penalties.some(p => p.id === id)) continue;
+    // One open penalty at a time (v3.1): a further overdue trial is recorded but waived.
+    if (live("penalties").some(p => !p.waived && live("tasks").some(x => x.id === p.task && !x.done))) { put("penalties", { id, date: k.due, block: null, trial: true, title: k.title, s: 0, xp: 0, task: null, waived: true }); continue; }
     fresh.push(put("penalties", { id, date: k.due, block: null, trial: true, title: k.title, s: 0, xp: 15, task: k.id }));
   }
   return fresh;
