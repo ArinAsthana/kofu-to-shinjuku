@@ -4,4 +4,6 @@
     <string name="title_activity_main">The Arin</string>
     <string name="package_name">com.arin.thearin</string>
     <string name="custom_url_scheme">com.arin.thearin</string>
+    <string name="widget_now_desc">Now, today\'s quests and level</string>
+    <string name="widget_small_desc">Now: the current or next block</string>
 </resources>

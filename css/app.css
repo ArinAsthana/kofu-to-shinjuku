@@ -581,3 +581,6 @@ body.has-dbar .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 .lvbar{display:block;height:8px;background:rgba(242,239,232,.15)}
 .lvbar i{display:block;height:100%;background:var(--paper)}
 .lvnext{font-size:11px;color:var(--soft);text-align:right}
+/* v5.2 phone limit line in Quests */
+.usage-l{margin-top:10px;padding-top:8px;border-top:1px solid var(--rule)}
+.usage-l .px{width:14px;height:auto;margin-right:6px;vertical-align:-1px}
