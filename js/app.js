@@ -12,6 +12,7 @@ import { STARTER } from "./decks.js";
 import * as J from "./jlpt.js";
 import * as Soc from "./social.js";
 import * as Sy from "./system.js";
+import * as Cl from "./classes.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -79,16 +80,16 @@ document.addEventListener("touchend", e => {
   const cur = TABS.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = TABS[cur + (dx < 0 ? 1 : -1)];
   if (next) go(next[0]);
 }, { passive: true });
-window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; trialForm = null; battle = null; apForm = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
+window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (!location.hash.startsWith("#classes/q")) dq = null; chEdit = false; trialForm = null; battle = null; apForm = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", settings: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", settings: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", classes: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, study: vStudyPage, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vStatus, more: vSettings, settings: vSettings };
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, study: vStudyPage, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vStatus, more: vSettings, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
@@ -168,7 +169,7 @@ function vHome() {
     ...q.events.filter(e => !e.done).map(e => e.k.title), ...q.habits.filter(x => !x.on).map(x => x.h.name)].slice(0, 3);
   const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
   return `
-  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1></div>
+  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<button class="ident" data-act="go" data-id="classes">${esc(Cl.identity())}</button>` : ""}</div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
     ${gear("home")}</div></header>
   <button class="strip" data-act="nav" data-id="status">
@@ -789,7 +790,94 @@ function vDungeon() {
   ${pens.length ? penaltyBox() : ""}
   ${gateCard("body", bg)}${gateCard("study", sg)}
   ${tip("dungeon", `Each dungeon opens ${S.settings.plan.openPad ?? 10} min before its quest block. Do the work inside the block, or it counts as skipped: −${S.settings.study.penaltyXp ?? 30} XP and a make-up quest.`)}
-  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="jlpt">JLPT ladder</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
+  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="classes">Class hall</button><button data-act="go" data-id="jlpt">JLPT ladder</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
+}
+
+/* ================= CLASS HALL (v3.2) ================= */
+// Disciplines (chapters → quizzes → boss exam), classes and titles. Only the current chapter of each discipline shows.
+let dq = null, chEdit = false; // quiz in progress {id, ch, qs, ans, res}; own-chapter editor open
+function vClasses([sub, id, ch]) {
+  if (sub === "d") return vDisc(id);
+  if (sub === "q") return vDiscQuiz(id, ch);
+  const act = Cl.active(), pc = Cl.pace(), tl = Cl.titles(), eq = (S.settings.classes || {}).equipped;
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><div class="hdr">Study dungeon</div><h1>Class hall</h1></div></header>`;
+  const discRow = id => { const d = Cl.disc(id), c = Cl.currentChapter(id), L = Cl.chapters(id);
+    return `<button class="panel discp" data-act="go" data-id="classes/d/${id}"><div class="row between"><b>${esc(d.name)}</b><span class="small muted">${Cl.clearedCount(id)}/${L.length}${Cl.bossPassed(id) ? " · cleared" : ""}</span></div>
+      ${bar(Cl.clearedCount(id) / (L.length || 1), "var(--acc)")}
+      <div class="small muted">${c ? (Cl.readDone(id, c.id) ? `Quiz ready: ${esc(c.title)}` : `Now: ${esc(c.title)}${Cl.readPct(c.id) ? ` · ${Cl.readPct(c.id)}% read` : ""}`) : Cl.bossPassed(id) ? `Title earned: ${esc(d.title)}` : "Boss exam open"}</div></button>`; };
+  const classRow = c => { const ci = Cl.classInfo(c.id);
+    return `<div class="item"><div class="row between"><b>${esc(c.name)}</b><span class="small ${ci.earned ? "" : "muted"}">${ci.earned ? ic("check", "inl") + " earned" : `${ci.got.length}/${c.needs.length}`}</span></div>
+      <div class="chips" style="margin-top:6px">${c.needs.map(n => `<span class="chip ${Cl.bossPassed(n) ? "on" : act.includes(n) ? "half" : ""}">${esc(Cl.disc(n)?.name || n)}</span>`).join("")}</div>
+      ${ci.ready ? `<div class="small" style="margin-top:6px">Capstone: ${esc(c.capstone)}</div><div class="btns"><button class="btn sm ${ci.earned ? "" : "go"}" data-act="capstone" data-id="${c.id}">${ci.earned ? "Undo capstone" : "Capstone done"}</button></div>` : ""}</div>`; };
+  const others = Cl.all().filter(d => !act.includes(d.id));
+  return `${head}
+  ${tip("classes", `Pick up to ${Cl.CAP} disciplines. Finance blocks work through their chapters; the System picks which. Read the chapter, pass its quiz (5 of 6), and the next one opens. Clear every chapter for the boss exam and a title.`)}
+  <h2>Active <span class="n">${act.length}/${Cl.CAP}</span></h2>
+  ${act.map(discRow).join("") || `<div class="panel"><p class="small muted">No discipline active. The shared core comes first: Accounting.</p></div>`}
+  ${act.length ? `<div class="panel ${pc.ok ? "" : "warnp"}"><div class="row between"><b>Pace</b><span class="small ${pc.ok ? "" : "warn"}">${pc.ok ? "on pace" : "behind"}</span></div>
+    <div class="small muted">${pc.need} h left in these disciplines · ${pc.have} h of Finance blocks before graduation (${pc.wk} h a week). ${pc.ok ? "" : `Needs ${pc.perWeek} h a week: add a block or drop a discipline.`}</div></div>` : ""}
+  ${fold("cl-titles", `<b class="grow">Titles</b><span class="small muted">${tl.length}</span>`, tl.length ? `<div class="list">${tl.map(t => `<div class="row between item"><div class="grow"><b>${esc(t.name)}</b><div class="tiny muted">${esc(t.from)}</div></div>
+      ${eq === t.id ? `<button class="btn sm" data-act="unequip">Equipped</button>` : `<button class="btn sm ${t.owned ? "" : "go"}" data-act="equip" data-id="${t.id}">${t.owned ? "Equip" : `Equip · ${t.cost} XP`}</button>`}</div>`).join("")}</div>
+      <p class="tiny muted">The first equip costs wallet XP (${Cl.COST.disc} for a discipline or JLPT title, ${Cl.COST.class} for a class, ${Cl.COST.spec} for a specialisation). Re-equipping is free; level never drops.</p>`
+    : `<p class="empty">None yet. Boss exams and JLPT Boss Raids give titles.</p>`)}
+  ${fold("cl-classes", `<b class="grow">Classes</b>`, `${Cl.CLASSES.filter(c => Cl.CORE.includes(c.id)).map(classRow).join("")}
+    <details style="margin-top:8px"><summary class="small">Other paths</summary>${Cl.CLASSES.filter(c => !Cl.CORE.includes(c.id)).map(classRow).join("")}</details>
+    <h3 style="margin-top:12px">Specialisations</h3>${Cl.SPECS.map(sp => { const si = Cl.specInfo(sp.id); return `<div class="small item">${si.earned ? ic("check", "inl") + " " : ""}<b>${esc(sp.name)}</b> <span class="muted">· ${esc(Cl.CLASSES.find(c => c.id === sp.base).name)} + ${esc(Cl.plusName(sp.plus))}</span></div>`; }).join("")}`, true)}
+  ${fold("cl-add", `<b class="grow">Add a discipline</b>`, others.map(d => `<div class="row between item"><div class="grow"><b>${esc(d.name)}</b><div class="tiny muted">${esc(d.blurb)}</div></div>
+    <button class="btn sm" data-act="discon" data-id="${d.id}" ${act.length >= Cl.CAP ? "disabled" : ""}>Start</button></div>`).join("") + (act.length >= Cl.CAP ? `<p class="tiny muted">${Cl.CAP} active is the cap. Drop one to start another.</p>` : ""), !act.length)}`;
+}
+function vDisc(id) {
+  const d = Cl.disc(id); if (!d) return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Class hall</button><h1>Not found</h1>`;
+  const L = Cl.chapters(id), c = Cl.currentChapter(id), on = Cl.active().includes(id), done = L.filter(x => Cl.chapterCleared(id, x.id));
+  const hidden = c ? L.length - done.length - 1 : 0, custom = Cl.isCustom(id);
+  const cur = c ? `<div class="panel hero"><div class="row between"><span class="hdr">Chapter ${L.indexOf(c) + 1} of ${L.length} · ~${c.hours} h</span><span class="hdr">${Cl.readPct(c.id)}% read</span></div>
+      <h3 style="margin-top:6px">${esc(c.title)}</h3>
+      <p class="small"><b>Read</b> · ${esc(c.read || "")}</p><p class="small"><b>Produce</b> · ${esc(c.produce || "")}</p>
+      ${bar(Cl.readPct(c.id) / 100, "var(--acc)")}
+      <div class="btns">${custom ? `<button class="btn go" data-act="chself" data-id="${c.id}">Chapter done</button>`
+        : Cl.readDone(id, c.id) ? `<button class="btn go" data-act="go" data-id="classes/q/${id}/${c.id}">Take the chapter quiz</button>`
+        : `<button class="btn" data-act="chread" data-id="${c.id}">Reading done</button>`}</div>
+      <p class="tiny muted">${custom ? "Your own chapter list: mark it done when the output exists." : Cl.readDone(id, c.id) ? "6 questions; 5 right clears the chapter. Misses become flashcards." : "Finance study blocks fill the reading bar. Tap Reading done if you studied it elsewhere; the quiz opens."}</p></div>`
+    : Cl.bossPassed(id) ? sysBox(`Discipline cleared. Title earned: <b>${esc(d.title)}</b>.`, "Equip it in the Class hall.")
+    : `<div class="panel dgate open"><span class="k">Boss exam</span><h3 style="margin:2px 0 6px">${esc(d.title)}</h3><p class="small muted">10 questions across every chapter. 70% clears it and earns the title.</p>
+      <div class="btns"><button class="btn go" data-act="go" data-id="classes/q/${id}/boss">Enter the boss exam</button></div></div>`;
+  return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Class hall</button>
+  <header class="top"><div><div class="hdr">Discipline · ${esc(d.title)}</div><h1>${esc(d.name)}</h1></div></header>
+  <p class="small muted" style="margin:0 4px 8px">${esc(d.blurb)}</p>
+  ${on ? cur : `<div class="panel"><p class="small">Not active.</p><div class="btns"><button class="btn go" data-act="discon" data-id="${id}" ${Cl.active().length >= Cl.CAP ? "disabled" : ""}>Start</button></div></div>`}
+  ${done.length ? fold("dc-done-" + id, `<b class="grow">Cleared</b><span class="small muted">${done.length}</span>`, done.map(x => `<div class="item small">${ic("check", "inl")} ${esc(x.title)}</div>`).join("")) : ""}
+  ${hidden > 0 ? `<div class="sealed">${ic("lock", "inl")} ${hidden} more chapter${hidden === 1 ? "" : "s"} sealed</div>` : ""}
+  ${chEdit ? `<div class="panel"><h3>Your own chapters</h3><p class="tiny muted">One per line: Title | what to read | what to produce | hours. Use your book's contents page. Quizzes only cover the starter chapters, so your own chapters are marked done by hand; the boss exam stays.</p>
+      <textarea data-f="chapters" rows="12" style="font-size:13px">${esc(L.map(x => [x.title, x.read, x.produce, x.hours].join(" | ")).join("\n"))}</textarea>
+      <div class="btns"><button class="btn go" data-act="chsave" data-id="${id}">Save</button><button class="btn" data-act="chedit">Cancel</button>${custom ? `<button class="btn danger" data-act="chreset" data-id="${id}">Back to the starter list</button>` : ""}</div></div>`
+    : `<div class="quiet-links">${on ? `<button data-act="discoff" data-id="${id}">Drop this discipline</button>` : ""}<button data-act="chedit" data-id="${id}">Use my own book's chapters</button></div>`}`;
+}
+function vDiscQuiz(id, ch) {
+  const d = Cl.disc(id), back = `<button class="back" data-act="nav" data-id="classes/d/${id}">${ic("left")} ${esc(d ? d.name : "Back")}</button>`;
+  if (!d) return back;
+  const boss = ch === "boss";
+  if (!dq || dq.id !== id || dq.ch !== ch) {
+    dq = { id, ch, qs: null, ans: [], res: null };
+    Cl.loadFull(id).then(f => {
+      if (!dq || dq.id !== id || dq.ch !== ch) return;
+      const src = boss ? f.boss : (f.chapters.find(x => x.id === ch) || {}).quiz || [];
+      dq.qs = src.map((q, i) => ({ ...q, _i: i })); render();
+    }).catch(() => { if (dq) { dq.err = true; render(); } });
+  }
+  const title = boss ? "Boss exam" : (Cl.chapters(id).find(x => x.id === ch) || {}).title || "Chapter quiz";
+  const head = `${back}<header class="top"><div><div class="hdr">${esc(d.name)} · ${boss ? "10 questions · 70% to clear" : "6 questions · 5 to clear"}</div><h1>${esc(title)}</h1></div></header>`;
+  if (dq.err) return head + `<p class="empty">Couldn't load the questions. Check the connection and try again.</p>`;
+  if (!dq.qs) return head + `<p class="muted">Loading…</p>`;
+  const r = dq.res;
+  const qHtml = (q, i) => { const a = dq.ans[i], ok = r && Cl.correct(q, a);
+    return `<div class="panel dq ${r ? (ok ? "right" : "wrong") : ""}"><div class="k">Q${i + 1}</div><p style="white-space:pre-wrap">${esc(q.q)}</p>
+      ${Cl.isNum(q) ? `<div class="row" style="gap:8px">${q.unit === "¥" ? "<span>¥</span>" : ""}<input inputmode="decimal" data-ch="dqnum" data-id="${i}" value="${esc(a ?? "")}" ${r ? "disabled" : ""} style="max-width:180px">${q.unit && q.unit !== "¥" ? `<span>${esc(q.unit)}</span>` : ""}</div>`
+        : `<div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="dqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>`}
+      ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(Cl.answerText(q))}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
+  return head + (r ? sysBox(r.pass ? (boss ? `Boss cleared. Title earned: <b>${esc(d.title)}</b>.` : "Chapter cleared. The next one is open.") : `${r.ok}/${r.n}. Not yet.`, r.pass ? "" : "Your misses are now flashcards. Review them and retake when ready.",
+      `<div class="btns"><button class="btn sm primary" data-act="go" data-id="classes/d/${id}">Back to ${esc(d.name)}</button>${r.pass ? "" : `<button class="btn sm" data-act="dqretry">Retake</button>`}</div>`) : "")
+    + dq.qs.map(qHtml).join("")
+    + (r ? "" : `<div class="btns"><button class="btn go block" data-act="dqsubmit">Submit</button></div>`);
 }
 
 let topicEdit = null; // subject whose topic list is open for editing
@@ -808,8 +896,8 @@ function vStudy() {
       <div class="small" style="margin-top:8px">${cur ? `Now: <b>${esc(cur.t)}</b> · ${St.progress(k, cur.id)}%` : "All done."}</div>
       <details style="margin-top:8px"><summary class="small">All topics</summary>${L.map((t, i) => { const pr = St.progress(k, t.id);
         return `<div class="item row between small ${t === cur ? "cur" : ""}"><span class="grow">${i + 1}. ${esc(t.t)}</span><span class="${pr >= 100 ? "" : "muted"}">${pr >= 100 ? ic("check", "inl") : pr + "%"}</span></div>`; }).join("")}</details>
-      <div class="btns"><button class="btn sm" data-act="topicedit" data-id="${k}">Edit list</button></div>
-      <p class="tiny muted">Blocks named like "${esc(SUBJECTS[k].match.split("|")[0])}…" use this list.</p></div>`;
+      ${k === "fin" && Cl.active().length ? `<p class="tiny muted">Finance blocks follow your active disciplines. The System picks the chapter.</p><div class="btns"><button class="btn sm" data-act="go" data-id="classes">Class hall</button></div>` : `<div class="btns"><button class="btn sm" data-act="topicedit" data-id="${k}">Edit list</button></div>
+      <p class="tiny muted">Blocks named like "${esc(SUBJECTS[k].match.split("|")[0])}…" use this list.</p>`}</div>`;
   }).join("");
   const logs = live("blockLog").filter(r => r.final).sort((a, b) => b.at - a.at).slice(0, 15);
   const pens = live("penalties").sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15), open = new Set(St.openPenalties().map(p => p.id));
@@ -1596,7 +1684,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.2 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1828,6 +1916,29 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     // shell: settings sheet, morning brief, backgrounds
     case "sheet": sheet = id && sheet !== id ? id : null; if (!sheet) { taskForm = null; blockForm = null; blockNew = null; personForm = false; } return render();
     case "brief": briefOpen = true; return render();
+    case "discon": if (!Cl.setActive(id, true)) return toast(`${Cl.CAP} disciplines active is the cap`); save(); return go("classes/d/" + id);
+    case "discoff": if (!confirm("Drop this discipline? Cleared chapters stay cleared.")) return; Cl.setActive(route()[2], false); save(); return go("classes");
+    case "chread": if (!confirm("Mark this chapter's reading as done? The quiz opens.")) return; Cl.markRead(route()[2], id); save(); return render();
+    case "chself": { if (!confirm("Mark this chapter done?")) return; const g = Cl.selfClear(route()[2], id); save(); announce([g]); return render(); }
+    case "chedit": chEdit = !chEdit; return render();
+    case "chsave": {
+      const L = $("[data-f=chapters]").value.split("\n").map(l => l.split("|").map(x => x.trim())).filter(p => p[0])
+        .map((p, i) => ({ id: id + "-c" + String(i + 1).padStart(2, "0"), title: p[0], read: p[1] || "", produce: p[2] || "", hours: num(p[3]) || 4 }));
+      if (!L.length) return toast("Add at least one chapter");
+      S.settings.classes.custom = { ...(S.settings.classes.custom || {}), [id]: L }; chEdit = false; touchSettings(); save(); toast("Chapters saved"); return render();
+    }
+    case "chreset": { if (!confirm("Go back to the starter chapters? Chapters you cleared there stay cleared.")) return; const c = { ...(S.settings.classes.custom || {}) }; delete c[id]; S.settings.classes.custom = c; chEdit = false; touchSettings(); save(); return render(); }
+    case "dqpick": { if (!dq || dq.res) return; const [i, j] = id.split(":").map(Number); dq.ans[i] = j; return render(); }
+    case "dqsubmit": {
+      if (!dq || !dq.qs) return; document.querySelectorAll("[data-ch=dqnum]").forEach(el => { dq.ans[+el.dataset.id] = el.value; });
+      const miss = dq.qs.filter((q, i) => dq.ans[i] == null || dq.ans[i] === "").length;
+      if (miss && !confirm(`${miss} unanswered. Submit anyway?`)) return;
+      dq.res = Cl.finish(dq.id, dq.ch, dq.qs, dq.ans); save(); announce(dq.res.gains); window.scrollTo(0, 0); return render();
+    }
+    case "dqretry": if (dq) { dq.ans = []; dq.res = null; } window.scrollTo(0, 0); return render();
+    case "equip": { const err = Cl.equip(id); if (err) return toast(err); save(); toast("Title equipped"); return render(); }
+    case "unequip": Cl.unequip(); save(); return render();
+    case "capstone": { const on = !Cl.capstoneDone(id); if (!confirm(on ? "Capstone done? Only mark it when the 'done when' line is true." : "Undo the capstone?")) return; Cl.setCapstone(id, on); save(); return render(); }
     case "offer": {
       const on = !(S.settings.system || {}).offerAt;
       if (!confirm(on ? "Log a job offer in one of your target roles?" : "Remove the logged offer?")) return;
@@ -2114,6 +2225,7 @@ document.addEventListener("change", async ev => {
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
+  if (k === "dqnum") { if (dq) dq.ans[+el.dataset.id] = el.value; return; }
   if (k === "profname") { S.settings.name = el.value.trim().slice(0, 24) || "Arin"; touchSettings(); save(); return; }
   if (k === "cardsnew") { const v = num(el.value); if (v === null || v < 0 || v > 200) return render(); S.settings.cards.newPerDay = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "cardimg") {
@@ -2155,6 +2267,7 @@ function renameStyle() {
 }
 (async function boot() {
   await load();
+  await Cl.loadIndex();
   renameStyle();
   if (Soc.migrateTraits()) save();
   briefOpen = briefDue();

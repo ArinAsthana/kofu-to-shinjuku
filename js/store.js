@@ -14,6 +14,7 @@ export const RECORD_STORES = [
   "blockLog", "penalties", // schema 6: blockLog {date, block, subj, topic, gain %, poms, done}; penalties {date, block, title, xp, task} (id "pen-<date>-<block>")
   "fieldNotes", "appraisals", // schema 9: fieldNotes {person, trait, habit, status tried|worked|notme}; appraisals {date, by, scores}
   "jlptItems", "jlptExams", // schema 8: JLPT results, see jlpt.js (questions themselves are static files in data/jlpt)
+  "discLog", "titles", // schema 10: class system, see classes.js
   "cards", "reviewDays", // schema 7: flashcards (see cards.js); reviewDays one record a day {id "rv-<date>", date, n, ok}. Card media stays in the photos store.
 ];
 
@@ -141,6 +142,8 @@ const MIGRATIONS = {
   7: s => { s.jlptItems = s.jlptItems || []; s.jlptExams = s.jlptExams || []; return s; },
   // 8 -> 9: social trials. Two new empty stores; trials themselves are tasks with a `trial` field.
   // Marks the old trait set for migrateTraits() in social.js (fresh installs start on the new set).
+  // 9 -> 10: class system. Two new empty stores; nothing existing changes.
+  9: s => { s.discLog = s.discLog || []; s.titles = s.titles || []; return s; },
   8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {

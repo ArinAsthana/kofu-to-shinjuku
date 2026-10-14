@@ -5,13 +5,15 @@ import { S, live, put, remove } from "./store.js";
 import { SUBJECTS, STUDY, HABITS } from "./data.js";
 import * as E from "./engine.js";
 import * as P from "./planner.js";
+import * as Cl from "./classes.js";
 
 const st = () => S.settings.study || STUDY;
 const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const absMs = (date, m) => E.parse(date).getTime() + m * 60000;
 
 /* ---------- topics ---------- */
-export const topics = subj => (st().topics || {})[subj] || SUBJECTS[subj]?.topics || [];
+// Finance blocks follow the active disciplines' chapters once any are active (the System picks the order).
+export const topics = subj => subj === "fin" && Cl.active().length ? Cl.studyTopics() : (st().topics || {})[subj] || SUBJECTS[subj]?.topics || [];
 export function subjectOf(b) {
   if (!b || b.kind !== "quest" || P.isWorkout(b)) return null;
   if (b.subj && SUBJECTS[b.subj]) return b.subj;

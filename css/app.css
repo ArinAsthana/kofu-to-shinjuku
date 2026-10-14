@@ -506,3 +506,17 @@ body[data-tab="plan"] main,body[data-tab="social"] main{padding-bottom:calc(150p
 .ms-in{position:relative;max-width:360px;width:100%;text-align:center;display:grid;gap:10px}
 .ms-t{font-family:var(--dot);font-weight:800;font-size:34px;line-height:1.1;color:var(--fg);margin:0;display:block}
 @keyframes msin{from{opacity:0;transform:scale(1.04)}to{opacity:1;transform:none}}
+
+/* v3.2 Class hall */
+.ident{display:block;border:0;background:none;padding:2px 0 0;color:var(--acc);font-size:13px;font-weight:600;letter-spacing:.02em;text-align:left}
+.panel.discp{display:block}
+.chip.on{background:var(--acc);color:var(--acc-ink);border-color:transparent}
+.chip.half{border-color:var(--acc);color:var(--acc)}
+.chips .chip{font-size:12px;padding:3px 10px;min-height:0}
+.sealed{margin:12px 4px 0;color:var(--dim);font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.dq .opt{width:100%}
+.opt.sel{border-color:var(--acc);background:var(--grain),color-mix(in srgb,var(--acc) 30%,var(--panel))}
+.dq.right{border-color:color-mix(in srgb,var(--ok) 60%,transparent)}
+.dq.wrong{border-color:color-mix(in srgb,var(--bad) 60%,transparent)}
+.opt.ans{border-color:var(--ok);background:var(--grain),color-mix(in srgb,var(--ok) 30%,var(--panel))}
+.panel.warnp{border-color:color-mix(in srgb,var(--warn) 50%,transparent)}
