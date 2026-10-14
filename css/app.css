@@ -570,3 +570,10 @@ body[data-tab="home"] main{padding-bottom:calc(170px + env(safe-area-inset-botto
 .actline .link{white-space:nowrap}
 .actline .hdr{min-width:0}
 body.has-dbar .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
+/* v4.3 People */
+.bigbtn{min-height:56px;margin:12px 0 4px;font-size:17px;display:flex;align-items:center;justify-content:center;gap:10px}
+.bigbtn .px{width:20px;height:auto}
+.trial-hero .now-t{font-size:18px;line-height:1.3}
+.traits{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.trait{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--rule);font-size:14px}
+.trait b{color:var(--fg)}
