@@ -387,6 +387,7 @@ function tickPomo() {
   if (b) b.style.width = (1 - left / St.pomoLen(p)) * 100 + "%";
 }
 function runAssess() {
+  if (Sy.ensureLoanBill()) save();
   const fresh = [...St.assess(), ...Soc.assess()];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
@@ -509,7 +510,7 @@ function vMoney([sub] = []) {
   ${fold("money-bills", `<b class="grow">Bills and insurance</b><span class="small ${unpaid.length && bl.length ? "warn" : "muted"}">${yen(E.billsMonthly())}/mo${unpaid.length && bl.length ? ` · ${unpaid.length} unpaid` : ""}</span>`, `
     ${bl.length ? bl.map(b => { const paid = !!(b.paid || {})[mk]; return `<div class="item row between">
       <button class="bx sm ${paid ? "on" : ""}" data-act="billpaid" data-id="${b.id}" aria-pressed="${paid}" aria-label="Paid ${esc(b.name)} this month">${paid ? ic("check") : ""}</button>
-      <div class="grow"><b>${esc(b.name)}</b><div class="small muted">${b.kind === "insurance" ? "Insurance · " : ""}${b.freq === "year" ? "yearly" : "monthly"}${paid ? " · paid this month" : ""}</div></div>
+      <div class="grow"><b>${esc(b.name)}</b><div class="small muted">${b.kind === "insurance" ? "Insurance · " : b.kind === "loan" ? "Fixed · " : ""}${b.freq === "year" ? "yearly" : "monthly"}${paid ? " · paid this month" : ""}</div></div>
       <input class="amt" type="number" inputmode="numeric" data-ch="billamt" data-id="${b.id}" value="${b.amount ?? ""}" placeholder="¥ amount" aria-label="${esc(b.name)} amount">
       <button class="btn sm danger" data-act="delbill" data-id="${b.id}" aria-label="Delete ${esc(b.name)}">${ic("x")}</button></div>`; }).join("") : `<p class="empty">No bills yet.</p>`}
     ${unpaid.length && bl.length ? `<p class="small muted" style="margin-top:6px">${unpaid.length} not marked paid for ${mk}. Tick a bill when you pay it.</p>` : ""}
@@ -1654,7 +1655,15 @@ function archivesHtml() {
     <h3 style="margin-top:12px">Acts</h3>
     <div class="list">${Sy.ACTS.map(x => `<div class="small item"><b>Act ${x.id}: ${esc(x.name)}</b> <span class="muted">· ${esc(x.when)}</span><div class="muted">${esc(x.objective)}</div></div>`).join("")}
     <div class="small item"><b>Final Gate: Retirement</b> <span class="muted">· 14 Jan 2049</span></div></div>
-    <p class="tiny muted" style="margin-top:8px">Estimates, not advice. The target is rechecked once a country is chosen.</p>`;
+    <p class="tiny muted" style="margin-top:8px">Estimates, not advice. The target is rechecked once a country is chosen.</p>
+    <details style="margin-top:10px"><summary class="small">Education loan</summary>${(() => { const l = Sy.loanCfg(), st = Sy.loanState();
+      return `<p class="small" style="margin-top:8px">₹${st.bal.toLocaleString("en-IN")} left (about ${yen(st.yen)}), ${(l.rate * 100).toFixed(1)}% a year. EMI ₹${l.emi.toLocaleString("en-IN")} (about ${yen(st.emiYen)}) a month; about ₹${st.interest.toLocaleString("en-IN")} of it is interest now. ${isFinite(st.left) ? `Paid off in about ${Math.floor(st.left / 12)} years ${st.left % 12} months at this EMI.` : "The EMI doesn't cover the interest."}</p>
+      <p class="small">${l.takeover ? (Sy.loanLive() ? `Yours since ${E.fmtDate(l.takeover)}: it's a fixed bill in the Store.` : `Dad pays until ${E.fmtDate(l.takeover)}; then it becomes a fixed bill.`) : "Dad pays until your job starts. Set the start date when the offer lands."}</p>
+      <div class="grid"><label class="f">Job start date<input type="date" data-ch="loan" data-id="takeover" value="${esc(l.takeover || "")}"></label>
+        <label class="f">Yen per rupee<input type="number" step="0.01" inputmode="decimal" data-ch="loan" data-id="yenPerInr" value="${l.yenPerInr}"></label>
+        <label class="f">EMI (₹)<input type="number" inputmode="numeric" data-ch="loan" data-id="emi" value="${l.emi}"></label>
+        <label class="f">Rate (% a year)<input type="number" step="0.1" inputmode="decimal" data-ch="loan" data-id="rate" value="${r1(l.rate * 100)}"></label></div>
+      <p class="tiny muted">The rupee rate isn't live; update it now and then. Balance is estimated from ₹${l.inr.toLocaleString("en-IN")} on ${E.fmtDate(l.asOf)}.</p>`; })()}</details>`;
 }
 
 // The one Settings page: every setting in the app, in folding sections. Gears elsewhere land on their section.
@@ -1684,7 +1693,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.3 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1942,7 +1951,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "offer": {
       const on = !(S.settings.system || {}).offerAt;
       if (!confirm(on ? "Log a job offer in one of your target roles?" : "Remove the logged offer?")) return;
-      Sy.logOffer(on); save(); return render();
+      Sy.logOffer(on);
+      if (on) { const d = prompt("Job start date (YYYY-MM-DD)? Leave empty if you don't know yet; you can set it in Settings → System Archives.", ""); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) Sy.setLoan({ takeover: d.trim() }); }
+      save(); return render();
     }
     case "milestone": Sy.seeMilestone(id); save(); return render();
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
@@ -2225,6 +2236,11 @@ document.addEventListener("change", async ev => {
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
+  if (k === "loan") {
+    const f = el.dataset.id, v = f === "takeover" ? (el.value || null) : num(el.value);
+    if (f !== "takeover" && (v === null || v <= 0)) return render();
+    Sy.setLoan({ [f]: f === "rate" ? v / 100 : v }); save(); return render();
+  }
   if (k === "dqnum") { if (dq) dq.ans[+el.dataset.id] = el.value; return; }
   if (k === "profname") { S.settings.name = el.value.trim().slice(0, 24) || "Arin"; touchSettings(); save(); return; }
   if (k === "cardsnew") { const v = num(el.value); if (v === null || v < 0 || v > 200) return render(); S.settings.cards.newPerDay = Math.round(v); touchSettings(); save(); return render(); }
