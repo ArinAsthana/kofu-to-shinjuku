@@ -13,6 +13,7 @@ import * as J from "./jlpt.js";
 import * as Soc from "./social.js";
 import * as Sy from "./system.js";
 import * as Cl from "./classes.js";
+import * as Al from "./alarms.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -99,7 +100,7 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : milestoneHtml(cer.ms)) : "");
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
@@ -286,6 +287,13 @@ function planSettings() {
     <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>`)}`;
 }
 // Dungeon gear: pomodoro and penalty rules (they apply to every study and workout block).
+function alarmSettings() {
+  if (!Al.granted()) return `<p class="small muted">Notifications are off for The Arin.</p><div class="btns"><button class="btn primary" data-act="alarmson">Turn on alarms</button></div>`;
+  const p = Al.prefs(), n = Al.upcoming().length;
+  return `${Al.TYPES.map(([k, l, d]) => `<div class="item row between"><div class="grow"><b>${l}</b><div class="tiny muted">${d}</div></div><div class="seg"><button data-act="alarmtoggle" data-id="${k}" aria-pressed="${p[k]}">${p[k] ? "On" : "Off"}</button></div></div>`).join("")}
+    ${Al.exactOk() ? "" : `<p class="small warn" style="margin-top:8px">Exact alarms are off, so alarms can ring a few minutes late.</p><div class="btns"><button class="btn sm" data-act="alarmson">Allow exact alarms</button></div>`}
+    <p class="tiny muted" style="margin-top:8px">${n} alarm${n === 1 ? "" : "s"} set for the next 3 days. Nothing rings during sleep blocks.</p>`;
+}
 function dungeonSettings() {
   const sst = S.settings.study;
   return `<h3>Pomodoro and penalties</h3><div class="grid">
@@ -331,11 +339,15 @@ function ceremony() {
   if (Sy.has(1) && ["study", "body"].includes(homeState().k)) return null; // never during a Dungeon
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
   const m = Sy.nextMilestone(); if (m) return { ms: m };
+  if (Al.needsAsk()) return { alarms: true };
   if (Sy.has(2) && E.parse(E.today()).getDay() === 0 && E.moneyDue() && lsGet(MONEYWIN_KEY) !== E.today()) return { money: true };
   return null;
 }
 const MONEYWIN_KEY = "kts-moneywin";
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const alarmWinHtml = () => `<div class="milestone" role="dialog" aria-label="Alarms"><div class="ms-in">
+  <div class="hdr">System · Alarms</div>${px("bell", "ms-px")}<h2 class="ms-t">Let the System wake you</h2><p class="muted">Dungeons and penalties start now. Alarms ring when a block opens, an hour before bed, before a penalty lapses, and with the morning brief. Android will ask to allow notifications, then exact alarms.</p>
+  <button class="btn primary block" data-act="alarmson">Turn on alarms</button><button class="btn block" style="margin-top:8px" data-act="alarmslater">Not now</button></div></div>`;
 const moneyWinHtml = () => `<div class="milestone" role="dialog" aria-label="Money check-in"><div class="ms-in">
   <div class="hdr">System · Sunday</div>${px("coin", "ms-px")}<h2 class="ms-t">Money check-in</h2><p class="muted">Bank balance and debt left. Twenty seconds, then the week is counted.</p>
   <button class="btn primary block" data-act="moneywin" data-id="money">Open Store</button><button class="btn block" style="margin-top:8px" data-act="moneywin">Later</button></div></div>`;
@@ -1431,6 +1443,7 @@ function vWeek() {
 let wdTimer = null;
 function scheduleWindDown() {
   clearTimeout(wdTimer);
+  if (Al.available()) return; // the Android app schedules a real alarm instead (alarms.js)
   const wd = S.settings.windDown;
   if (!wd || wd.on === false || !wd.notify || typeof Notification === "undefined" || Notification.permission !== "granted") return;
   const now = Date.now();
@@ -1806,6 +1819,7 @@ function vSettings([sec] = []) {
     <p class="tiny muted">Used for the greeting on the System screen.</p>`, esc(st.name || "Arin"))}
   ${planSettings()}
   ${sx("dungeon", "Dungeon", dungeonSettings())}
+  ${Al.available() && Sy.has(1) ? sx("alarms", "Alarms", alarmSettings(), Al.granted() ? "on" : "off") : ""}
   ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
   ${sx("money", "Money and Store", moneySettings())}
@@ -1823,7 +1837,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v5.0 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v5.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2110,6 +2124,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       if (on) { const d = prompt("Job start date (YYYY-MM-DD)? Leave empty if you don't know yet; you can set it in Settings → System Archives.", ""); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) Sy.setLoan({ takeover: d.trim() }); }
       save(); return render();
     }
+    case "alarmson": ceremonyDone = true; Al.request().then(render); return render();
+    case "alarmslater": Al.later(); ceremonyDone = true; return render();
+    case "alarmtoggle": Al.toggle(id); return render();
     case "moneywin": try { localStorage.setItem(MONEYWIN_KEY, E.today()); } catch (e) {} ceremonyDone = true; if (id) { entering = true; return go(id); } return render();
     case "milestone": Sy.seeMilestone(id); ceremonyDone = true; save(); return render();
     case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
@@ -2455,6 +2472,7 @@ function renameStyle() {
   setTimeout(() => { runAssess(); render(); }, 6000);
   setInterval(tickPomo, 1000);
   scheduleWindDown(); onSave(scheduleWindDown);
+  let alT = null; Al.init({ go, render }); onSave(() => { clearTimeout(alT); alT = setTimeout(Al.reschedule, 2000); });
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
   setInterval(() => {
     runAssess();
