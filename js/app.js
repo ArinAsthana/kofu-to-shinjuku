@@ -1823,7 +1823,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.3.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v5.0 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {

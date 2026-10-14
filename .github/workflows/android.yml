@@ -1,0 +1,83 @@
+# Builds The Arin's Android APK and publishes it as a GitHub Release.
+# The APK loads the live GitHub Pages site, so web releases reach the phone without a new APK.
+# A new APK is only needed when something under native/ changes.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   KEYSTORE_B64       the release keystore, base64-encoded (key alias "thearin")
+#   KEYSTORE_PASSWORD  its password (store and key use the same one)
+# and native/android/app/google-services.json from the Firebase console.
+# Without them the workflow still compiles the app as a check, but publishes nothing.
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["native/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install and sync Capacitor
+        run: |
+          npm ci
+          npx cap sync android
+
+      - name: Check release inputs
+        id: inputs
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          ok=true
+          if [ -z "$KEYSTORE_B64" ]; then echo "::warning::KEYSTORE_B64 secret is missing: building an unsigned check only."; ok=false; fi
+          if [ ! -s android/app/google-services.json ]; then echo "::warning::native/android/app/google-services.json is missing: Google sign-in would crash, so nothing is published."; ok=false; fi
+          echo "release=$ok" >> "$GITHUB_OUTPUT"
+          if [ "$ok" = true ]; then echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"; fi
+
+      - name: Build APK
+        working-directory: native/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          KEYSTORE_PATH: ${{ steps.inputs.outputs.release == 'true' && format('{0}/release.keystore', runner.temp) || '' }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          ls -la app/build/outputs/apk/release/
+
+      - name: Publish release
+        if: steps.inputs.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/The-Arin.apk"
+          tag="apk-${{ github.run_number }}"
+          gh release create "$tag" "$RUNNER_TEMP/The-Arin.apk" \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --latest \
+            --title "The Arin · build ${{ github.run_number }}" \
+            --notes "Install: download The-Arin.apk on your phone and open it. Installs over the previous version; your data stays."
