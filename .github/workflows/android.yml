@@ -13,6 +13,8 @@ on:
   push:
     branches: [main]
     paths: ["native/**", ".github/workflows/android.yml"]
+  pull_request:
+    paths: ["native/**", ".github/workflows/android.yml"]
   workflow_dispatch:
 
 permissions:
@@ -71,7 +73,7 @@ jobs:
           ls -la app/build/outputs/apk/release/
 
       - name: Publish release
-        if: steps.inputs.outputs.release == 'true'
+        if: steps.inputs.outputs.release == 'true' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
