@@ -5,6 +5,7 @@
 import { S, live, put } from "./store.js";
 import * as E from "./engine.js";
 import * as J from "./jlpt.js";
+import * as Cl from "./classes.js";
 
 // Hidden target: family spending × 25 (the 4% rule). ¥130M is the default until a country is chosen.
 export const FI = { target: 130000000, born: "2004-01-14", finalGate: "2049-01-14", perYear: 3750000, realReturn: 0.05 };
@@ -99,6 +100,8 @@ export function milestones() {
   const a = act1(), out = [];
   for (const q of a.parts) if (q.done) out.push({ id: "act1:" + q.id, title: q.id === "save" ? "Savings goal reached" : q.id === "debt" ? "Debt cleared" : "Offer secured", text: "Act I objective complete: " + q.label + "." });
   if (a.done) out.push({ id: "act1:clear", title: "Act I cleared: Escape Kofu", text: "A new gate opens. The Treasury unlocks." });
+  for (const d of Cl.all()) if (Cl.bossPassed(d.id)) out.push({ id: "dboss:" + d.id, title: "Boss cleared: " + d.name, text: "Title earned: " + d.title + ". Equip it in the Class hall." });
+  for (const c of Cl.CLASSES) if (Cl.classInfo(c.id).earned) out.push({ id: "class:" + c.id, title: "Class earned: " + c.name, text: "Every discipline cleared and the capstone done." });
   for (const l of J.unlocked().slice(1)) out.push({ id: "jlpt:" + l, title: "Gate open: " + l, text: "The JLPT ladder climbs to " + l + "." });
   return out;
 }
