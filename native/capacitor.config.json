@@ -1,0 +1,30 @@
+{
+  "appId": "com.arin.thearin",
+  "appName": "The Arin",
+  "webDir": "www",
+  "backgroundColor": "#E0211F",
+  "server": {
+    "url": "https://arinasthana.github.io/kofu-to-shinjuku/",
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": [
+        "google.com"
+      ]
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_eye",
+      "iconColor": "#E0211F"
+    },
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK"
+    }
+  }
+}

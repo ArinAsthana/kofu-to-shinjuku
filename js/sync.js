@@ -57,13 +57,26 @@ export function panelHtml(esc) {
 
 export function handle(act, el, c) {
   if (act === "signin") { signIn(); return true; }
-  if (act === "signout") { fb && fb.auth.signOut(fb.authI); return true; }
+  if (act === "signout") { fb && fb.auth.signOut(fb.authI); if (isNative()) nativeAuth().signOut().catch(() => {}); return true; }
   if (act === "syncnow") { syncNow(true); return true; }
   return false;
 }
 
+// In the Android app (Capacitor), Google blocks sign-in inside the web view, so the native plugin signs in
+// and hands its ID token to Firebase web auth. Sync then works exactly as in Chrome.
+export const isNative = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const nativeAuth = () => window.Capacitor.Plugins.FirebaseAuthentication || window.Capacitor.registerPlugin("FirebaseAuthentication");
 async function signIn() {
   if (!fb) return;
+  if (isNative()) {
+    try {
+      const r = await nativeAuth().signInWithGoogle();
+      const tok = r && r.credential && r.credential.idToken;
+      if (!tok) throw new Error("Google didn't return a sign-in token");
+      await fb.auth.signInWithCredential(fb.authI, fb.auth.GoogleAuthProvider.credential(tok));
+    } catch (e) { error = msg(e); refresh(); }
+    return;
+  }
   const p = new fb.auth.GoogleAuthProvider();
   const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   try {
