@@ -2,7 +2,7 @@
 // Every record has an id and `u` (last-updated ms). Deletes are tombstones ({del:true})
 // so sync between devices never resurrects or loses records.
 
-import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED, BLOCK_SEED, PLAN_SETTINGS, WIND_DOWN, CARE_SEED, SOCIAL, FUN, STUDY } from "./data.js";
+import { APP_ID, SCHEMA_VERSION, DEFAULT_REWARDS, HABITS, DATES, MONEY, MONEY_SEED, BILL_SEED, BLOCK_SEED, PLAN_SETTINGS, WIND_DOWN, CARE_SEED, SOCIAL, FUN, STUDY, USAGE } from "./data.js";
 
 export const RECORD_STORES = [
   "habitLog", "xpEvents", "rewardHistory", "exercises", "areaState",
@@ -44,6 +44,7 @@ function freshSettings() {
     study: { ...STUDY, from: Date.now(), topics: null },
     cards: { newPerDay: 15 }, // new flashcards introduced per day
     jlpt: { level: "N5", unlocked: ["N5"], placed: false }, // ladder position; levels unlock by placement or Boss Raid
+    usage: { ...USAGE, apps: USAGE.apps.slice(), days: {}, judged: {} },
   };
 }
 
@@ -146,6 +147,8 @@ const MIGRATIONS = {
   9: s => { s.discLog = s.discLog || []; s.titles = s.titles || []; return s; },
   // 10 -> 11: v4 stages. The System starts at stage 0 today; everything already logged is kept, only hidden until its stage opens.
   10: s => { s.settings = s.settings || {}; const x = s.settings.system = s.settings.system || {}; if (x.stage == null) { x.stage = 0; x.unlockedAt = { 0: localIso(new Date()).slice(0, 10) }; } return s; },
+  // 11 -> 12: v5.2 phone-usage quest. Adds settings.usage (watched apps, daily limit, minutes per day); nothing existing changes.
+  11: s => { s.settings = s.settings || {}; if (!s.settings.usage) s.settings.usage = { ...USAGE, apps: USAGE.apps.slice(), days: {}, judged: {} }; return s; },
   8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {

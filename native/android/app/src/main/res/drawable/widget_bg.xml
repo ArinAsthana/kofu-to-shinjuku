@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A black System window with a red rule across the top. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="rectangle"><solid android:color="#FF0B0B0B" /><corners android:radius="4dp" /></shape></item>
+    <item android:height="3dp" android:gravity="top"><shape android:shape="rectangle"><solid android:color="#FFE0211F" /></shape></item>
+</layer-list>

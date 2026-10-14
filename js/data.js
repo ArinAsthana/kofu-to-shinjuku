@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -377,3 +377,7 @@ export const RIVAL_ACT = {
   Taste: "Show one thing you're into: wear it, play it or recommend it, and say why.",
   Reliability: "Make 3 small promises and keep every one, on time.",
 };
+
+// v5.2 phone-usage quest (Android app). apps: watched package names. days: minutes per date. judged: date -> "ok" | "over".
+export const USAGE_APPS = [["com.instagram.android", "Instagram"], ["com.zhiliaoapp.musically", "TikTok"], ["com.ss.android.ugc.trill", "TikTok (Asia)"], ["com.google.android.youtube", "YouTube"], ["com.twitter.android", "X"]];
+export const USAGE = { apps: USAGE_APPS.map(a => a[0]), limitMin: 60, days: {}, judged: {} };

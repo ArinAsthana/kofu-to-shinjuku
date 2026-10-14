@@ -1,5 +1,5 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY, TRIALS, TOWER, EGO, RIVAL_ACT } from "./data.js";
+import { USAGE_APPS, HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY, TRIALS, TOWER, EGO, RIVAL_ACT } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
@@ -14,6 +14,7 @@ import * as Soc from "./social.js";
 import * as Sy from "./system.js";
 import * as Cl from "./classes.js";
 import * as Al from "./alarms.js";
+import * as Us from "./usage.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -100,10 +101,11 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : milestoneHtml(cer.ms)) : "");
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
+  pushWidget();
   hydrate();
   if (tab === "settings" && rest[0] && entering0) { const d = document.querySelector(`[data-fold="set-${SET_SECTIONS[rest[0]] || rest[0]}"]`); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 0); } }
 }
@@ -214,7 +216,7 @@ function homeHero(hs, t) {
       <div class="btns"><button class="btn go block" data-act="enter" data-id="${hs.kind}">${hs.kind === "study" && g.ended ? "Report" : "Enter the Dungeon"}</button></div></div>`;
   }
   if (hs.k === "pen") { const p = St.openPenalties()[0], k = live("tasks").find(x => x.id === p.task), at = k && P.plan().at.get(k.id);
-    return `<div class="hero pen"><span class="hdr">${px("skull")} Penalty quest</span><div class="now-t">Make up ${esc(p.title)}</div>
+    return `<div class="hero pen"><span class="hdr">${px("skull")} Penalty quest</span><div class="now-t">${penWhat(p)}</div>
       <div class="small muted">${k ? P.dur(k.mins) : ""}${at ? ` · set for ${esc(dayLabel(at.date))} ${P.toHM(at.s)}` : ""}. The Store stays locked until it's done.</div>
       ${k ? `<div class="btns"><button class="btn go" data-act="taskdone" data-id="${k.id}">Done</button><button class="btn" data-act="go" data-id="plan">Open plan</button></div>` : ""}</div>`; }
   if (hs.k === "comeback") return `<div class="hero"><span class="hdr">${px("flame")} Welcome back</span><div class="now-t">Comeback quest</div>
@@ -240,6 +242,34 @@ function dungeonBar(hs) {
 }
 // Today's quests: the three that matter most, tagged. "Show all" opens the rest.
 const tag = (k, l) => `<span class="tag t-${k}">${k === "trial" ? px("flag") + " " : k === "pen" ? px("skull") + " " : ""}${l}</span>`;
+// v5.2: today's phone minutes against the limit, one line. Nothing else about usage is shown.
+function usageLine() {
+  if (!Us.available() || !Us.isGranted() || !Sy.has(1)) return "";
+  const m = Us.today(), lim = Us.cfg().limitMin, j = Us.cfg().judged[E.today()];
+  if (m == null) return "";
+  return `<div class="usage-l row between small ${m > lim ? "bad-t" : m > lim * 0.8 ? "warn" : ""}"><span>${px("eye")} Phone ${j === "ok" ? "· cleared" : j === "over" ? "· over" : ""}</span><span class="mono">${m} / ${lim} min</span></div>`;
+}
+// v5.3: a small snapshot for the Android home-screen widget (WidgetPlugin.java). Sent only when it changes.
+let widgetSig = "", widgetT = null;
+function pushWidget() {
+  if (!(window.Capacitor && window.Capacitor.isPluginAvailable && window.Capacitor.isPluginAvailable("Widget"))) return;
+  clearTimeout(widgetT);
+  widgetT = setTimeout(() => {
+    const nn = P.nowNext(), pens = St.openPenalties(), q = todayQuests();
+    const it = r => r && (r.type === "task" ? r.k.title : r.b ? r.b.title : "");
+    const now = pens.length ? { label: "PENALTY QUEST", title: penWhat(pens[0]).replace(/&[^;]+;/g, ""), time: "" }
+      : nn.now ? { label: "NOW", title: it(nn.now), time: `${P.toHM(nn.now.s)}–${P.toHM(nn.now.e)}` }
+      : nn.next ? { label: "NEXT", title: it(nn.next), time: P.toHM(nn.next.s) } : { label: "SYSTEM", title: "Nothing left today", time: "" };
+    const quests = [...q.trials.map(e => ({ t: e.k.title, done: !!e.done })), ...q.events.map(e => ({ t: e.k.title, done: !!e.done })), ...q.habits.map(x => ({ t: x.h.name, done: x.on }))]
+      .sort((a, b) => a.done - b.done).slice(0, 3);
+    const m = Us.available() && Us.isGranted() ? Us.today() : null;
+    const snapshot = { now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "" };
+    const sig = JSON.stringify(snapshot); if (sig === widgetSig) return;
+    widgetSig = sig;
+    const W = window.Capacitor.Plugins.Widget || window.Capacitor.registerPlugin("Widget");
+    W.update({ snapshot }).catch(() => { widgetSig = ""; });
+  }, 800);
+}
 function questsPanel(q) {
   const items = [...q.trials.filter(e => !e.done).map(e => [e.k.title, tag("trial", "Trial")]),
     ...q.events.filter(e => !e.done).map(e => [e.k.title, e.k.penalty ? tag("pen", "Penalty") : tag("today", "Today")]),
@@ -247,6 +277,7 @@ function questsPanel(q) {
   const top = items.slice(0, 3);
   return `<div class="panel quests"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
     ${top.length ? `<ul class="top3">${top.map(([x, tg]) => `<li><span class="grow">${esc(x)}</span>${tg}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}
+    ${usageLine()}
     <div class="btns"><button class="btn sm" data-act="questsall">${showAllQuests ? "Hide" : `Show all (${q.total})`}</button></div>
     ${showAllQuests ? questsAll(q) : ""}</div>`;
 }
@@ -287,6 +318,14 @@ function planSettings() {
     <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>`)}`;
 }
 // Dungeon gear: pomodoro and penalty rules (they apply to every study and workout block).
+function usageSettings() {
+  const u = Us.cfg(), extra = u.apps.filter(p => !USAGE_APPS.some(a => a[0] === p));
+  return `${Us.isGranted() ? "" : `<p class="small muted">Usage access is off for The Arin.</p><div class="btns"><button class="btn primary" data-act="usageon">Open Usage access</button></div>`}
+    <div class="grid"><label class="f">Daily limit (min)<input type="number" inputmode="numeric" data-ch="usagelimit" value="${u.limitMin}"></label></div>
+    <h3>Watched apps</h3>${USAGE_APPS.map(([p, l]) => `<div class="item row between"><span>${esc(l)}</span><div class="seg"><button data-act="usageapp" data-id="${p}" aria-pressed="${u.apps.includes(p)}">${u.apps.includes(p) ? "On" : "Off"}</button></div></div>`).join("")}
+    <label class="f" style="margin-top:8px">Other apps (package names, comma-separated)<input data-ch="usageextra" value="${esc(extra.join(", "))}" placeholder="e.g. com.reddit.frontpage"></label>
+    <p class="tiny muted">Counted from midnight. Over the limit: a penalty quest. Under it at wind-down: +${XP.habit} XP.</p>`;
+}
 function alarmSettings() {
   if (!Al.granted()) return `<p class="small muted">Notifications are off for The Arin.</p><div class="btns"><button class="btn primary" data-act="alarmson">Turn on alarms</button></div>`;
   const p = Al.prefs(), n = Al.upcoming().length;
@@ -340,6 +379,7 @@ function ceremony() {
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
   const m = Sy.nextMilestone(); if (m) return { ms: m };
   if (Al.needsAsk()) return { alarms: true };
+  if (Us.needsAsk()) return { usage: true };
   if (Sy.has(2) && E.parse(E.today()).getDay() === 0 && E.moneyDue() && lsGet(MONEYWIN_KEY) !== E.today()) return { money: true };
   return null;
 }
@@ -348,6 +388,9 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return 
 const alarmWinHtml = () => `<div class="milestone" role="dialog" aria-label="Alarms"><div class="ms-in">
   <div class="hdr">System · Alarms</div>${px("bell", "ms-px")}<h2 class="ms-t">Let the System wake you</h2><p class="muted">Dungeons and penalties start now. Alarms ring when a block opens, an hour before bed, before a penalty lapses, and with the morning brief. Android will ask to allow notifications, then exact alarms.</p>
   <button class="btn primary block" data-act="alarmson">Turn on alarms</button><button class="btn block" style="margin-top:8px" data-act="alarmslater">Not now</button></div></div>`;
+const usageWinHtml = () => `<div class="milestone" role="dialog" aria-label="Phone limit"><div class="ms-in">
+  <div class="hdr">System · New daily quest</div>${px("eye", "ms-px")}<h2 class="ms-t">Stay under ${Us.cfg().limitMin} min</h2><p class="muted">The System watches Instagram, TikTok, YouTube and X. Under the limit: +${XP.habit} XP. Over it: a penalty quest. Android needs you to switch on Usage access for The Arin.</p>
+  <button class="btn primary block" data-act="usageon">Open Usage access</button><button class="btn block" style="margin-top:8px" data-act="usagelater">Not now</button></div></div>`;
 const moneyWinHtml = () => `<div class="milestone" role="dialog" aria-label="Money check-in"><div class="ms-in">
   <div class="hdr">System · Sunday</div>${px("coin", "ms-px")}<h2 class="ms-t">Money check-in</h2><p class="muted">Bank balance and debt left. Twenty seconds, then the week is counted.</p>
   <button class="btn primary block" data-act="moneywin" data-id="money">Open Store</button><button class="btn block" style="margin-top:8px" data-act="moneywin">Later</button></div></div>`;
@@ -373,7 +416,7 @@ function briefHtml() {
   return `<div class="modal-scrim" data-act="briefclose"></div><div class="modal brief" role="dialog" aria-label="Today's quests">
     <div class="hdr">System · ${esc(E.fmtDate(t))}</div><h2 class="bh">${back ? "Welcome back" : "Daily quests have arrived"}</h2>
     ${back ? `<p class="small">No penalties for the days away. Clear any one quest today for +${Sy.COMEBACK_XP} XP.</p>` : ""}
-    ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} Make up ${esc(p.title)} · shop locked until done</div>`).join("")}` : ""}
+    ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} ${penWhat(p)} · shop locked until done</div>`).join("")}` : ""}
     ${blocks.length ? `<div class="bsec">Blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
       return `<div class="bl"><span class="mono">${span(o.s, o.e)}</span> <b>${esc(o.b.title)}</b>${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}</div>`; }).join("")}` : ""}
     <div class="bsec">Today</div>${q.events.filter(e => !e.done).map(({ k, at }) => `<div class="bl"><span class="mono">${span(at.s, at.e)}</span> ${esc(k.title)}</div>`).join("") || `<div class="bl muted">No to-dos planned today.</div>`}
@@ -391,10 +434,14 @@ function topicLine(b, cls = "small") {
   const top = St.current(subj);
   return `<div class="${cls} topic-l">${ic("target", "inl")} ${top ? esc(top.t) : "All topics done. Add more in Plan → Study"}</div>`;
 }
+// A phone-limit penalty (v5.2) reads as what to do, not "make up".
+const isUsePen = p => String(p.id).startsWith("pen-use-");
+const penWhat = p => isUsePen(p) ? "30 min phone-free" : "Make up " + esc(p.title);
 function penaltyBox() {
   const pens = St.openPenalties(); if (!pens.length) return "";
   const xp = pens.reduce((a, p) => a + (p.xp || 0), 0), at = P.plan().at;
   const lines = pens.map(p => { const k = live("tasks").find(x => x.id === p.task), w = k && at.get(k.id);
+    if (isUsePen(p)) return `<div class="x">${esc(p.title)} on ${esc(dayLabel(p.date))}. Penalty quest: 30 min phone-free${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`;
     if (p.trial) return `<div class="x">Missed trial: ${esc(p.title)}, due ${esc(dayLabel(p.date))}. Clear it late to lift the penalty.</div>`;
     return `<div class="x">Missed ${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}. Penalty quest: ${k ? P.dur(k.mins) + " make-up" : "make-up"}${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`; }).join("");
   return win("Penalty", `${pens.length === 1 ? "A block was skipped." : pens.length + " blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
@@ -1497,7 +1544,7 @@ ${exLines.length ? exLines.join("\n") : "- No lifting or calisthenics logged"}
 - Runs: ${runs.length ? runs.map(r => `${r.km} km in ${E.fmtTime(r.sec)} (${E.fmtTime(E.pace(r))}/km, feel ${r.feel}/5)`).join("; ") : "none"}. Longest ever ${longest} / ${RUN_GOAL_KM} km.
 
 ### Social
-${socialLines(wk)}
+${socialLines(wk)}${Us.weekLine(t) ? "\n\n### Phone\n" + Us.weekLine(t) : ""}
 
 ### Money
 ${moneyLines()}
@@ -1819,6 +1866,7 @@ function vSettings([sec] = []) {
     <p class="tiny muted">Used for the greeting on the System screen.</p>`, esc(st.name || "Arin"))}
   ${planSettings()}
   ${sx("dungeon", "Dungeon", dungeonSettings())}
+  ${Us.available() && Sy.has(1) ? sx("usage", "Phone limit", usageSettings(), Us.isGranted() ? Us.cfg().limitMin + " min" : "off") : ""}
   ${Al.available() && Sy.has(1) ? sx("alarms", "Alarms", alarmSettings(), Al.granted() ? "on" : "off") : ""}
   ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
@@ -1837,7 +1885,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v5.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v5.3 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2126,6 +2174,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "alarmson": ceremonyDone = true; Al.request().then(render); return render();
     case "alarmslater": Al.later(); ceremonyDone = true; return render();
+    case "usageon": ceremonyDone = true; Us.openSettings(); return render();
+    case "usagelater": Us.later(); ceremonyDone = true; return render();
+    case "usageapp": { const u = Us.cfg(); u.apps = u.apps.includes(id) ? u.apps.filter(x => x !== id) : [...u.apps, id]; touchSettings(); save(); render(); if (await Us.refresh()) { save(); render(); } return; }
     case "alarmtoggle": Al.toggle(id); return render();
     case "moneywin": try { localStorage.setItem(MONEYWIN_KEY, E.today()); } catch (e) {} ceremonyDone = true; if (id) { entering = true; return go(id); } return render();
     case "milestone": Sy.seeMilestone(id); ceremonyDone = true; save(); return render();
@@ -2426,6 +2477,8 @@ document.addEventListener("change", async ev => {
     const c = live("cards").find(x => x.id === cardForm.id); if (c) { c.img = mid; put("cards", c); save(); }
     return render();
   }
+  if (k === "usagelimit") { const v = num(el.value); if (v === null || v < 5 || v > 600) return render(); Us.cfg().limitMin = Math.round(v); touchSettings(); save(); return render(); }
+  if (k === "usageextra") { const u = Us.cfg(), keep = u.apps.filter(p => USAGE_APPS.some(a => a[0] === p)); u.apps = [...keep, ...el.value.split(",").map(x => x.trim()).filter(x => /^[\w.]+$/.test(x))]; touchSettings(); save(); return render(); }
   if (k === "studynum") { const v = num(el.value), id = el.dataset.id; if (v === null || v < (id === "penaltyXp" || id === "grace" ? 0 : 1) || v > 500) return render(); S.settings.study[id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "planmin") { const v = num(el.value); if (v === null || v < 0 || v > 120) return render(); S.settings.plan[el.dataset.id] = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "slotoff") {
@@ -2472,6 +2525,9 @@ function renameStyle() {
   setTimeout(() => { runAssess(); render(); }, 6000);
   setInterval(tickPomo, 1000);
   scheduleWindDown(); onSave(scheduleWindDown);
+  const usageTick = async () => { if (await Us.refresh()) { save(); render(); } };
+  usageTick(); setInterval(usageTick, 5 * 60000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") usageTick(); });
   let alT = null; Al.init({ go, render }); onSave(() => { clearTimeout(alT); alT = setTimeout(Al.reschedule, 2000); });
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
   setInterval(() => {
