@@ -144,6 +144,8 @@ const MIGRATIONS = {
   // Marks the old trait set for migrateTraits() in social.js (fresh installs start on the new set).
   // 9 -> 10: class system. Two new empty stores; nothing existing changes.
   9: s => { s.discLog = s.discLog || []; s.titles = s.titles || []; return s; },
+  // 10 -> 11: v4 stages. The System starts at stage 0 today; everything already logged is kept, only hidden until its stage opens.
+  10: s => { s.settings = s.settings || {}; const x = s.settings.system = s.settings.system || {}; if (x.stage == null) { x.stage = 0; x.unlockedAt = { 0: localIso(new Date()).slice(0, 10) }; } return s; },
   8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {

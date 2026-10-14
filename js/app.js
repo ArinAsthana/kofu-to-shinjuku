@@ -63,34 +63,44 @@ document.addEventListener("touchend", e => {
     if (d < el.dataset.min || d > el.dataset.max) return;
     planDate = d === E.today() ? null : d; entering = true; render(); return;
   }
-  const cur = TABS.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = TABS[cur + (dx < 0 ? 1 : -1)];
+  const T = openTabs(), cur = T.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = T[cur + (dx < 0 ? 1 : -1)];
   if (next) go(next[0]);
 }, { passive: true });
 window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (!location.hash.startsWith("#classes/q")) dq = null; chEdit = false; trialForm = null; battle = null; apForm = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
-const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
-const TAB_PX = { home: "eye", plan: "cal", money: "coin", status: "chart" };
+// v4: five fixed slots. A slot stays empty until its stage unlocks; tabs never shift.
+const TABS = [["home", "System", "eye", 0], ["plan", "Plan", "cal", 0], ["classes", "Study", "scroll", 3], ["people", "People", "people", 4], ["money", "Store", "coin", 2]];
+const openTabs = () => TABS.filter(t => Sy.has(t[3]));
+// Old links still land somewhere: the Dungeon is a Home state, Status is Profile, topics live in Study, People is a tab.
+const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
+// The stage each area needs. Locked areas are invisible, so a link to one lands on Home.
+const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, cards: 3, jlpt: 3, people: 4 };
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { home: "eye", alerts: "bell", settings: "gear", more: "gear", dungeon: "gate", focus: "sword", cards: "scroll", jlpt: "flag", classes: "crown", study: "scroll", train: "sword", body: "flame", plan: "cal", social: "people", money: "coin", status: "chart", skills: "chart" };
-const TAB_OF = { home: "home", alerts: "home", more: "home", settings: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", classes: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
+const HEAD_PX = { home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
-  const [tab, ...rest] = route();
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, study: vStudyPage, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vStatus, more: vSettings, settings: vSettings };
+  if (Sy.checkStage()) save();
+  let [tab, ...rest] = route();
+  if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
+  if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
-  $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(TAB_PX[k])}${l}</button>`).join("");
+  const fresh = Sy.pendingUnlock();
+  $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
   document.body.dataset.tab = tab;
   const h1 = $("#app header.top h1") || $("#app > h1"); if (h1) h1.insertAdjacentHTML("afterbegin", px(HEAD_PX[tab] || "eye", "hpx"));
   const app = $("#app"), entering0 = entering;
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
-  const ms = !briefOpen && !sheet ? Sy.nextMilestone() : null;
-  $("#overlay").innerHTML = (briefOpen ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (ms ? milestoneHtml(ms) : "");
-  $("#fab").innerHTML = TAB_OF[tab] === "plan" && !(tab === "social" && rest[0] === "p") ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
-  document.body.classList.toggle("modal-open", !!(briefOpen || sheet || ms));
+  // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
+  const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : milestoneHtml(cer.ms)) : "");
+  $("#fab").innerHTML = TAB_OF[tab] === "plan" ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
+  document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   hydrate();
   if (tab === "settings" && rest[0] && entering0) { const d = document.querySelector(`[data-fold="set-${SET_SECTIONS[rest[0]] || rest[0]}"]`); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 0); } }
 }
@@ -255,6 +265,16 @@ function sheetHtml(k) {
 }
 // Every gear opens the one Settings page, at the section for the screen it sits on.
 const gear = k => `<button class="rbtn" data-act="nav" data-id="settings/${k}" aria-label="Settings">${ic("settings")}</button>`;
+/* ---------- ceremonies: unlock and milestone windows ---------- */
+let ceremonyDone = false; // one per open
+function ceremony() {
+  if (ceremonyDone) return null;
+  const u = Sy.pendingUnlock(); if (u) return { unlock: u };
+  const m = Sy.nextMilestone(); return m ? { ms: m } : null;
+}
+const unlockHtml = u => `<div class="milestone" role="dialog" aria-label="New area unlocked: ${esc(u.area)}"><div class="ms-in">
+  <div class="hdr">System · New area unlocked</div>${px({ Dungeon: "sword", Store: "coin", Study: "scroll", People: "people", Tower: "trophy" }[u.area] || "star", "ms-px")}<h2 class="ms-t">${esc(u.area)}</h2><p class="muted">${esc(u.text)}</p>
+  <button class="btn primary block" data-act="unlock" data-id="${u.tab || ""}">${u.tab ? "Open " + esc(u.area) : "Continue"}</button></div></div>`;
 /* ---------- milestone window ---------- */
 // Full screen, for big moments only (Act steps, gates). Routine ticks stay quiet.
 const milestoneHtml = m => `<div class="milestone" role="dialog" aria-label="${esc(m.title)}"><div class="ms-in">
@@ -364,7 +384,7 @@ function tickPomo() {
 }
 function runAssess() {
   if (Sy.ensureLoanBill()) save();
-  const fresh = [...St.assess(), ...Soc.assess()];
+  const fresh = [...(Sy.has(1) ? St.assess() : []), ...(Sy.has(4) ? Soc.assess() : [])];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
 
@@ -405,20 +425,28 @@ function vAlerts() {
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
 
-function vStatus() {
-  const t = E.today(), xp = E.xpTotal(), sk = Sy.streak(), days = E.daysBetween(t, S.settings.dates.graduation);
-  const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
-  return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div>${gear("status")}</header>
+// Profile (was Status): Act I in full, the locked gates, titles, discipline badges, level history,
+// and one "?" for whatever the System unlocks next. Level and streak live on Home.
+function vProfile() {
+  const xp = E.xpTotal(), nx = Sy.nextStage(), tl = Sy.has(5) ? Cl.titles() : [], eq = (S.settings.classes || {}).equipped;
+  const ups = levelUps(), discs = Sy.has(3) ? Cl.all().filter(d => Cl.bossPassed(d.id) || Cl.active().includes(d.id)) : [];
+  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>
+  <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
-  <div class="carousel">
-    <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
-      <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "var(--mag)")}
-      <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} to spend${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
-    <div class="card g-ind"><span class="k">Days to graduation</span>
-      <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
-    <div class="card g-cyan"><span class="k">Streak</span>
-      <div><div class="dm huge">${String(sk.n).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done · shield ${sk.shieldUsed ? "used this week" : "ready"}</div></div></div>
-  </div>`;
+  <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
+  <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
+    ${ups.length ? `<div class="list" style="margin-top:8px">${ups.slice(-5).reverse().map(u => `<div class="row between small"><span>Level ${u.lv}</span><span class="muted mono">${esc(E.fmtDate(u.date))}</span></div>`).join("")}</div>` : ""}</div>
+  ${discs.length ? `<h2>Disciplines</h2><div class="chips">${discs.map(d => `<span class="chip ${Cl.bossPassed(d.id) ? "on" : "half"}">${Cl.bossPassed(d.id) ? px("star") + " " : ""}${esc(d.name)}</span>`).join("")}</div>` : ""}
+  ${Sy.has(5) ? `<h2>Titles <span class="n">${tl.length}</span></h2>${tl.length ? `<div class="panel">${tl.map(t => `<div class="row between item"><div class="grow"><b>${esc(t.name)}</b><div class="tiny muted">${esc(t.from)}</div></div>
+      ${eq === t.id ? `<button class="btn sm" data-act="unequip">Equipped</button>` : `<button class="btn sm ${t.owned ? "" : "go"}" data-act="equip" data-id="${t.id}">${t.owned ? "Equip" : `Equip · ${t.cost} XP`}</button>`}</div>`).join("")}</div>`
+      : `<div class="panel"><p class="small muted">None yet. Boss exams and Raids give titles.</p></div>`}` : ""}
+  ${nx ? `<h2>Next</h2><div class="panel silhouette"><span class="q-mark">?</span><div class="grow"><b>Something is sealed.</b><div class="small muted">${esc(Sy.STAGES[Sy.stage()].hint)}</div></div></div>` : ""}`;
+}
+// Dates each level was reached, from the running XP total.
+function levelUps() {
+  let tot = 0, lv = 1; const out = [];
+  for (const e of live("xpEvents").sort((a, b) => a.ts - b.ts)) { tot += e.xp || 0; const L = Math.floor(tot / LEVEL_XP) + 1; if (L > lv) { for (let x = lv + 1; x <= L; x++) out.push({ lv: x, date: E.ymd(new Date(e.ts)) }); lv = L; } }
+  return out;
 }
 // The current Act in full, later Acts as locked, unnamed gates, and the Final Gate as a bar with no number.
 function actPanel() {
@@ -579,13 +607,13 @@ function gaps(opp) {
 }
 function rivalBox() {
   const L = ladder(), s1 = n => n.toFixed(1);
-  if (L.me.avg == null) return sysBox(`Rate yourself to start the rival ladder.`, "Score yourself on the same key you use for others. Your next opponent is the person ranked just above you; match their stats to clear them, then face the next.", `<div class="btns"><button class="btn sm primary" data-act="go" data-id="social/me">Rate yourself</button></div>`);
-  if (!L.opp) return sysBox(`Ladder cleared. You're at or above everyone you've rated.`, `You: ${L.me.r} ${s1(L.me.avg)}. Add someone you look up to as your next opponent.`, `<div class="btns"><button class="btn sm" data-act="go" data-id="social/me">Re-rate yourself</button></div>`);
+  if (L.me.avg == null) return sysBox(`Rate yourself to start the rival ladder.`, "Score yourself on the same key you use for others. Your next opponent is the person ranked just above you; match their stats to clear them, then face the next.", `<div class="btns"><button class="btn sm primary" data-act="go" data-id="people/me">Rate yourself</button></div>`);
+  if (!L.opp) return sysBox(`Ladder cleared. You're at or above everyone you've rated.`, `You: ${L.me.r} ${s1(L.me.avg)}. Add someone you look up to as your next opponent.`, `<div class="btns"><button class="btn sm" data-act="go" data-id="people/me">Re-rate yourself</button></div>`);
   const g = gaps(L.opp), o = L.opp;
   return `<div class="panel rival"><div class="row between"><span class="k">Next opponent</span><span class="mono small muted">${L.cleared.length} cleared · ${L.ahead.length} to go</span></div>
-    <button class="q tbtn person" data-act="go" data-id="social/p/${o.p.id}" style="margin-top:8px">${badge(o.rk)}<div class="grow"><div class="t">${esc(o.p.name)}</div><div class="small muted">${s1(o.rk.avg)} vs your ${s1(L.me.avg)} · gap ${s1(o.rk.avg - L.me.avg)}</div></div><span class="chev">${ic("right")}</span></button>
+    <button class="q tbtn person" data-act="go" data-id="people/p/${o.p.id}" style="margin-top:8px">${badge(o.rk)}<div class="grow"><div class="t">${esc(o.p.name)}</div><div class="small muted">${s1(o.rk.avg)} vs your ${s1(L.me.avg)} · gap ${s1(o.rk.avg - L.me.avg)}</div></div><span class="chev">${ic("right")}</span></button>
     <div class="small" style="margin-top:8px">${g.length ? `Close the gap: ${g.slice(0, 3).map(x => `<b>${esc(x.c)}</b> ${x.me ?? "?"}→${x.them}`).join(" · ")}` : "No single stat behind; lift your average anywhere."}</div>
-    <div class="btns"><button class="btn sm" data-act="go" data-id="social/me">Re-rate yourself</button></div>
+    <div class="btns"><button class="btn sm" data-act="go" data-id="people/me">Re-rate yourself</button></div>
     <p class="tiny muted">Re-rate yourself monthly, honestly. ${S.settings.social.selfAt ? `Last: ${E.fmtDate(S.settings.social.selfAt)}.` : ""}</p></div>`;
 }
 // One criterion row: 1–5, ? (don't know), and a fold-out key on how to read it.
@@ -597,7 +625,7 @@ function critRow(c, v, id) {
 }
 function vSelf() {
   const sc = selfScores(), rk = rankScores(sc);
-  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button>
+  return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button>
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>You</h1><div class="small muted">${rk.avg ? `${rk.avg.toFixed(1)} avg` : "unrated"} · same key as everyone else</div></div></div>
   <p class="small muted">Rate where you are today, not where you want to be. Ask a friend if unsure.</p>
   <h2>Assessment</h2><div class="panel">${S.settings.social.criteria.map(c => critRow(c, sc[c] || 0, "me")).join("")}</div>`;
@@ -615,11 +643,11 @@ function vSocial([sub, id]) {
   if (sub === "p" && id) return vPerson(id);
   if (sub === "me") return vSelf();
   sub = sub || "people";
-  if (sub === "log") return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Hangouts</h1>${vHangouts()}`;
+  if (sub === "log") return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><h1>Hangouts</h1>${vHangouts()}`;
   if (sub === "habits") return vHabits();
   if (sub === "battle") return vBattle();
   if (sub === "appraise") return vAppraise(id);
-  return `${planHead("people")}${trialsPanel()}${vPeople()}<button class="quiet-row" data-act="go" data-id="social/log"><span class="grow">Hangout log</span><span class="chev">${ic("right")}</span></button>`;
+  return `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>People</h1></div></header>${trialsPanel()}${vPeople()}<button class="quiet-row" data-act="go" data-id="people/log"><span class="grow">Hangout log</span><span class="chev">${ic("right")}</span></button>`;
 }
 function balance() {
   const t = E.today(), hs = live("hangouts").filter(h => E.daysBetween(h.date, t) < 30), ppl = Object.fromEntries(live("people").map(p => [p.id, p]));
@@ -647,17 +675,17 @@ function vPeople() {
     ${bl.total >= 3 && bl.partnerOnly / bl.total > 0.7 ? `<p class="small warn" style="margin-top:8px">Over 70% of your time out is just the two of you. Book one friend this week.</p>` : ""}
     <div class="chips" style="margin-top:10px">${counts.map(([r, c, n]) => `<span class="chip" style="min-height:0;padding:3px 10px">${badge({ r, c })} ${n}</span>`).join("")}</div>
   </div>
-  <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="social/p/${p.id}">
+  <div class="list" style="margin-top:12px">${ppl.map(({ p, st, rk }) => `<button class="q tbtn person" data-act="go" data-id="people/p/${p.id}">
       ${badge(rk)}<div class="grow"><div class="t">${esc(p.name)}</div>
       <div class="small muted">${esc(ptype(p.type)[1])} · ${st.since === null ? "never logged" : st.since === 0 ? "seen today" : `seen ${st.since}d ago`}</div></div><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">Nobody registered yet. Add the people you want to keep close, or keep an eye on.</p>`}</div>
   ${tip("people-rank", "Rank is the average of your scores (? left out): S 4.5+, A 3.8+, B 3.0+, C 2.2+, D 1.5+, E below. Each score has a Key on the person's page. It's your private read, not a verdict on them.")}`;
 }
 function vPerson(id) {
   const p = live("people").find(x => x.id === id);
-  if (!p) return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><p class="empty">Not found.</p>`;
+  if (!p) return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><p class="empty">Not found.</p>`;
   const rk = rankOf(p), st = personState(p), crit = S.settings.social.criteria;
   const hs = live("hangouts").filter(h => (h.people || []).includes(id)).sort((a, b) => b.date.localeCompare(a.date));
-  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button>
+  return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button>
   <div class="row" style="gap:14px;margin:6px 0 4px">${badge(rk, true)}<div><h1>${esc(p.name)}</h1><div class="small muted">${esc(ptype(p.type)[1])}${rk.avg ? ` · ${rk.avg.toFixed(1)} avg` : " · unrated"}</div></div></div>
   <h2>Assessment</h2>
   <div class="panel">${crit.map(c => critRow(c, (p.scores || {})[c] || 0, p.id)).join("")}</div>
@@ -668,7 +696,7 @@ function vPerson(id) {
     <div class="btns"><button class="btn go" data-act="hangwith" data-id="${p.id}">Log a hangout with ${esc(p.name)}</button></div></div>
   <h2>Field notes <span class="n">habits worth copying</span></h2>
   <div class="panel">${live("fieldNotes").filter(n => n.person === p.id).map(n => `<div class="item small"><b>${esc(n.trait)}</b> · ${esc(n.habit)}${n.status ? ` <span class="muted">· ${n.status === "notme" ? "not me" : n.status}</span>` : ""}</div>`).join("") || `<p class="empty">Nothing yet. What do they do that works?</p>`}
-    <div class="btns"><button class="btn sm" data-act="go" data-id="social/habits">Add in Habit library</button></div></div>
+    <div class="btns"><button class="btn sm" data-act="go" data-id="people/habits">Add in Habit library</button></div></div>
   <h2>Notes</h2>
   <div class="panel"><label class="f">Where you met<input data-ch="pwhere" data-id="${p.id}" value="${esc(p.where || "")}"></label>
     <label class="f" style="margin-top:8px">Notes (birthday, interests, what you talked about)<textarea data-ch="pnote" data-id="${p.id}" rows="4">${esc(p.note || "")}</textarea></label></div>
@@ -704,7 +732,7 @@ const dayLabel = d => d === E.today() ? "Today" : d === E.addDays(E.today(), 1) 
 
 const planHead = cur => `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>Plan</h1></div>
     <div class="row" style="gap:8px">${gear("plan")}</div></header>
-  <div class="pills">${[["plan", "Day"], ["plan/week", "Week"], ["social", "People"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === l.toLowerCase()}">${l}</button>`).join("")}</div>`;
+  <div class="pills">${[["plan", "Day"], ["plan/week", "Week"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === l.toLowerCase()}">${l}</button>`).join("")}</div>`;
 function vPlan([sub]) {
   sub = sub === "week" ? "week" : "day";
   return planHead(sub) + (sub === "week" ? vWeek() : vDay());
@@ -1098,7 +1126,7 @@ function trialsPanel() {
   const open = Soc.openTrials(), fl = Soc.towerFloor();
   return `<div class="panel trials"><div class="row between"><span class="k" style="color:${TR_C}">Trials</span><span class="small muted">Fear Tower ${fl}/5</span></div>
     ${open.length ? `<div class="list" style="margin-top:8px">${open.slice(0, 6).map(k => trialRow(k, false)).join("")}</div>` : `<p class="small muted" style="margin:6px 0 0">No trial running. Ratings don't change you; trials do.</p>`}
-    <div class="btns"><button class="btn sm go" data-act="sheet" data-id="trial">New trial</button><button class="btn sm" data-act="go" data-id="social/habits">Habit library</button><button class="btn sm" data-act="go" data-id="social/battle">Battle log</button><button class="btn sm" data-act="go" data-id="social/appraise">Appraisal</button></div></div>`;
+    <div class="btns"><button class="btn sm go" data-act="sheet" data-id="trial">New trial</button><button class="btn sm" data-act="go" data-id="people/habits">Habit library</button><button class="btn sm" data-act="go" data-id="people/battle">Battle log</button><button class="btn sm" data-act="go" data-id="people/appraise">Appraisal</button></div></div>`;
 }
 // The new-trial sheet: pick a type, then a pre-filled form.
 function trialSheetHtml(type) {
@@ -1142,7 +1170,7 @@ function battleHtml(id) {
       ${[["what", "What happened"], ["react", "How they reacted"], ["next", "Next time"]].map(([f, n]) => l[f] ? `<div class="small"><b>${n}:</b> ${esc(l[f])}</div>` : "").join("")}
       <div class="btns"><button class="btn sm" data-act="trialundo" data-id="${k.id}">Mark not done</button></div>`; }
   if (k.trial === "appraisal") return `<h3>${esc(k.title)}</h3><p class="small muted">Hand your phone to them. Your own ratings stay hidden until they're done.</p>
-    <div class="btns"><button class="btn go" data-act="go" data-id="social/appraise/${k.id}">Start the appraisal</button><button class="btn danger" data-act="trialdel" data-id="${k.id}">Drop it</button></div>`;
+    <div class="btns"><button class="btn go" data-act="go" data-id="people/appraise/${k.id}">Start the appraisal</button><button class="btn danger" data-act="trialdel" data-id="${k.id}">Drop it</button></div>`;
   const b = battle && battle.id === id ? battle : (battle = { id, actual: null, asked: null, turned: null, ended: null, result: null, what: "", react: "", next: "" });
   return `<h3>Battle Log</h3><div class="small"><b>${esc(k.title)}</b></div><div class="small muted">${esc(TRIALS[k.trial]?.name || "Trial")} · ${esc(trialDue(k))}${k.fear ? ` · you predicted fear ${k.fear}/5` : ""}</div>
     <div id="battleForm"><div class="small" style="margin-top:12px">How scary was it, really?</div>${fearChips("actual", b.actual)}
@@ -1159,7 +1187,7 @@ function battleHtml(id) {
 function vHabits() {
   const ppl = live("people"), byId = Object.fromEntries(ppl.map(p => [p.id, p.name])), notes = live("fieldNotes"), crit = S.settings.social.criteria;
   const lab = { tried: "tried", worked: "worked", notme: "not me" };
-  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Habit library</h1>
+  return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><h1>Habit library</h1>
   <p class="small muted">Habits you've seen people do, by trait. Copy one as a trial and mark whether it worked for you.</p>
   <div class="panel" id="noteForm"><h3>Add a field note</h3><div class="grid">
     <label class="f">Who<select data-f="person"><option value="">Someone</option>${ppl.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></label>
@@ -1175,7 +1203,7 @@ function vBattle() {
   const fp = bs.filter(k => k.fear), over = fp.length ? fp.reduce((a, k) => a + (k.fear - k.log.actual), 0) / fp.length : null;
   const chart = last.length >= 2 ? Ch.lines([{ d: last.map(k => k.fear ?? null), c: "var(--warn)", dash: "4 3" }, { d: last.map(k => k.log.actual), c: TR_C }], { min: 1, max: 5, ticks: [1, 3, 5], label: "Predicted vs actual fear" }) : "";
   const wchart = sig.length >= 2 ? Ch.lines([{ d: sig.slice(-20).map(k => Soc.wantedScore(k.log)), c: "var(--lime)" }], { min: 0, max: 3, ticks: [0, 1, 2, 3], label: "Wanted signals" }) : "";
-  return `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button><h1>Battle log</h1>
+  return `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button><h1>Battle log</h1>
   <div class="panel"><div class="row between"><div><div class="dm big2">${bs.length}</div><div class="small muted">trials logged</div></div>
     <div style="text-align:right"><div class="dm big2">${sig.length ? Math.round(wanted / sig.length * 100) + "%" : "–"}</div><div class="small muted">wanted rate</div></div></div>
     ${over != null ? `<p class="small" style="margin-top:8px">${over > 0.2 ? `You predict ${over.toFixed(1)} points more fear than you feel. The fear is lying.` : over < -0.2 ? `It's been ${(-over).toFixed(1)} points scarier than you expect. Take smaller floors.` : "Your fear predictions are accurate."}</p>` : ""}</div>
@@ -1184,7 +1212,7 @@ function vBattle() {
   ${bs.length ? `<h2>Logs</h2><div class="panel">${bs.slice().reverse().slice(0, 30).map(k => `<button class="item tbtn" style="width:100%;text-align:left" data-act="sheet" data-id="battle:${k.id}"><div class="row between small"><b class="grow">${esc(k.title)}</b><span class="muted">${k.fear ?? "?"}→${k.log.actual}</span></div><div class="small muted">${esc(dayLabel(E.ymd(new Date(k.doneAt))))}${k.log.what ? " · " + esc(k.log.what) : ""}</div></button>`).join("")}</div>` : `<p class="empty">Clear a trial and fill in its Battle Log to see your numbers.</p>`}`;
 }
 function vAppraise(trialId) {
-  const crit = S.settings.social.criteria, aps = live("appraisals").sort((a, b) => b.date.localeCompare(a.date)), back = `<button class="back" data-act="nav" data-id="social">${ic("left")} People</button>`;
+  const crit = S.settings.social.criteria, aps = live("appraisals").sort((a, b) => b.date.localeCompare(a.date)), back = `<button class="back" data-act="nav" data-id="people">${ic("left")} People</button>`;
   if (apForm) return `${back}<h1>Appraisal</h1><p class="small muted">Rate them honestly on what you've actually seen. Use the Key under each trait. Tap ? if you can't judge.</p>
     <div class="panel" id="apForm"><label class="f">Your name<input data-f="by" value="${esc(apForm.by || "")}"></label></div>
     <div class="panel">${crit.map(c => critRow(c, apForm.scores[c] || 0, "ap")).join("")}</div>
@@ -1233,9 +1261,9 @@ function addHtml() {
     <button class="act" data-act="newtask">${ic("check")}<span>Task<small>The System finds it a slot</small></span></button>
     <button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, quest block, anything fixed</small></span></button>
     <button class="act" data-act="personform">${ic("user")}<span>Person<small>Add to your registry</small></span></button>
-    <button class="act" data-act="go" data-id="social/log">${ic("users")}<span>Hangout<small>Log time with people</small></span></button>
+    <button class="act" data-act="go" data-id="people/log">${ic("users")}<span>Hangout<small>Log time with people</small></span></button>
     <button class="act trial" data-act="sheet" data-id="trial">${ic("flame")}<span>Trial<small>A social quest with a Battle Log</small></span></button>
-    <button class="act" data-act="go" data-id="social/habits">${ic("edit")}<span>Field note<small>A habit you saw someone do well</small></span></button>
+    <button class="act" data-act="go" data-id="people/habits">${ic("edit")}<span>Field note<small>A habit you saw someone do well</small></span></button>
   </div>`;
 }
 
@@ -1622,6 +1650,7 @@ async function shrink(file) {
 
 /* ================= MORE ================= */
 // System Archives: the full plan, for when Arin deliberately wants it. Never linked from Home.
+const GLOSSARY = [["Quest", "anything that earns XP today"], ["Block", "planned time in your week"], ["Dungeon", "a block while it's running"], ["Trial", "a social quest with a floor"], ["Raid", "a big exam or application, fought in rounds"], ["Title", "earned by clearing a discipline or a Raid"], ["Moment", "one thing that happened with someone"], ["Active day", "a day with at least one quest done"]];
 function archivesHtml() {
   const a = Sy.archive();
   return `<p class="small muted">Everything the System keeps off the main screens. You don't need any of this day to day.</p>
@@ -1639,7 +1668,11 @@ function archivesHtml() {
         <label class="f">Yen per rupee<input type="number" step="0.01" inputmode="decimal" data-ch="loan" data-id="yenPerInr" value="${l.yenPerInr}"></label>
         <label class="f">EMI (₹)<input type="number" inputmode="numeric" data-ch="loan" data-id="emi" value="${l.emi}"></label>
         <label class="f">Rate (% a year)<input type="number" step="0.1" inputmode="decimal" data-ch="loan" data-id="rate" value="${r1(l.rate * 100)}"></label></div>
-      <p class="tiny muted">The rupee rate isn't live; update it now and then. Balance is estimated from ₹${l.inr.toLocaleString("en-IN")} on ${E.fmtDate(l.asOf)}.</p>`; })()}</details>`;
+      <p class="tiny muted">The rupee rate isn't live; update it now and then. Balance is estimated from ₹${l.inr.toLocaleString("en-IN")} on ${E.fmtDate(l.asOf)}.</p>`; })()}</details>
+    <details style="margin-top:10px"><summary class="small">Glossary</summary><div class="list" style="margin-top:6px">${GLOSSARY.map(([w, d]) => `<div class="small item"><b>${w}</b> <span class="muted">· ${d}</span></div>`).join("")}</div></details>
+    <details style="margin-top:10px"><summary class="small">Stage</summary><p class="small" style="margin-top:8px">Stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)} · ${Sy.activeDays()} active days.</p>
+      <div class="row" style="gap:8px"><select id="skipStage" style="max-width:220px">${Sy.STAGES.map(x => `<option value="${x.n}" ${x.n === Sy.stage() ? "selected" : ""}>${x.n} · ${esc(x.name)}</option>`).join("")}</select><button class="btn sm" data-act="skipstage">Skip to stage</button></div>
+      <p class="tiny muted">For testing. Stages normally open on their own.</p></details>`;
 }
 
 // The one Settings page: every setting in the app, in folding sections. Gears elsewhere land on their section.
@@ -1668,7 +1701,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.5 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.0 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1863,7 +1896,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "addperson": {
       const f = readForm("#personForm"); if (!f.name) return toast("Add a name");
       const p = put("people", { name: f.name, type: f.type, where: f.where, scores: {}, every: null, note: "" });
-      personForm = false; save(); return go("social/p/" + p.id);
+      personForm = false; save(); return go("people/p/" + p.id);
     }
     case "score": {
       if (id === "ap") { if (!apForm) return; Object.assign(apForm, readForm("#apForm")); const c = el.dataset.c, n = +el.dataset.n; if (apForm.scores[c] === n) delete apForm.scores[c]; else apForm.scores[c] = n; return render(); }
@@ -1883,9 +1916,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "delperson": {
       const p = live("people").find(x => x.id === id); if (!p || !confirm(`Delete ${p.name}? Hangouts stay, without their name.`)) return;
-      remove("people", id); save(); return go("social");
+      remove("people", id); save(); return go("people");
     }
-    case "hangwith": hangSel = [id]; return go("social/log");
+    case "hangwith": hangSel = [id]; return go("people/log");
     case "addhang": {
       const f = readForm("#hangForm"), ids = [...document.querySelectorAll("#hpeople [aria-pressed=true]")].map(b => b.dataset.id);
       if (!ids.length) return toast("Pick who you were with");
@@ -1930,7 +1963,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       if (on) { const d = prompt("Job start date (YYYY-MM-DD)? Leave empty if you don't know yet; you can set it in Settings → System Archives.", ""); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) Sy.setLoan({ takeover: d.trim() }); }
       save(); return render();
     }
-    case "milestone": Sy.seeMilestone(id); save(); return render();
+    case "milestone": Sy.seeMilestone(id); ceremonyDone = true; save(); return render();
+    case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
+    case "skipstage": { const n = +($("#skipStage") || {}).value; if (!confirm(`Set the System to stage ${n}? Use this for testing.`)) return; Sy.skipTo(n); save(); toast("Stage " + n); return render(); }
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
     case "dismiss": dismiss(id); return render();
 
@@ -2116,7 +2151,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       if (!Object.keys(sc).length) return toast("Rate at least one trait");
       put("appraisals", { date: E.today(), by: f.by || null, scores: sc });
       const k = apForm.trial && live("tasks").find(x => x.id === apForm.trial); const gains = k && !k.done ? Soc.logBattle(k, { appraisal: true }) : [];
-      apForm = null; save(); announce(gains); toast("Appraisal saved"); if (location.hash !== "#social/appraise") return go("social/appraise"); render(); return window.scrollTo(0, 0);
+      apForm = null; save(); announce(gains); toast("Appraisal saved"); if (location.hash !== "#people/appraise") return go("people/appraise"); render(); return window.scrollTo(0, 0);
     }
 
     case "wishmove": {

@@ -171,3 +171,40 @@ export function archive() {
   const age = E.daysBetween(FI.born, E.today()) / 365.25, yearsLeft = E.daysBetween(E.today(), FI.finalGate) / 365.25;
   return { age: Math.floor(age), yearsLeft: Math.round(yearsLeft), ...FI };
 }
+
+/* ---------- stages (v4): the System unlocks itself ---------- */
+// Stages only go up. Active days = days with at least one quest done, counted from the day stage 0 began.
+// Nothing is deleted when a stage is locked; the screens for it are just not shown yet.
+export const STAGES = [
+  { n: 0, name: "Awakening", area: "System", text: "You have been chosen. Complete today's quests.", hint: "Something opens after a few days of quests." },
+  { n: 1, name: "Dungeon", area: "Dungeon", text: "Blocks now run as Dungeons. Work inside the block. Skipping now has a cost.", hint: "The next area opens when you level up." },
+  { n: 2, name: "Store", area: "Store", tab: "money", text: "Points are worth something now. Spend them.", hint: "A place to study is coming." },
+  { n: 3, name: "Study", area: "Study", tab: "classes", text: "One chapter at a time.", hint: "Other people are part of this too." },
+  { n: 4, name: "People", area: "People", tab: "people", text: "Social growth is a quest too.", hint: "Bigger floors are waiting." },
+  { n: 5, name: "Tower, Raids & Titles", area: "Tower", text: "Bigger floors are open: the Fear Tower, Boss Raids, Appraisal and Titles.", hint: "" },
+];
+const st5 = () => { const x = sys(); if (x.stage == null) x.stage = 0; x.unlockedAt = x.unlockedAt || {}; if (!x.unlockedAt[0]) x.unlockedAt[0] = E.today(); return x; };
+export const stage = () => st5().stage;
+export const has = n => stage() >= n;
+export function activeDays() {
+  const from = st5().unlockedAt[0];
+  return new Set([...live("habitLog").map(h => h.date), ...live("tasks").filter(k => k.done && k.doneAt).map(k => E.ymd(new Date(k.doneAt)))].filter(d => d >= from)).size;
+}
+const trialCleared = () => live("tasks").some(k => k.trial && k.done);
+const NEED = [null, () => activeDays() >= 3, () => E.level() >= 2, () => activeDays() >= 7, () => activeDays() >= 14, () => trialCleared() || activeDays() >= 21];
+// Moves up at most one stage per call. Returns the stage just unlocked, or null.
+export function checkStage() {
+  const x = st5(), next = x.stage + 1;
+  if (next >= STAGES.length || !NEED[next]()) return null;
+  x.stage = next; x.unlockedAt[next] = E.today(); x.unlockSeen = false; touch();
+  return STAGES[next];
+}
+// The unlock window waits until it has been seen once.
+export const pendingUnlock = () => { const x = st5(); return x.stage > 0 && x.unlockSeen === false ? STAGES[x.stage] : null; };
+export function seeUnlock() { st5().unlockSeen = true; touch(); }
+export function skipTo(n) {
+  const x = st5(); n = Math.max(0, Math.min(STAGES.length - 1, n | 0));
+  for (let i = 1; i <= n; i++) x.unlockedAt[i] = x.unlockedAt[i] || E.today();
+  x.stage = n; x.unlockSeen = true; touch();
+}
+export const nextStage = () => STAGES[stage() + 1] || null;
