@@ -1,11 +1,10 @@
 import { S, load, save, flush, onSave, live, put, remove, touchSettings, photos, exportObject, validateImport, importMerge, uid } from "./store.js";
-import { HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, SKILLS, UNLOCKS, COMBOS, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY, TRIALS, TOWER, EGO, RIVAL_ACT } from "./data.js";
+import { HABITS, AREAS, SLOTS, RPE, RUN_GOAL_KM, LEVEL_XP, XP, RANKS, PERSON_TYPES, LIBRARY, SUBJECTS, SOCIAL_KEY, TRIALS, TOWER, EGO, RIVAL_ACT } from "./data.js";
 import * as Ch from "./charts.js";
 import * as E from "./engine.js";
 import * as Sync from "./sync.js";
 import * as P from "./planner.js";
 import { ic } from "./icons.js";
-import * as C from "./command.js";
 import * as St from "./study.js";
 import * as G from "./glass.js";
 import * as K from "./cards.js";
@@ -36,30 +35,62 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
-// Swipe the day timeline left/right to change day.
+// Swipes: an alert sideways dismisses it; the day header on Plan changes the day; anywhere else changes tab.
+// Sliders, fields and anything that scrolls sideways keep their own swipe.
 let swipe0 = null;
-document.addEventListener("touchstart", e => { swipe0 = e.target.closest("#dayline") ? [e.touches[0].clientX, e.touches[0].clientY] : null; }, { passive: true });
+function scrollsX(el) {
+  for (; el && el !== document.body; el = el.parentElement) {
+    if (el.matches("input,textarea,select,.tune,.pills,.chips,.carousel,[data-noswipe]")) return true;
+    if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true;
+  }
+  return false;
+}
+document.addEventListener("touchstart", e => {
+  swipe0 = null; if (e.touches.length !== 1 || document.body.classList.contains("modal-open")) return;
+  const x = e.touches[0].clientX, y = e.touches[0].clientY, al = e.target.closest(".al");
+  if (al) swipe0 = { kind: "alert", el: al, x, y };
+  else if (e.target.closest("#dayline")) swipe0 = { kind: "day", x, y };
+  else if (e.target.closest("#app") && !scrollsX(e.target)) swipe0 = { kind: "tab", x, y };
+}, { passive: true });
+document.addEventListener("touchmove", e => {
+  if (!swipe0 || swipe0.kind !== "alert") return;
+  const dx = e.touches[0].clientX - swipe0.x, dy = e.touches[0].clientY - swipe0.y;
+  if (!swipe0.drag && Math.abs(dy) > Math.abs(dx)) { swipe0 = null; return; }
+  swipe0.drag = true; swipe0.el.style.transition = "none";
+  swipe0.el.style.transform = `translateX(${dx}px)`; swipe0.el.style.opacity = String(Math.max(0.2, 1 - Math.abs(dx) / 300));
+}, { passive: true });
 document.addEventListener("touchend", e => {
-  if (!swipe0) return; const t = e.changedTouches[0], dx = t.clientX - swipe0[0], dy = t.clientY - swipe0[1]; swipe0 = null;
-  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-  const el = $("#dayline"), d = E.addDays(planDate || E.today(), dx < 0 ? 1 : -1);
-  if (d < el.dataset.min || d > el.dataset.max) return;
-  planDate = d === E.today() ? null : d; entering = true; render();
+  if (!swipe0) return; const s0 = swipe0, t = e.changedTouches[0], dx = t.clientX - s0.x, dy = t.clientY - s0.y; swipe0 = null;
+  const horiz = Math.abs(dx) >= 60 && Math.abs(dx) >= Math.abs(dy) * 1.5;
+  if (s0.kind === "alert") {
+    const el = s0.el; el.style.transition = "transform .2s, opacity .2s";
+    if (!horiz || Math.abs(dx) < 90) { el.style.transform = ""; el.style.opacity = ""; return; }
+    el.style.transform = `translateX(${dx < 0 ? -110 : 110}%)`; el.style.opacity = "0";
+    dismiss(el.dataset.akey); setTimeout(render, 200); return;
+  }
+  if (!horiz) return;
+  if (s0.kind === "day") {
+    const el = $("#dayline"), d = E.addDays(planDate || E.today(), dx < 0 ? 1 : -1);
+    if (d < el.dataset.min || d > el.dataset.max) return;
+    planDate = d === E.today() ? null : d; entering = true; render(); return;
+  }
+  const cur = TABS.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = TABS[cur + (dx < 0 ? 1 : -1)];
+  if (next) go(next[0]);
 }, { passive: true });
 window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; trialForm = null; battle = null; apForm = null; if (recorder) recorder.stop(); render(); window.scrollTo(0, 0); });
 
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 const TABS = [["home", "System"], ["plan", "Plan"], ["money", "Store"], ["status", "Status"]];
-const TAB_OF = { home: "home", alerts: "home", more: "home", cmd: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
+const TAB_OF = { home: "home", alerts: "home", more: "home", settings: "home", dungeon: "home", focus: "home", cards: "home", jlpt: "home", study: "home", train: "home", body: "home", plan: "plan", social: "plan", money: "money", status: "status", skills: "status" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   const [tab, ...rest] = route();
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, study: vStudyPage, cmd: vCmd, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vSkills, more: vMore };
+  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, study: vStudyPage, alerts: vAlerts, status: vStatus, plan: vPlan, social: vSocial, train: vTrain, money: vMoney, skills: vStatus, more: vSettings, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   $("#nav").innerHTML = TABS.map(([k, l]) => `<button data-act="nav" data-id="${k}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
   document.body.dataset.tab = tab;
-  const app = $("#app");
+  const app = $("#app"), entering0 = entering;
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
@@ -67,7 +98,7 @@ function render() {
   $("#fab").innerHTML = TAB_OF[tab] === "plan" && !(tab === "social" && rest[0] === "p") ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(briefOpen || sheet));
   hydrate();
-  if (tab === "cmd" && !cmd.prop && !cmd.done) $("[data-cmd]")?.focus();
+  if (tab === "settings" && rest[0] && entering0) { const d = document.querySelector(`[data-fold="set-${SET_SECTIONS[rest[0]] || rest[0]}"]`); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 0); } }
 }
 // Async bits after render (photo thumbnails).
 function hydrate() {
@@ -131,10 +162,9 @@ function vHome() {
   const q = todayQuests(t), next = q.trials.find(e => !e.done)?.k.title || q.events.find(e => !e.done)?.k.title || q.habits.find(x => !x.on)?.h.name;
   const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
   return `
-  <header class="top"><div><div class="hdr">Kofu → Shinjuku · ${E.fmtDate(t)}</div><h1>Status window</h1></div>
+  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1></div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
-    <button class="rbtn ${G.live() ? "on" : ""}" data-act="glass" aria-label="Glass mode ${G.live() ? "on" : "off"}" aria-pressed="${G.live()}">${ic("eye")}</button>
-    <button class="rbtn" data-act="sheet" data-id="home" aria-label="Settings">${ic("settings")}</button></div></header>
+    ${gear("home")}</div></header>
   <button class="strip" data-act="nav" data-id="status">
     <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${E.streak()}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
   ${alertStrip()}
@@ -154,7 +184,6 @@ function vHome() {
      <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
 
   <div class="quiet-links"><button data-act="go" data-id="dungeon">Dungeon</button><button data-act="go" data-id="cards">Flashcards</button></div>
-  <button class="cmdline dock" data-act="nav" data-id="cmd">${ic("cmd")}<span class="grow">Tell the System…</span>${ic("mic")}</button>
 `;
 }
 
@@ -221,14 +250,11 @@ function sheetHtml(k) {
   // Edit sheets: forms and actions for the tapped item.
   const edit = { task: () => arg ? taskActHtml(arg) : taskFormHtml(), block: () => blockFormHtml(blockForm && blockForm !== "new" ? live("blocks").find(b => b.id === blockForm) : blockNew),
     add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg) }[kind];
-  if (edit) return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>`;
-  const body = { plan: planSettings, status: statusSettings, money: moneySettings, body: bodySettings, dungeon: dungeonSettings }[k] || homeSettings;
-  return `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog" aria-label="Settings">
-    <div class="row between sheet-h"><b>Settings</b>${closeBtn}</div>${body()}
-    <div class="btns"><button class="btn sm" data-act="nav" data-id="more">Backup, sync and all settings</button></div></div>`;
+  return edit ? `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>` : "";
 }
-const gear = k => `<button class="rbtn" data-act="sheet" data-id="${k}" aria-label="Settings">${ic("settings")}</button>`;
-function homeSettings() {
+// Every gear opens the one Settings page, at the section for the screen it sits on.
+const gear = k => `<button class="rbtn" data-act="nav" data-id="settings/${k}" aria-label="Settings">${ic("settings")}</button>`;
+function lookSettings() {
   const c = G.cfg();
   const lk = G.look();
   return `<h3>Glass look</h3>
@@ -239,17 +265,9 @@ function homeSettings() {
     <h3 style="margin-top:14px">Background</h3>
     <p class="small muted">A photo of your choice, blurred and darkened behind the cards. It stays on this phone.</p>
     <div class="btns"><label class="btn sm">${c.photo ? "Change photo" : "Pick a photo"}<input type="file" accept="image/*" data-ch="bgphoto" hidden></label>${c.photo ? `<button class="btn sm" data-act="bgclear">Remove</button>` : ""}</div>
-    <h3 style="margin-top:14px">Glass mode</h3>
-    <p class="small muted">Uses the back camera so the app looks see-through. It turns itself off after the time below, when the battery drops under 20%, or when you leave the app. The camera runs only on this phone; nothing is recorded.</p>
-    <div class="grid"><label class="f">Turn off after (min)<input type="number" inputmode="numeric" min="1" max="60" data-ch="glassmins" value="${c.mins}"></label></div>
-    <label class="row small" style="margin-top:10px"><input type="checkbox" data-ch="glassfull" style="width:auto" ${c.full ? "checked" : ""}> Full screen (hides the status and navigation bars)</label>
-    <div class="btns"><button class="btn sm ${G.live() ? "" : "primary"}" data-act="glass">${G.live() ? `Turn off (${G.minsLeft()} min left)` : "Turn on"}</button>${G.live() && G.lens().n > 1 ? `<button class="btn sm" data-act="glasslens">Next lens (${G.lens().i + 1} of ${G.lens().n})</button>` : ""}</div>
-    ${G.live() && G.lens().n > 1 ? `<p class="small muted">Tap Next lens until the picture is the widest one (your 0.6×). It's remembered.</p>` : ""}
-    <h3 style="margin-top:14px">Line it up</h3>
-    <p class="small muted">Turn Glass mode on, hold the phone where you normally do, and drag until the picture matches what's behind it. Also applies to the photo.</p>
-    <div class="tune">${[["blur", "Blur", 0, 20, 1, "px"], ["dim", "Brightness", 0.15, 1, 0.05, ""], ["zoom", "Zoom", 1, 1.8, 0.02, "×"], ["y", "Crop height", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
+    ${c.photo ? `<div class="tune">${[["blur", "Blur", 0, 20, 1, "px"], ["dim", "Brightness", 0.15, 1, 0.05, ""], ["zoom", "Zoom", 1, 1.8, 0.02, "×"], ["y", "Crop height", 0, 100, 1, "%"]].map(([k, l, lo, hi, st, u]) =>
       `<label>${l}<input type="range" min="${lo}" max="${hi}" step="${st}" value="${c[k]}" data-tune="${k}"><output>${c[k]}${u}</output></label>`).join("")}</div>
-    <div class="btns"><button class="btn sm" data-act="glassreset">Reset look</button></div>`;
+    <div class="btns"><button class="btn sm" data-act="glassreset">Reset photo</button></div>` : ""}`;
 }
 
 /* ---------- morning brief ---------- */
@@ -342,7 +360,7 @@ function chime(p) {
   } catch (e) {}
   const msg = p.phase === "focus" ? "Break's over. Back to focus." : "Focus round done. Take a break.";
   toast(msg);
-  try { if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("Kofu to Shinjuku", { body: msg }); } catch (e) {}
+  try { if (document.visibilityState !== "visible" && typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("System", { body: msg }); } catch (e) {}
 }
 function tickPomo() {
   if (route()[0] !== "focus") return;
@@ -366,87 +384,46 @@ function alertList() {
   const unplaced = P.plan().unplaced.length;
   const btn = (id, l) => `<div class="btns"><button class="btn sm" data-act="go" data-id="${id}">${l}</button></div>`;
   const pens = St.openPenalties(), fg = St.focusGate();
+  // Each alert has a key that changes when its condition does, so a swiped-away alert comes back only when something new happens.
+  const gone = dismissed();
   return [
-    pens.length && penaltyBox(),
-    fg.open && fg.ended && reportDueBox(fg),
-    wd && sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done."),
-    E.moneyDue() && sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now")),
-    flags.length && sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio."),
-    unplaced && sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan")),
-    hasData && (expDays === null || expDays >= 7) && sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("more", "Export now")),
-  ].filter(Boolean);
+    pens.length && ["pen:" + pens.map(p => p.id).join(","), penaltyBox()],
+    fg.open && fg.ended && ["report:" + St.occKey(fg.o), reportDueBox(fg)],
+    wd && ["wind:" + t, sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.")],
+    E.moneyDue() && ["money:" + E.weekStart(t), sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now"))],
+    flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
+    unplaced && ["unplaced:" + unplaced, sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan"))],
+    hasData && (expDays === null || expDays >= 7) && ["export:" + (lastExp || "never"), sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("settings/sync", "Export now"))],
+  ].filter(a => a && !gone[a[0]]).map(([k, h]) => `<div class="al" data-akey="${esc(k)}">${h}</div>`);
+}
+// Swiped-away alerts (per phone). Old keys are pruned when the list grows.
+const DISMISS_KEY = "kts-dismiss";
+function dismissed() { try { return JSON.parse(localStorage.getItem(DISMISS_KEY)) || {}; } catch (e) { return {}; } }
+function dismiss(key) {
+  const d = dismissed(); d[key] = Date.now();
+  const keys = Object.keys(d).sort((a, b) => d[b] - d[a]).slice(0, 60);
+  try { localStorage.setItem(DISMISS_KEY, JSON.stringify(Object.fromEntries(keys.map(k => [k, d[k]])))); } catch (e) {}
 }
 function vAlerts() {
   const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
   return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Notifications</h1>
+  ${list.length ? `<p class="tiny muted" style="margin:10px 4px 0">Swipe an alert sideways to dismiss it. It comes back if something changes.</p>` : ""}
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
 
-const statusSeg = cur => `<div class="pills">${[["status", "Overview"], ["skills", "Skills"]].map(([k, l]) => `<button class="pill" data-act="nav" data-id="${k}" aria-pressed="${cur === k}">${l}</button>`).join("")}</div>`;
 function vStatus() {
   const t = E.today(), xp = E.xpTotal(), mp = E.moneyPlan(), days = E.daysBetween(t, S.settings.dates.graduation);
   const lastReward = live("rewardHistory").sort((a, b) => b.ts - a.ts)[0];
-  return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div>${gear("status")}</header>${statusSeg("status")}
+  return `<header class="top"><div><div class="hdr">Player status</div><h1>Status</h1></div>${gear("status")}</header>
   <div class="carousel">
     <div class="card g-mag"><div class="row between"><span class="k">Level</span><span class="k">${xp} XP</span></div>
       <div><div class="dm huge">${E.level()}</div>${bar(E.levelProgress(), "var(--mag)")}
       <div class="small soft">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} to spend${lastReward ? ` · Last reward: ${esc(lastReward.reward)}` : ""}</div></div></div>
     <div class="card g-ind"><span class="k">Days to graduation</span>
       <div><div class="dm huge">${days}</div><div class="small soft">${E.fmtDate(S.settings.dates.graduation)} · classes end ${E.fmtDate(S.settings.dates.classesEnd)}</div></div></div>
-    <button class="card g-org" data-act="nav" data-id="money"><span class="k">Treasury</span>
-      <div><div class="dm big2">${Math.round(mp.savePct * 100)}%</div><div class="small soft">${yen(mp.bank)} of ${yen(mp.goal)} · debt ${yen(mp.debt)}</div></div></button>
     <div class="card g-cyan"><span class="k">Streak</span>
       <div><div class="dm huge">${String(E.streak()).padStart(2, "0")}</div><div class="small soft">days in a row with a quest done</div></div></div>
-  </div>
-  <button class="quiet-row" data-act="nav" data-id="skills"><span class="grow">Stats radar and skill tree</span><span class="chev">${ic("right")}</span></button>`;
-}
-
-function statList() {
-  const sk = Object.fromEntries(SKILLS.map(x => [x.id, E.skillInfo(x)]));
-  return [["STR", sk.str.pct * 100, "org"], ["END", sk.end.pct * 100, "lime"], ["JP", sk.jp.pct * 100, "mag"],
-    ["FIN", sk.fin.pct * 100, "ind"], ["MATH", sk.math.pct * 100, "cyan"], ["CHA", sk.cha.pct * 100, "warn"], ["DISC", E.discipline() * 100, "fg"]];
-}
-
-/* ================= SKILLS ================= */
-const SKILL_POINTS = [
-  { a: "jp", b: "fin", x: 170, y: 76, label: "Japanese filings" },
-  { a: "jp", b: "str", x: 90, y: 150, label: "Gym Japanese", dy: -10 },
-  { a: "fin", b: "math", x: 250, y: 150, label: "Model drills", dy: -10 },
-  { a: "str", b: "math", x: 170, y: 228, label: "Shift discipline", dy: 18 },
-  { a: "jp", b: "fin", c: "math", x: 170, y: 150, label: "JP case interview", big: 1, dy: 20 },
-];
-function vSkills([sub]) {
-  sub = sub || "tree";
-  const sk = SKILLS.map(E.skillInfo), by = Object.fromEntries(sk.map(x => [x.id, x]));
-  const seg = `<div class="pills">${[["tree", "Tree"], ["overlap", "Overlap"], ["unlocks", "Unlocks"], ["combos", "Combos"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="skills/${k}" aria-pressed="${sub === k}">${l}</button>`).join("")}</div>`;
-  let body = "";
-  if (sub === "tree") {
-    body = `<div class="panel">${Ch.tree(sk)}</div>
-    ${fold("skill-tiers", `<b class="grow">Tier details</b><span class="small muted">${sk.length} skills</span>`, `<div class="list">${sk.map(x => `<div class="unl"><div class="lv" style="color:var(--${x.c})">T${x.tier}</div><div><b>${esc(x.name)}: ${esc(x.tiers[Math.max(0, x.tier - 1)])}</b></div>
-      <div class="need">${x.src === "run" ? `longest run ${x.value} km` : `${x.value} session${x.value === 1 ? "" : "s"} logged`}${x.next != null ? ` · next tier at ${x.next}${x.src === "run" ? " km" : ""}` : " · maxed"}</div></div>`).join("")}</div>`)}
-    <p class="tiny muted">Tiers unlock from what you log: quest ticks for study and life skills, workout days for Strength, longest run for Endurance.</p>`;
-  } else if (sub === "overlap") {
-    const lvl = ids => ids.reduce((a, id) => a + by[id].pct, 0) / ids.length;
-    const domains = [{ name: "Japanese", c: "mag", level: lvl(["jp"]) }, { name: "Finance", c: "ind", level: lvl(["fin"]) }, { name: "Body", c: "org", level: lvl(["str", "end"]) }, { name: "Mind", c: "cyan", level: lvl(["math"]) }];
-    const pts = SKILL_POINTS.map(p => ({ ...p, lit: [p.a, p.b, p.c].filter(Boolean).every(id => by[id].tier >= 2) }));
-    body = `<div class="panel">${Ch.venn(domains, pts)}<p class="tiny muted">Circles fill as each area grows. A point lights up when every skill it touches reaches tier 2. The overlaps are where you stand out.</p></div>`;
-  } else if (sub === "unlocks") {
-    body = `<div class="list">${UNLOCKS.map(u => {
-      const parts = Object.entries(u.need), ok = parts.every(([id, n]) => by[id].tier >= n);
-      return `<div class="unl ${ok ? "" : "lock"}"><div class="lv">${ok ? ic("check") : ic("lock")}</div><div><b>${esc(u.title)}</b></div>
-        <div class="need">${parts.map(([id, n]) => `<span style="color:var(--${by[id].c})">${esc(by[id].name)}</span> T${Math.min(by[id].tier, n)}/${n}`).join(" · ")}</div></div>`;
-    }).join("")}</div>`;
-  } else {
-    const g = { jp: "g-mag", fin: "g-ind", math: "g-cyan", str: "g-org", end: "g-cyan", cha: "g-org" };
-    body = `<div class="list">${COMBOS.map(c => {
-      const ok = by[c.a].tier >= 2 && by[c.b].tier >= 2;
-      return `<div class="combo ${g[c.a]} ${ok ? "" : "dimmed"}"><div class="chips">${[c.a, c.b].map(id => `<span class="chip">${esc(by[id].name.toUpperCase())}</span>`).join("")}${ok ? "" : `<span class="chip">LOCKED · T2 BOTH</span>`}</div>
-        <b>${esc(c.title)}</b><div class="small soft">${esc(c.text)}</div></div>`;
-    }).join("")}</div><p class="tiny muted">Locked ideas still work today. They just count once both skills reach tier 2.</p>`;
-  }
-  return `<header class="top"><div><div class="hdr">Skill tree</div><h1>Skills</h1></div></header>${statusSeg("skills")}
-  <div class="panel">${Ch.radar(statList())}<p class="tiny muted">Your stats. Each fills toward its last skill tier. DISC is the share of weekly targets hit over 4 weeks.</p></div>
-  <div style="margin-top:14px">${seg}</div>${body}`;
+  </div>`;
 }
 
 /* ================= MONEY ================= */
@@ -713,124 +690,6 @@ function vHangouts() {
     <textarea data-ch="criteria" rows="6">${esc(S.settings.social.criteria.join("\n"))}</textarea></details>`;
 }
 
-/* ================= COMMAND BAR ================= */
-// Type or say a change; the System shows what it understood and nothing is saved until Apply.
-const cmd = { text: "", prop: null, done: null, undo: null, listening: false };
-const dayName = d => d === E.today() ? "today" : d === E.addDays(E.today(), 1) ? "tomorrow" : P.DAY_NAMES[E.parse(d).getDay()] + " " + E.parse(d).getDate();
-// Blocks that would overlap a proposed time on a date (the moved block itself excluded).
-function clashNote(date, start, end, except) {
-  const s = P.toMin(start); let e = P.toMin(end); if (e <= s) e += 1440;
-  const hit = P.segments(date).filter(g => g.b.id !== except && g.b.from !== except && g.s < e && s < g.e);
-  return hit.length ? `<div class="small warn" style="margin-top:8px">Overlaps ${hit.map(g => `${esc(g.b.title)} ${P.toHM(g.s)}–${P.toHM(g.e)}`).join(", ")}</div>` : "";
-}
-function cmdCard(p) {
-  if (!p) return "";
-  if (p.error) return sysBox(esc(p.error), p.hint ? `Try: “${esc(p.hint)}”` : "");
-  const time = (f, v) => `<label class="f">${f === "start" ? "Start" : "End"}<input type="time" data-f="${f}" value="${esc(v)}"></label>`;
-  let body = "", title = "";
-  if (p.type === "move") {
-    const b = p.block, DN = P.DAY_NAMES[E.parse(p.date).getDay()];
-    title = `Move ${esc(b.title)}`;
-    body = `<div class="small muted">Now ${esc(b.start)}–${esc(b.end)}${b.locked ? ` · <span class="warn">${ic("lock", "inl")} locked block</span>` : ""}</div>
-      <div class="grid" style="margin-top:8px">${time("start", p.start)}${time("end", p.end)}</div>${clashNote(p.date, p.start, p.end, b.id)}
-      ${p.weekly ? `<div class="chips" style="margin-top:10px"><button class="chip" data-act="cmdscope" data-id="day" aria-pressed="${p.scope === "day"}">Only ${esc(dayName(p.date))}</button><button class="chip" data-act="cmdscope" data-id="week" aria-pressed="${p.scope === "week"}">Every ${DN}</button></div>` : `<div class="small muted" style="margin-top:8px">${esc(E.fmtDate(p.date))}</div>`}`;
-  } else if (p.type === "block") {
-    title = "Add to timetable";
-    body = `<div class="grid"><label class="f" style="flex-basis:100%">Name<input data-f="title" value="${esc(p.title)}"></label>
-      <label class="f">Type<select data-f="kind">${Object.entries(P.KINDS).map(([k, v]) => `<option value="${k}" ${p.kind === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
-      ${p.days.length ? `<label class="f">Every<input readonly value="${P.DAY_NAMES[p.days[0]]}"></label>` : `<label class="f">Date<input type="date" data-f="date" value="${esc(p.date)}"></label>`}
-      ${time("start", p.start)}${time("end", p.end)}</div>${p.date ? clashNote(p.date, p.start, p.end) : ""}`;
-  } else if (p.type === "task") {
-    title = "Add to-do";
-    body = `<div class="grid"><label class="f" style="flex-basis:100%">Task<input data-f="title" value="${esc(p.title)}"></label>
-      <label class="f">Length<select data-f="mins">${P.TASK_LEN.map(m => `<option value="${m}" ${p.mins === m ? "selected" : ""}>${P.dur(m)}</option>`).join("")}</select></label>
-      <label class="f">Energy<select data-f="energy"><option value="high" ${p.energy === "high" ? "selected" : ""}>Focus</option><option value="low" ${p.energy === "low" ? "selected" : ""}>Light</option></select></label>
-      <label class="f">Due (optional)<input type="date" data-f="due" value="${esc(p.due || "")}"></label></div>
-      <div class="small muted" style="margin-top:8px">The planner picks the slot.</div>`;
-  } else if (p.type === "card") {
-    title = "Add flashcard";
-    body = `<div class="grid"><label class="f" style="flex-basis:100%">Front<input data-f="front" value="${esc(p.front)}"></label>
-      <label class="f" style="flex-basis:100%">Back<input data-f="back" value="${esc(p.back)}"></label>
-      <label class="f" style="flex-basis:100%">Deck<input data-f="deck" list="dl-cmd" value="${esc(lastDeck())}"></label>${deckList("dl-cmd")}</div>`;
-  } else if (p.type === "wish") {
-    title = "Add to wishlist";
-    body = `<div class="grid"><label class="f" style="flex-basis:100%">What<input data-f="name" value="${esc(p.name)}"></label>
-      <label class="f">Price (¥)<input type="number" inputmode="numeric" data-f="price" value="${p.price ?? ""}" placeholder="needed"></label>
-      <label class="f">Type<select data-f="kind">${[["item", "Item"], ["trip", "Trip"], ["exp", "Experience"]].map(([k, l]) => `<option value="${k}" ${p.kind === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-      <label class="f" style="flex-basis:100%">Link${p.shop ? ` (${esc(p.shop)} search)` : ""}<input type="url" data-f="link" value="${esc(p.link)}"></label></div>
-      <div class="small muted" style="margin-top:8px">${p.price ? `Costs ${E.suggestXp(p.price).toLocaleString("en-US")} XP at ¥${S.settings.fun.yenPerXp} per XP.` : "Add the price and the XP cost is set from it."}</div>`;
-  }
-  return `<div class="panel" id="cmdCard"><div class="hdr">System · Confirm</div><h3>${title}</h3>${body}
-    <div class="btns"><button class="btn go" data-act="cmdapply">Apply</button><button class="btn" data-act="cmdcancel">Cancel</button></div></div>`;
-}
-function vCmd() {
-  const mic = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>
-  <header class="top"><div><div class="hdr">Command</div><h1>Tell the System</h1></div></header>
-  <div class="panel cmdbar"><div class="row" style="gap:8px">
-    <input data-cmd value="${esc(cmd.text)}" placeholder="move the gym up an hour" enterkeyhint="go" autocomplete="off" autocapitalize="off">
-    ${mic ? `<button class="rbtn ${cmd.listening ? "live" : ""}" data-act="cmdmic" aria-label="${cmd.listening ? "Stop listening" : "Speak a command"}">${ic("mic")}</button>` : ""}
-    <button class="btn go" data-act="cmdrun">Run</button></div>
-    ${mic ? "" : `<p class="tiny muted" style="margin:8px 0 0">To speak, tap the mic on your keyboard.</p>`}</div>
-  ${cmd.done ? sysBox(esc(cmd.done), "", cmd.undo ? `<div class="btns"><button class="btn sm" data-act="cmdundo">Undo</button></div>` : "") : ""}
-  ${cmdCard(cmd.prop)}
-  <h2>Things it understands</h2>
-  <div class="list">${C.EXAMPLES.map(x => `<button class="panel tbtn small cmdex" style="margin:0;text-align:left;width:100%" data-act="cmdex" data-id="${esc(x)}">${ic("cmd", "inl")}<span>${esc(x)}</span></button>`).join("")}</div>
-  <p class="tiny muted">Works offline with set phrasings: move, push, add, add task, add … to my wishlist, card front | back. Add “every week” to change a weekly block for good; otherwise only that day moves.</p>`;
-}
-function cmdRun(text) {
-  cmd.text = text; cmd.prop = C.parse(text); cmd.done = null; render();
-  $("#cmdCard input")?.focus({ preventScroll: true });
-}
-function cmdApply() {
-  const p = cmd.prop; if (!p || p.error) return;
-  const f = readForm("#cmdCard"), undo = [];
-  const keep = (k, id) => { const old = live(k).find(x => x.id === id); undo.push({ k, id, old: old ? JSON.parse(JSON.stringify(old)) : null }); };
-  const add = (k, rec) => { const r = put(k, rec); undo.push({ k, id: r.id, old: null }); return r; };
-  let msg;
-  if (p.type === "move") {
-    if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
-    const b = live("blocks").find(x => x.id === p.block.id); if (!b) return toast("That block is gone");
-    if ((p.date === E.today() || p.scope !== "day") && P.editLock(b)) return toast(`Locked: ${b.title} starts within ${S.settings.plan.lockMins ?? 15} min or is running`);
-    keep("blocks", b.id);
-    if (p.weekly && p.scope === "day") {
-      put("blocks", { ...b, skip: [...new Set([...(b.skip || []), p.date])].filter(d => d >= E.addDays(E.today(), -60)) });
-      add("blocks", { title: b.title, kind: b.kind, days: [], date: p.date, start: f.start, end: f.end, locked: b.locked, from: b.id });
-      msg = `${b.title} moved to ${f.start}–${f.end} ${dayName(p.date)} only.`;
-    } else { put("blocks", { ...b, start: f.start, end: f.end }); msg = `${b.title} now ${f.start}–${f.end}${p.weekly ? " every week" : ""}.`; }
-  } else if (p.type === "block") {
-    if (!f.title) return toast("Name the block"); if (!f.start || !f.end || f.start === f.end) return toast("Set a start and an end");
-    add("blocks", { title: f.title, kind: f.kind, days: p.days, date: p.days.length ? null : f.date || E.today(), start: f.start, end: f.end, locked: false });
-    msg = `${f.title} added, ${p.days.length ? "every " + P.DAY_NAMES[p.days[0]] : dayName(f.date || E.today())} ${f.start}–${f.end}.`;
-  } else if (p.type === "task") {
-    if (!f.title) return toast("Name the task");
-    const k = add("tasks", { title: f.title, mins: +f.mins, prio: f.due ? 3 : 2, energy: f.energy, due: f.due || null, done: false, created: Date.now(), pin: null });
-    const at = P.plan().at.get(k.id);
-    msg = `${f.title}: ${at ? `planned ${dayName(at.date)} ${P.toHM(at.s)}${at.late ? " (after deadline)" : ""}` : "no free slot in the next 2 weeks"}.`;
-  } else if (p.type === "card") {
-    if (!f.front || !f.back) return toast("Fill in both sides"); const deck = f.deck || lastDeck();
-    if (K.inDeck(deck).some(c => c.front.trim() === f.front)) return toast("Already in " + deck);
-    add("cards", K.newCard({ deck, front: f.front, back: f.back })); setLastDeck(deck);
-    msg = `Card added to ${deck}.`;
-  } else if (p.type === "wish") {
-    const price = num(f.price); if (!f.name) return toast("Name it"); if (price === null || price < 0) return toast("Add the price");
-    const xp = E.suggestXp(price);
-    add("wishlist", { name: f.name, price: Math.round(price), xp, kind: f.kind, link: f.link, bought: null });
-    msg = `${f.name} on the wishlist: ${yen(price)}, ${xp.toLocaleString("en-US")} XP.`;
-  }
-  save(); cmd.prop = null; cmd.text = ""; cmd.done = msg; cmd.undo = undo; toast("Applied"); render();
-}
-let recog = null;
-function cmdMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return toast("Use the mic on your keyboard");
-  if (recog) { recog.stop(); return; }
-  recog = new SR(); recog.lang = "en-US"; recog.interimResults = false; recog.maxAlternatives = 1;
-  recog.onresult = e => { const t = e.results[0][0].transcript; recog = null; cmd.listening = false; cmdRun(t); };
-  recog.onerror = e => { toast(e.error === "not-allowed" ? "Microphone not allowed" : "Didn't hear that"); };
-  recog.onend = () => { recog = null; if (cmd.listening) { cmd.listening = false; render(); } };
-  cmd.listening = true; render(); recog.start();
-}
-
 /* ================= PLAN ================= */
 let planDate = null, taskForm = null, blockForm = null, blockNew = null;
 const kindChip = k => { const K = P.KINDS[k] || P.KINDS.other; return `<span class="kchip" style="--c:var(--${K.c})">${esc(K.label)}</span>`; };
@@ -838,7 +697,7 @@ const span = (s, e) => `${P.toHM(s)}–${P.toHM(e)}`;
 const dayLabel = d => d === E.today() ? "Today" : d === E.addDays(E.today(), 1) ? "Tomorrow" : E.fmtDate(d);
 
 const planHead = cur => `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>Plan</h1></div>
-    <div class="row" style="gap:8px"><button class="rbtn" data-act="nav" data-id="cmd" aria-label="Command bar">${ic("cmd")}</button>${gear("plan")}</div></header>
+    <div class="row" style="gap:8px">${gear("plan")}</div></header>
   <div class="pills">${[["plan", "Day"], ["plan/week", "Week"], ["social", "People"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === l.toLowerCase()}">${l}</button>`).join("")}</div>`;
 function vPlan([sub]) {
   sub = sub === "week" ? "week" : "day";
@@ -1668,29 +1527,33 @@ async function shrink(file) {
 }
 
 /* ================= MORE ================= */
-function vMore() {
+// The one Settings page: every setting in the app, in folding sections. Gears elsewhere land on their section.
+const SET_SECTIONS = { home: "look", plan: "schedule", dungeon: "dungeon", body: "habits", money: "money", status: "report" };
+function vSettings([sec] = []) {
   const st = S.settings, rh = live("rewardHistory").sort((a, b) => b.ts - a.ts);
-  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>More</h1>
-  <div class="panel"><h3>Sync and backup</h3>${Sync.panelHtml(esc)}</div>
-  <div class="panel"><h3>Export</h3>
+  const sx = (k, title, body, sub = "") => fold("set-" + k, `<b class="grow">${title}</b>${sub ? `<span class="small muted">${sub}</span>` : ""}`, body, false, "set");
+  return `<header class="top"><div><button class="back" data-act="back">${ic("left")} Back</button><h1>Settings</h1></div></header>
+  ${sx("profile", "Profile", `<div class="grid"><label class="f">Your name<input data-ch="profname" value="${esc(st.name || "Arin")}" maxlength="24"></label></div>
+    <p class="tiny muted">Used for the greeting on the System screen.</p>`, esc(st.name || "Arin"))}
+  ${sx("look", "Look and background", lookSettings())}
+  ${planSettings()}
+  ${sx("dungeon", "Dungeon", dungeonSettings())}
+  ${sx("habits", "Daily quests", bodySettings())}
+  ${sx("money", "Money and Store", moneySettings())}
+  ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
+    <label class="f">Chance (%)<input type="number" min="0" max="100" data-ch="chance" value="${Math.round((st.rewardChance ?? 0.18) * 100)}"></label>
+    <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
+    <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>`)}
+  ${sx("report", "Weekly report", statusSettings())}
+  ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
+    <h3 style="margin-top:14px">Export</h3>
     <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Flashcard images and recordings are in the file; check-in photos and the copied text leave media out.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
     <div class="btns"><button class="btn primary" data-act="export">Export file</button><button class="btn" data-act="exportcopy">Copy JSON</button></div>
     <div id="exportBox"></div>
-  </div>
-  <div class="panel"><h3>Import</h3>
+    <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
-    <input type="file" accept="application/json,.json" data-ch="import">
-  </div>
-  <div class="panel"><h3>Habit targets per week</h3>
-    ${HABITS.map(h => `<div class="row between item"><span>${esc(h.name)}</span><input style="width:80px" type="number" min="0" max="7" data-ch="htarget" data-id="${h.id}" value="${E.habitTarget(h.id)}"></div>`).join("")}
-  </div>
-  <div class="panel"><h3>Rewards</h3>
-    <p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
-    <label class="f">Chance (%)<input type="number" min="0" max="100" data-ch="chance" value="${Math.round((st.rewardChance ?? 0.18) * 100)}"></label>
-    <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
-    <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>
-  </div>
-  <p class="tiny muted" style="text-align:center;margin-top:16px">Kofu to Shinjuku · v2.6.4 · data schema ${S.schemaVersion}</p>`;
+    <input type="file" accept="application/json,.json" data-ch="import">`)}
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v3.0 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1704,6 +1567,18 @@ function download(name, text, type = "application/json") {
 function saveLink(blob, name) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// Full screen on phones: the installed app opens full screen (manifest); in a browser tab the first tap asks for it,
+// again after each return to the app. Browsers only allow it from a tap.
+function fullOnTap() {
+  if (!matchMedia("(pointer: coarse)").matches || !document.documentElement.requestFullscreen) return;
+  let asked = false;
+  document.addEventListener("pointerdown", () => {
+    if (asked || document.fullscreenElement || matchMedia("(display-mode: fullscreen)").matches) return;
+    asked = true; document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+  }, true);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") asked = false; });
 }
 
 /* ================= EVENTS ================= */
@@ -1839,16 +1714,6 @@ document.addEventListener("click", async ev => {
     }
 
     // command bar
-    case "cmdrun": return cmdRun($("[data-cmd]")?.value || "");
-    case "cmdex": return cmdRun(id);
-    case "cmdscope": cmd.prop.scope = id; return render();
-    case "cmdapply": return cmdApply();
-    case "cmdcancel": cmd.prop = null; return render();
-    case "cmdmic": return cmdMic();
-    case "cmdundo": {
-      for (const x of (cmd.undo || []).slice().reverse()) x.old ? put(x.k, { ...x.old }) : remove(x.k, x.id);
-      save(); cmd.undo = null; cmd.done = "Undone."; return render();
-    }
 
     // rewards
     case "wishform": wishForm = id && wishForm !== id ? id : null; render(); if (wishForm) $("#wishForm")?.scrollIntoView({ block: "center" }); return;
@@ -1913,7 +1778,6 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const h = put("hangouts", { date: f.date, people: ids, what: f.what, note: f.note });
       const ppl = live("people"), social = ids.some(i => { const p = ppl.find(x => x.id === i); return p && p.type !== "partner"; });
       const gains = social ? [E.gainXP("social", "hang:" + h.id, "Hangout")] : [];
-      if (social && !E.habitDone("friend", f.date)) put("habitLog", { date: f.date, habit: "friend", auto: true });
       hangSel = null; save(); announce(gains); if (!gains.length) toast("Logged"); return render();
     }
     case "delhang": if (confirm("Delete this hangout?")) { E.revokeXP("hang:" + id); remove("hangouts", id); save(); render(); } return;
@@ -1922,12 +1786,6 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "sheet": sheet = id && sheet !== id ? id : null; if (!sheet) { taskForm = null; blockForm = null; blockNew = null; personForm = false; } return render();
     case "brief": briefOpen = true; return render();
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
-    case "glass": {
-      if (G.live()) { G.stopGlass(); return render(); }
-      const err = await G.startGlass(why => { if (why) toast(why); render(); });
-      toast(err || `Glass mode on for ${G.cfg().mins} min`); return render();
-    }
-    case "glasslens": await G.nextLens(); return render();
     case "bgclear": await G.clearPhoto(); return render();
     case "lookreset": G.setLook(null); return render();
     case "glassreset": { const d = G.DEFAULTS; G.setCfg({ blur: d.blur, dim: d.dim, zoom: d.zoom, y: d.y }); return render(); }
@@ -2167,8 +2025,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
 
 document.addEventListener("input", ev => {
   if (ev.target.matches("[data-look]")) { const k = ev.target.dataset.look, v = +ev.target.value; G.setLook({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ hue: "°", clear: "%", frost: "px", grain: "%" }[k] || ""); return; }
-  if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } if (ev.target.matches("[data-cmd]")) cmd.text = ev.target.value; });
-document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("[data-cmd]")) { ev.preventDefault(); cmdRun(ev.target.value); } });
+  if (ev.target.matches("[data-tune]")) { const k = ev.target.dataset.tune, v = +ev.target.value; G.setCfg({ [k]: v }); const o = ev.target.nextElementSibling; if (o) o.textContent = v + ({ blur: "px", zoom: "×", y: "%" }[k] || ""); return; } });
 document.addEventListener("change", async ev => {
   const sel = ev.target.closest("[data-act-ch]");
   if (sel && trialForm) { Object.assign(trialForm, readForm("#trialForm")); trialForm[sel.dataset.actCh === "trialnote" ? "note" : "person"] = sel.value; trialForm.title = null; trialForm.keepTitle = false; return render(); }
@@ -2207,8 +2064,7 @@ document.addEventListener("change", async ev => {
   if (k === "wdon") { S.settings.windDown.on = el.checked; touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "wdmins") { const v = num(el.value); if (v === null || v < 0 || v > 240) return render(); S.settings.windDown.mins = Math.round(v); touchSettings(); save(); scheduleWindDown(); return render(); }
   if (k === "bgphoto") { const f = el.files[0]; if (!f) return; await G.setPhoto(await shrink(f)); toast("Background set"); return render(); }
-  if (k === "glassfull") { G.setCfg({ full: el.checked }); return; }
-  if (k === "glassmins") { const v = num(el.value); if (v === null || v < 1 || v > 60) return render(); G.setCfg({ mins: Math.round(v) }); return render(); }
+  if (k === "profname") { S.settings.name = el.value.trim().slice(0, 24) || "Arin"; touchSettings(); save(); return; }
   if (k === "cardsnew") { const v = num(el.value); if (v === null || v < 0 || v > 200) return render(); S.settings.cards.newPerDay = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "cardimg") {
     const file = el.files[0]; if (!file || !cardForm) return; keepCardForm();
@@ -2254,6 +2110,7 @@ function renameStyle() {
   briefOpen = briefDue();
   entering = true; render();
   G.applyPhoto();
+  fullOnTap();
   Sync.init({ render, toast });
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
   setTimeout(() => { runAssess(); render(); }, 6000);
