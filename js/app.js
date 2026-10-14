@@ -86,7 +86,7 @@ function render() {
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { home: vHome, dungeon: vDungeon, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -845,25 +845,6 @@ function vDay() {
 /* ================= DUNGEON ================= */
 // Stat building, gated by quest blocks: the Body dungeon (lifting, runs, calisthenics) and the Study dungeon
 // (topic + pomodoro, then flashcards, then JLPT practice). Each opens only around its block; skipping costs XP.
-function gateCard(kind, g) {
-  const isBody = kind === "body", nx = g.next, o = isBody ? (g.block ? { b: g.block, s: g.s, e: g.e } : null) : g.o;
-  const title = isBody ? "Body dungeon" : "Study dungeon", sub = isBody ? "Lifting · runs · calisthenics" : "Topic · flashcards · JLPT";
-  const state = g.open ? (o ? `Open now · ${esc(o.b.title)} ${span(o.s, o.e)}` : "Open for today") : nx ? `Opens ${nx.date === E.today() ? "today" : nx.date === E.addDays(E.today(), 1) ? "tomorrow" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)} · ${esc(nx.b.title)}` : "No block this week";
-  const btn = g.open ? `<button class="btn ${isBody || !g.ended ? "go" : "primary"}" data-act="nav" data-id="${isBody ? "train" : "focus"}">${!isBody && g.ended ? "Report" : "Enter"}</button>`
-    : `<button class="btn sm" data-act="nav" data-id="${isBody ? "train" : "focus"}">Peek</button>`;
-  const b = o ? o.b : nx ? nx.b : null;
-  return `<div class="panel dgate ${g.open ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">${sub}</span><h3 style="margin:2px 0 4px">${title}</h3>
-    <div class="small ${g.open ? "" : "muted"}">${g.open ? "" : ic("lock", "inl")}${state}</div>${!isBody && b ? topicLine(b) : ""}</div>${btn}</div></div>`;
-}
-function vDungeon() {
-  const t = E.today(), bg = P.trainGate(started(t)), sg = St.focusGate(), pens = St.openPenalties();
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Dungeon</h1></div>${gear("dungeon")}</header>
-  ${pens.length ? penaltyBox() : ""}
-  ${gateCard("body", bg)}${gateCard("study", sg)}
-  ${tip("dungeon", `Each dungeon opens ${S.settings.plan.openPad ?? 10} min before its quest block. Do the work inside the block, or it counts as skipped: −${S.settings.study.penaltyXp ?? 30} XP and a make-up quest.`)}
-  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="classes">Study</button><button data-act="go" data-id="jlpt">JLPT ladder</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
-}
-
 /* ================= CLASS HALL (v3.2) ================= */
 // Disciplines (chapters → quizzes → boss exam), classes and titles. Only the current chapter of each discipline shows.
 let dq = null, chEdit = false; // quiz in progress {id, ch, qs, ans, res}; own-chapter editor open
@@ -880,22 +861,35 @@ function vClasses([sub, id, ch]) {
     return `<div class="item"><div class="row between"><b>${esc(c.name)}</b><span class="small ${ci.earned ? "" : "muted"}">${ci.earned ? ic("check", "inl") + " earned" : `${ci.got.length}/${c.needs.length}`}</span></div>
       <div class="chips" style="margin-top:6px">${c.needs.map(n => `<span class="chip ${Cl.bossPassed(n) ? "on" : act.includes(n) ? "half" : ""}">${esc(Cl.disc(n)?.name || n)}</span>`).join("")}</div>
       ${ci.ready ? `<div class="small" style="margin-top:6px">Capstone: ${esc(c.capstone)}</div><div class="btns"><button class="btn sm ${ci.earned ? "" : "go"}" data-act="capstone" data-id="${c.id}">${ci.earned ? "Undo capstone" : "Capstone done"}</button></div>` : ""}</div>`; };
-  const others = Cl.all().filter(d => !act.includes(d.id));
+  const others = Cl.all().filter(d => !act.includes(d.id)), due = K.queue().length;
+  // The hero: the chapter the System wants next (the discipline with the most hours left), with Start.
+  const pick = Cl.studyTopics()[0], hid = pick ? pick.disc : act[0], hd = hid && Cl.disc(hid), hc = hid && Cl.currentChapter(hid);
+  const hero = !act.length ? `<div class="hero"><span class="hdr">${px("scroll")} First discipline</span><div class="now-t">Accounting</div>
+      <div class="small muted">The shared core of all three target roles. One chapter at a time: read it, pass its quiz, the next one opens.</div>
+      <div class="btns"><button class="btn go" data-act="discon" data-id="acct">Start Accounting</button></div></div>`
+    : `<div class="hero"><div class="row between"><span class="hdr">${px("scroll")} ${esc(hd.name)}${hc ? ` · chapter ${Cl.chapters(hid).indexOf(hc) + 1} of ${Cl.chapters(hid).length}` : ""}</span>${hc ? `<span class="hdr">${Cl.readPct(hc.id)}%</span>` : ""}</div>
+      <div class="now-t">${hc ? esc(hc.title) : Cl.bossPassed(hid) ? "Cleared" : "Boss exam open"}</div>
+      <div class="btns"><button class="btn go" data-act="go" data-id="classes/d/${hid}">${hc && Cl.readDone(hid, hc.id) ? "Take the quiz" : "Start"}</button>
+        <button class="btn" data-act="go" data-id="cards/review">${px("scroll")} Flashcards${due ? " · " + due + " due" : ""}</button></div></div>`;
+  // Japanese is a discipline here: Genki lessons are its chapters, the JLPT ladder its progress, N-level mocks its boss.
+  const jpL = St.topics("jp"), jpCur = St.current("jp"), jpOpen = (jpL[0] && St.progress("jp", jpL[0].id) >= 100) || live("jlptItems").length > 0 || live("jlptExams").length > 0;
+  const jpRow = !jpOpen ? "" : `<button class="panel discp" data-act="go" data-id="jlpt"><div class="row between"><b>Japanese</b><span class="small muted">${jpL.filter(x => St.progress("jp", x.id) >= 100).length}/${jpL.length}</span></div>
+      ${bar(jpL.filter(x => St.progress("jp", x.id) >= 100).length / (jpL.length || 1), "var(--acc)")}
+      <div class="small muted">${jpCur ? `Now: ${esc(jpCur.t)} · ${St.progress("jp", jpCur.id)}%` : "Every lesson done"} · JLPT ladder and mock exams</div></button>`;
+  const canAdd = act.some(id => Cl.clearedCount(id) > 0);
   return `${head}
-  ${tip("classes", `Pick up to ${Cl.CAP} disciplines. Finance blocks work through their chapters; the System picks which. Read the chapter, pass its quiz (5 of 6), and the next one opens. Clear every chapter for the boss exam and a title.`)}
-  <h2>Active <span class="n">${act.length}/${Cl.CAP}</span></h2>
-  ${act.map(discRow).join("") || `<div class="panel"><p class="small muted">No discipline active. The shared core comes first: Accounting.</p></div>`}
+  ${hero}
+  ${act.length > 1 ? `<h2>Active <span class="n">${act.length}/${Cl.CAP}</span></h2>${act.filter(id => id !== hid).map(discRow).join("")}` : ""}
+  ${jpRow}
   ${act.length ? `<div class="panel ${pc.ok ? "" : "warnp"}"><div class="row between"><b>Pace</b><span class="small ${pc.ok ? "" : "warn"}">${pc.ok ? "on pace" : "behind"}</span></div>
     <div class="small muted">${pc.need} h left in these disciplines · ${pc.have} h of Finance blocks before graduation (${pc.wk} h a week). ${pc.ok ? "" : `Needs ${pc.perWeek} h a week: add a block or drop a discipline.`}</div></div>` : ""}
-  ${fold("cl-titles", `<b class="grow">Titles</b><span class="small muted">${tl.length}</span>`, tl.length ? `<div class="list">${tl.map(t => `<div class="row between item"><div class="grow"><b>${esc(t.name)}</b><div class="tiny muted">${esc(t.from)}</div></div>
-      ${eq === t.id ? `<button class="btn sm" data-act="unequip">Equipped</button>` : `<button class="btn sm ${t.owned ? "" : "go"}" data-act="equip" data-id="${t.id}">${t.owned ? "Equip" : `Equip · ${t.cost} XP`}</button>`}</div>`).join("")}</div>
-      <p class="tiny muted">The first equip costs wallet XP (${Cl.COST.disc} for a discipline or JLPT title, ${Cl.COST.class} for a class, ${Cl.COST.spec} for a specialisation). Re-equipping is free; level never drops.</p>`
-    : `<p class="empty">None yet. Boss exams and JLPT Boss Raids give titles.</p>`)}
+  ${canAdd || act.length > 1 ? fold("cl-add", `<b class="grow">Add a discipline</b>`, others.map(d => `<div class="row between item"><div class="grow"><b>${esc(d.name)}</b><div class="tiny muted">${esc(d.blurb)}</div></div>
+    <button class="btn sm" data-act="discon" data-id="${d.id}" ${act.length >= Cl.CAP ? "disabled" : ""}>Start</button></div>`).join("") + (act.length >= Cl.CAP ? `<p class="tiny muted">${Cl.CAP} active is the cap. Drop one to start another.</p>` : "")) : ""}
   ${fold("cl-classes", `<b class="grow">Classes</b>`, `${Cl.CLASSES.filter(c => Cl.CORE.includes(c.id)).map(classRow).join("")}
     <details style="margin-top:8px"><summary class="small">Other paths</summary>${Cl.CLASSES.filter(c => !Cl.CORE.includes(c.id)).map(classRow).join("")}</details>
-    <h3 style="margin-top:12px">Specialisations</h3>${Cl.SPECS.map(sp => { const si = Cl.specInfo(sp.id); return `<div class="small item">${si.earned ? ic("check", "inl") + " " : ""}<b>${esc(sp.name)}</b> <span class="muted">· ${esc(Cl.CLASSES.find(c => c.id === sp.base).name)} + ${esc(Cl.plusName(sp.plus))}</span></div>`; }).join("")}`, true)}
-  ${fold("cl-add", `<b class="grow">Add a discipline</b>`, others.map(d => `<div class="row between item"><div class="grow"><b>${esc(d.name)}</b><div class="tiny muted">${esc(d.blurb)}</div></div>
-    <button class="btn sm" data-act="discon" data-id="${d.id}" ${act.length >= Cl.CAP ? "disabled" : ""}>Start</button></div>`).join("") + (act.length >= Cl.CAP ? `<p class="tiny muted">${Cl.CAP} active is the cap. Drop one to start another.</p>` : ""), !act.length)}`;
+    <h3 style="margin-top:12px">Specialisations</h3>${Cl.SPECS.map(sp => { const si = Cl.specInfo(sp.id); return `<div class="small item">${si.earned ? ic("check", "inl") + " " : ""}<b>${esc(sp.name)}</b> <span class="muted">· ${esc(Cl.CLASSES.find(c => c.id === sp.base).name)} + ${esc(Cl.plusName(sp.plus))}</span></div>`; }).join("")}`)}
+  ${fold("cl-topics", `<b class="grow">Block topics, reports and penalties</b>`, vStudy())}
+  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcard decks</button></div>`;
 }
 function vDisc(id) {
   const d = Cl.disc(id); if (!d) return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><h1>Not found</h1>`;
@@ -952,9 +946,6 @@ function vDiscQuiz(id, ch) {
 }
 
 let topicEdit = null; // subject whose topic list is open for editing
-function vStudyPage() {
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><h1>Study topics</h1></div>${gear("dungeon")}</header>${vStudy()}`;
-}
 function vStudy() {
   const sst = S.settings.study, fg = St.focusGate();
   const subj = Object.keys(SUBJECTS).map(k => {
@@ -1771,7 +1762,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.2 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
