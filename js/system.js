@@ -100,7 +100,7 @@ export function milestones() {
   const a = act1(), out = [];
   for (const q of a.parts) if (q.done) out.push({ id: "act1:" + q.id, title: q.id === "save" ? "Savings goal reached" : q.id === "debt" ? "Debt cleared" : "Offer secured", text: "Act I objective complete: " + q.label + "." });
   if (a.done) out.push({ id: "act1:clear", title: "Act I cleared: Escape Kofu", text: "A new gate opens. The Treasury unlocks." });
-  for (const d of Cl.all()) if (Cl.bossPassed(d.id)) out.push({ id: "dboss:" + d.id, title: "Boss cleared: " + d.name, text: "Title earned: " + d.title + ". Equip it in the Class hall." });
+  for (const d of Cl.all()) if (Cl.bossPassed(d.id)) out.push({ id: "dboss:" + d.id, title: "Boss cleared: " + d.name, text: "Title earned: " + d.title + ". Equip it in Profile." });
   for (const c of Cl.CLASSES) if (Cl.classInfo(c.id).earned) out.push({ id: "class:" + c.id, title: "Class earned: " + c.name, text: "Every discipline cleared and the capstone done." });
   for (const l of J.unlocked().slice(1)) out.push({ id: "jlpt:" + l, title: "Gate open: " + l, text: "The JLPT ladder climbs to " + l + "." });
   return out;
@@ -116,7 +116,7 @@ export function seeMilestone(id) { const x = sys(); if (!x.seen.includes(id)) x.
 const REVEALS = [
   { id: "act1", text: "Act I has begun: Escape Kofu.", sub: "Objective: ¥500k saved, debt-free, and one offer. Everything else is noise for now." },
   { id: "shield", text: "Streak shield active.", sub: "One missed day a week won't break your streak. Two will." },
-  { id: "loot", text: "Quest blocks can drop loot.", sub: "Finish the block. Sometimes there's more than the base XP." },
+  { id: "loot", text: "Blocks can drop loot.", sub: "Finish the block. Sometimes there's more than the base XP." },
   { id: "comeback", text: "Missed a day? The next one starts with a comeback quest.", sub: "Clear any one quest for a bonus. No pile-up." },
   { id: "gates", text: "Locked gates have appeared on Status.", sub: "They open in order. Only the current Act matters." },
   { id: "loan", when: () => loanLive(), text: "New area unlocked: Treasury.", sub: "Your education loan is yours now: one fixed monthly bill, paid before anything goes to the Store." },

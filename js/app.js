@@ -101,6 +101,7 @@ function render() {
   $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = TAB_OF[tab] === "plan" ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
+  document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
   hydrate();
   if (tab === "settings" && rest[0] && entering0) { const d = document.querySelector(`[data-fold="set-${SET_SECTIONS[rest[0]] || rest[0]}"]`); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ block: "start" }), 0); } }
 }
@@ -146,56 +147,112 @@ function todayQuests(t = E.today()) {
     ...Soc.trials().filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }))];
   const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
   const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
-  return { trials, events, habits, done: doneT.length + trials.filter(x => x.done).length + habits.filter(x => x.on).length, total: trials.length + events.length + habits.length };
+  const call = live("xpEvents").some(e => e.ref === "call" && E.ymd(new Date(e.ts)) === t);
+  return { trials, events, habits, call, done: doneT.length + trials.filter(x => x.done).length + habits.filter(x => x.on).length + (call ? 1 : 0), total: trials.length + events.length + habits.length + (call ? 1 : 0) };
 }
 const habitRow = ({ h, on }) => `<div class="q ${on ? "done" : ""}">
   <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
   <div class="grow"><div class="t">${esc(h.name)}</div><div class="small muted">${esc(h.note)} · ${E.habitWeekCount(h.id)}/${E.habitTarget(h.id)} this week</div></div>
   <div class="xp">+${XP.habit}</div></div>`;
+const CALL_XP = 10;
 const eventRow = ({ k, at, done }) => `<div class="q ${done ? "done" : ""} ${k.penalty ? "pen-q" : ""}">
   <button class="bx" data-act="${done ? "taskundo" : "taskdone"}" data-id="${k.id}" aria-pressed="${!!done}" aria-label="${esc(k.title)} done">${done ? ic("check") : ""}</button>
-  <div class="grow"><div class="t">${esc(k.title)}</div><div class="small muted">${done ? "done" : `${span(at.s, at.e)} · ${P.dur(k.mins)}`}</div></div>
+  <div class="grow"><div class="t">${k.penalty ? tag("pen", "Penalty") + " " : ""}${esc(k.title)}</div><div class="small muted">${done ? "done" : `${span(at.s, at.e)} · ${P.dur(k.mins)}`}</div></div>
   <div class="xp">${k.penalty ? "" : "+" + XP.task}</div></div>`;
 
+// Home (v4): one hero, chosen by priority: a running Dungeon, an open block, a penalty, a comeback, then the next block.
+// Below it, today's three most important quests. Everything else sits behind the bell, the gear or Profile.
+const ENTER_KEY = "kts-entered";
+const entered = () => { try { return JSON.parse(localStorage.getItem(ENTER_KEY)) || {}; } catch (e) { return {}; } };
+function enter(key, on = true) { const m = entered(); if (on) m[key] = Date.now(); else delete m[key]; const ks = Object.keys(m).sort((x, y) => m[y] - m[x]).slice(0, 30); try { localStorage.setItem(ENTER_KEY, JSON.stringify(Object.fromEntries(ks.map(k => [k, m[k]])))); } catch (e) {} }
+let moneyQuick = false, showAllQuests = false;
+// What the hero is right now. Dungeons run from stage 1; before that a block is just time on the Plan.
+function homeState(t = E.today()) {
+  const d1 = Sy.has(1), fg = St.focusGate(), bg = P.trainGate(started(t)), en = entered();
+  if (d1 && fg.open && (en[St.occKey(fg.o)] || fg.ended || St.pomo(St.occKey(fg.o)).run)) return { k: "study", g: fg };
+  if (d1 && bg.open && (en["body:" + t] || bg.started)) return { k: "body", g: bg };
+  if (d1 && fg.open) return { k: "open", kind: "study", g: fg };
+  if (d1 && bg.open) return { k: "open", kind: "body", g: bg };
+  if (d1 && St.openPenalties().length) return { k: "pen" };
+  const cb = Sy.comeback(t); if (cb && !cb.claimed) return { k: "comeback", cb };
+  return { k: "next" };
+}
 function vHome() {
-  const t = E.today();
-  const days = E.daysBetween(t, S.settings.dates.graduation);
-  const nn = P.nowNext(), wd = P.windDownNow(), n = alertList().length, gate = P.trainGate(started(t)), fg = St.focusGate();
-  const into = gate.open ? "train" : fg.open ? "focus" : "plan";
-  const nm = new Date().getHours() * 60 + new Date().getMinutes();
-  const cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
-  const act = fg.open && fg.ended ? "Report" : into === "focus" ? (St.pomo(St.occKey(fg.o)).run ? "Open timer" : "Enter dungeon") : into === "train" ? "Enter dungeon" : "Open plan";
-  const q = todayQuests(t), cb = Sy.comeback(t), a1 = Sy.act1();
-  // Choice reduction: at most three quests are highlighted; the rest fold away.
-  const top3 = [...(cb && !cb.claimed ? ["Comeback quest: clear any one quest (+" + Sy.COMEBACK_XP + " XP)"] : []), ...q.trials.filter(e => !e.done).map(e => e.k.title),
-    ...q.events.filter(e => !e.done).map(e => e.k.title), ...q.habits.filter(x => !x.on).map(x => x.h.name)].slice(0, 3);
-  const nowTitle = wd ? "Wind down" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
+  const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
+  const dungeon = hs.k === "study" || hs.k === "body";
   return `
-  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<button class="ident" data-act="go" data-id="classes">${esc(Cl.identity())}</button>` : ""}</div>
+  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1><button class="tbtn hname" data-act="nav" data-id="profile">Hi, ${esc(S.settings.name || "Arin")}</button></h1>${Cl.identity() ? `<button class="ident" data-act="nav" data-id="profile">${esc(Cl.identity())}</button>` : ""}</div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
     ${gear("home")}</div></header>
-  <button class="strip" data-act="nav" data-id="status">
-    <span><b class="dm">LV ${E.level()}</b></span><span>${E.xpWallet().toLocaleString("en-US")} XP to spend</span><span class="row" style="gap:4px">${ic("flame", "fire")}${Sy.streak().n}</span><span>${days}d to grad</span><span class="chev">${ic("right")}</span></button>
-  ${alertStrip()}
-  <button class="panel act" data-act="nav" data-id="status"><div class="row between"><span class="hdr">${px("crown")} Act I · Escape Kofu</span><span class="chev">${ic("right")}</span></div>
-    ${bar(a1.shown, "var(--acc)")}<div class="small muted">${a1.parts.filter(x => !x.done).map(x => esc(x.label)).join(" · ")}${a1.week > 0 ? ` · this week: put away ${yen(a1.week)}` : ""}</div></button>
-
-  <div class="hero now ${wd ? "winding" : ""}">
+  ${dungeon ? "" : actLine(a1)}
+  ${homeHero(hs, t)}
+  ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
+  ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></button>`}
+  ${dungeon ? dungeonBar(hs) : ""}`;
+}
+// Act I as one line, with its own money check-in so it works before the Store opens.
+function actLine(a1) {
+  const due = E.moneyDue(), last = E.moneyReports().slice(-1)[0];
+  return `<div class="panel actline"><div class="row between"><span class="hdr">${px("crown")} Act I · ${a1.week > 0 ? `${yen(a1.week)} this week` : "Escape Kofu"}</span>
+    <button class="link" data-act="moneyquick">${due ? "Check in" : moneyQuick ? "Close" : "Update"}</button></div>${bar(a1.shown, "var(--acc)")}
+    ${moneyQuick ? `<div class="grid" id="moneyForm" style="margin-top:6px">
+      <label class="f">Bank (¥)<input type="number" inputmode="numeric" data-f="bank" placeholder="${last ? last.bank : ""}"></label>
+      <label class="f">Debt left (¥)<input type="number" inputmode="numeric" data-f="debt" placeholder="${last ? last.debt : ""}"></label></div>
+      <div class="btns"><button class="btn primary block" data-act="savemoney">Save</button></div>` : due ? `<div class="small muted">Weekly check-in is due: bank balance and debt left.</div>` : ""}</div>`;
+}
+function homeHero(hs, t) {
+  const nm = new Date().getHours() * 60 + new Date().getMinutes(), wd = P.windDownNow();
+  if (hs.k === "study") return `<div class="dungeon">${focusBody(hs.g)}</div>`;
+  if (hs.k === "body") return `<div class="dungeon"><div class="hero">${trainSession(t)}</div></div>`;
+  if (hs.k === "open") {
+    const g = hs.g, b = hs.kind === "study" ? g.o.b : g.block, s = hs.kind === "study" ? g.o.s : g.s, e = hs.kind === "study" ? g.o.e : g.e;
+    return `<div class="hero"><div class="row between"><span class="hdr">${px("gate")} Block open · ${span(s, e)}</span></div>
+      <div class="now-t">${esc(b ? b.title : "Workout")}</div>${hs.kind === "study" && b ? topicLine(b) : ""}
+      <div class="btns"><button class="btn go block" data-act="enter" data-id="${hs.kind}">${hs.kind === "study" && g.ended ? "Report" : "Enter the Dungeon"}</button></div></div>`;
+  }
+  if (hs.k === "pen") { const p = St.openPenalties()[0], k = live("tasks").find(x => x.id === p.task), at = k && P.plan().at.get(k.id);
+    return `<div class="hero pen"><span class="hdr">${px("skull")} Penalty quest</span><div class="now-t">Make up ${esc(p.title)}</div>
+      <div class="small muted">${k ? P.dur(k.mins) : ""}${at ? ` · set for ${esc(dayLabel(at.date))} ${P.toHM(at.s)}` : ""}. The Store stays locked until it's done.</div>
+      ${k ? `<div class="btns"><button class="btn go" data-act="taskdone" data-id="${k.id}">Done</button><button class="btn" data-act="go" data-id="plan">Open plan</button></div>` : ""}</div>`; }
+  if (hs.k === "comeback") return `<div class="hero"><span class="hdr">${px("flame")} Welcome back</span><div class="now-t">Comeback quest</div>
+      <div class="small muted">Clear any one quest today for +${Sy.COMEBACK_XP} XP. Missed days don't pile up.</div>
+      <div class="btns"><button class="btn go" data-act="questsall">Pick a quest</button></div></div>`;
+  // Next block: what's on now (if anything) and what's next.
+  const nn = P.nowNext(), cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
+  const nowTitle = wd ? "Close the day" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
+  const noBlocks = !live("blocks").length;
+  return `<div class="hero now ${wd ? "winding" : ""}">
     <div class="row between"><span class="hdr">${px("bolt")} Now · ${P.toHM(nm)}</span>${cur && !wd ? `<span class="hdr">${P.dur(Math.max(0, cur.e - nm))} left</span>` : ""}</div>
     <div class="now-t">${esc(nowTitle)}</div>
-    ${wd ? `<div class="small muted">Bed at ${P.toHM(wd.bed)}. Screens off, shower, set out tomorrow's clothes.</div>` : cur && cur.type === "block" ? topicLine(cur.b) : ""}
+    ${wd ? `<div class="small muted">Bed at ${P.toHM(wd.bed)}. Tick what's left, then screens off.</div>` : cur && cur.type === "block" ? topicLine(cur.b) : ""}
     ${cur && !wd ? `<div class="bar"><i style="width:${pct * 100}%;background:var(--sys)"></i></div>` : ""}
     <div class="row between" style="margin-top:8px"><span class="small muted grow">${nn.next ? `Next: ${esc(nn.next.type === "wind" ? "Wind down" : nn.next.type === "task" ? nn.next.k.title : nn.next.b.title)} · ${P.toHM(nn.next.s)}` : "Nothing else today"}</span>
-      <button class="btn sm ${into !== "plan" || (fg.open && fg.ended) ? "primary" : ""}" data-act="nav" data-id="${into}">${act}</button></div>
-  </div>
-
-  ${fold("quests", `<div class="grow"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}${top3.length ? `<ul class="top3">${top3.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}</div>`,
-    `${cb ? `<div class="q ${cb.claimed ? "done" : ""}"><span class="lockbox">${ic(cb.claimed ? "check" : "flame")}</span><div class="grow"><div class="t">Comeback quest</div><div class="small muted">Yesterday was empty. Clear any one quest today.</div></div><div class="xp">+${Sy.COMEBACK_XP}</div></div>` : ""}${q.trials.length ? `<div class="qsec trial">Trials <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}${q.events.length ? `<div class="qsec">Event quests <span>to-do · ${q.events.filter(e => e.done).length}/${q.events.length}</span></div><div class="list">${q.events.map(eventRow).join("")}</div>` : `<div class="qsec">Event quests <span>none planned today</span></div>`}
-     <div class="qsec">Normal quests <span>daily · ${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
-     <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button><button class="btn sm" data-act="go" data-id="plan">Open plan</button></div>`)}
-
-  <div class="quiet-links"><button data-act="go" data-id="dungeon">Dungeon</button><button data-act="go" data-id="cards">Flashcards</button></div>
-`;
+      ${wd ? `<button class="btn sm primary" data-act="questsall">Close the day</button>` : noBlocks ? `<button class="btn sm primary" data-act="firstblock">Add your first block</button>` : `<button class="btn sm" data-act="nav" data-id="plan">Plan today</button>`}</div></div>`;
+}
+// While a Dungeon runs, its main action sits just above the tab bar.
+function dungeonBar(hs) {
+  if (hs.k === "study") { const g = hs.g, fin = St.logsFor(g.o).find(r => r.final);
+    return `<div class="dbar"><span class="grow small">${px("sword")} ${esc(g.o.b.title)} · ${span(g.o.s, g.o.e)}</span>${fin ? `<button class="btn sm" data-act="leave" data-id="study">Leave</button>` : `<button class="btn sm go" data-act="toreport">Report</button>`}</div>`; }
+  return `<div class="dbar"><span class="grow small">${px("sword")} Workout</span><button class="btn sm" data-act="go" data-id="train/pick/browse">Library</button><button class="btn sm" data-act="leave" data-id="body">Leave</button></div>`;
+}
+// Today's quests: the three that matter most, tagged. "Show all" opens the rest.
+const tag = (k, l) => `<span class="tag t-${k}">${k === "trial" ? px("flag") + " " : k === "pen" ? px("skull") + " " : ""}${l}</span>`;
+function questsPanel(q) {
+  const items = [...q.trials.filter(e => !e.done).map(e => [e.k.title, tag("trial", "Trial")]),
+    ...q.events.filter(e => !e.done).map(e => [e.k.title, e.k.penalty ? tag("pen", "Penalty") : tag("today", "Today")]),
+    ...q.habits.filter(x => !x.on).map(x => [x.h.name, tag("daily", "Daily")])];
+  const top = items.slice(0, 3);
+  return `<div class="panel quests"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
+    ${top.length ? `<ul class="top3">${top.map(([x, tg]) => `<li><span class="grow">${esc(x)}</span>${tg}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}
+    <div class="btns"><button class="btn sm" data-act="questsall">${showAllQuests ? "Hide" : `Show all (${q.total})`}</button></div>
+    ${showAllQuests ? questsAll(q) : ""}</div>`;
+}
+function questsAll(q) {
+  return `<div class="qall">${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
+    ${q.trials.length ? `<div class="qsec trial">${px("flag")} Trial <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}
+    <div class="qsec">Today <span>${q.events.length ? `${q.events.filter(e => e.done).length}/${q.events.length}` : "nothing planned"}</span></div>${q.events.length ? `<div class="list">${q.events.map(eventRow).join("")}</div>` : ""}
+    <div class="qsec">Daily <span>${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
+    <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button></div></div>`;
 }
 
 // The most urgent System message, with a count of the rest. Full list behind the bell.
@@ -211,7 +268,7 @@ function planSettings() {
     <label class="f">Plan tasks from<input type="time" data-ch="dayStart" value="${esc(pl.dayStart)}"></label>
     <label class="f">Until<input type="time" data-ch="dayEnd" value="${esc(pl.dayEnd)}"></label>
     <label class="f">Padding around blocks (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="buffer" value="${pl.buffer ?? 10}"></label>
-    <label class="f">Quest blocks open early / close late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
+    <label class="f">Blocks open early / close late (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="openPad" value="${pl.openPad ?? 10}"></label>
     <label class="f">Edit lock before a block (min)<input type="number" inputmode="numeric" data-ch="planmin" data-id="lockMins" value="${pl.lockMins ?? 15}"></label></div>
     <p class="tiny muted">Tasks only go inside this window, outside blocks plus padding, and before wind-down. Today's blocks can't be changed from the lock time until they end.</p>`, true)}
   ${fold("set-wind", `<b class="grow">Wind-down</b><span class="small muted">${wd.on !== false ? (wd.mins ?? 60) + " min before bed" : "off"}</span>`, `
@@ -226,12 +283,12 @@ function planSettings() {
     <div class="btns"><button class="btn sm" data-act="ics">Download whole timetable (.ics)</button></div>
     <p class="tiny muted">The .ics file has every block, the wind-down with an alarm, and this fortnight's planned tasks. On Android, import it at calendar.google.com → Settings → Import.</p>`)}`;
 }
-// Dungeon gear: pomodoro and penalty rules (they apply to every quest block).
+// Dungeon gear: pomodoro and penalty rules (they apply to every study and workout block).
 function dungeonSettings() {
   const sst = S.settings.study;
   return `<h3>Pomodoro and penalties</h3><div class="grid">
     ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
-    <p class="tiny muted">Every quest block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p>
+    <p class="tiny muted">Every study and workout block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p>
     <h3>Flashcards</h3><div class="grid"><label class="f">New cards per day<input type="number" inputmode="numeric" data-ch="cardsnew" value="${S.settings.cards.newPerDay ?? 15}"></label></div>
     <p class="tiny muted">How many unseen cards join the review pile each day. Reviews of cards you've seen are never capped.</p>`;
 }
@@ -269,6 +326,7 @@ const gear = k => `<button class="rbtn" data-act="nav" data-id="settings/${k}" a
 let ceremonyDone = false; // one per open
 function ceremony() {
   if (ceremonyDone) return null;
+  if (Sy.has(1) && ["study", "body"].includes(homeState().k)) return null; // never during a Dungeon
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
   const m = Sy.nextMilestone(); return m ? { ms: m } : null;
 }
@@ -288,15 +346,19 @@ let briefOpen = false;
 function briefDue() { const d = new Date(); if (d.getHours() < 4) return false; try { return localStorage.getItem(BRIEF_KEY) !== E.today(); } catch (e) { return false; } }
 function briefHtml() {
   const t = E.today(), q = todayQuests(t), pens = St.openPenalties();
-  const blocks = St.questOcc(t).sort((a, b) => a.s - b.s);
+  const blocks = St.questOcc(t).sort((a, b) => a.s - b.s), nx = Sy.nextStage();
+  const empty = d => !live("habitLog").some(h => h.date === d) && !live("tasks").some(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === d);
+  const back = live("habitLog").length > 0 && empty(E.addDays(t, -1)) && empty(E.addDays(t, -2));
   return `<div class="modal-scrim" data-act="briefclose"></div><div class="modal brief" role="dialog" aria-label="Today's quests">
-    <div class="hdr">System · ${esc(E.fmtDate(t))}</div><h2 class="bh">Daily quests have arrived</h2>
+    <div class="hdr">System · ${esc(E.fmtDate(t))}</div><h2 class="bh">${back ? "Welcome back" : "Daily quests have arrived"}</h2>
+    ${back ? `<p class="small">No penalties for the days away. Clear any one quest today for +${Sy.COMEBACK_XP} XP.</p>` : ""}
     ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} Make up ${esc(p.title)} · shop locked until done</div>`).join("")}` : ""}
-    ${blocks.length ? `<div class="bsec">Quest blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
+    ${blocks.length ? `<div class="bsec">Blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
       return `<div class="bl"><span class="mono">${span(o.s, o.e)}</span> <b>${esc(o.b.title)}</b>${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}</div>`; }).join("")}` : ""}
-    <div class="bsec">Event quests</div>${q.events.filter(e => !e.done).map(({ k, at }) => `<div class="bl"><span class="mono">${span(at.s, at.e)}</span> ${esc(k.title)}</div>`).join("") || `<div class="bl muted">No to-dos planned today.</div>`}
-    <div class="bsec">Normal quests</div><div class="bl">${q.habits.map(({ h }) => esc(h.name)).join(" · ")}</div>
-    <p class="tiny muted" style="margin-top:10px">Skipped quest blocks cost ${S.settings.study.penaltyXp ?? 30} XP and earn a penalty quest.</p>
+    <div class="bsec">Today</div>${q.events.filter(e => !e.done).map(({ k, at }) => `<div class="bl"><span class="mono">${span(at.s, at.e)}</span> ${esc(k.title)}</div>`).join("") || `<div class="bl muted">No to-dos planned today.</div>`}
+    <div class="bsec">Daily</div><div class="bl">${q.habits.map(({ h }) => esc(h.name)).join(" · ")}</div>
+    ${nx ? `<div class="bsec">Sealed</div><div class="bl">${px("lock")} ${esc(Sy.STAGES[Sy.stage()].hint)}</div>` : ""}
+    <p class="tiny muted" style="margin-top:10px">${Sy.has(1) ? "Skipped blocks cost" : "Blocks don't cost anything yet. Later, skipped blocks will cost"} ${S.settings.study.penaltyXp ?? 30} XP and earn a penalty quest.</p>
     <div class="btns"><button class="btn primary block" data-act="briefclose">Accept</button></div></div>`;
 }
 
@@ -314,7 +376,7 @@ function penaltyBox() {
   const lines = pens.map(p => { const k = live("tasks").find(x => x.id === p.task), w = k && at.get(k.id);
     if (p.trial) return `<div class="x">Missed trial: ${esc(p.title)}, due ${esc(dayLabel(p.date))}. Clear it late to lift the penalty.</div>`;
     return `<div class="x">Missed ${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}. Penalty quest: ${k ? P.dur(k.mins) + " make-up" : "make-up"}${w ? `, set for ${esc(dayLabel(w.date))} ${P.toHM(w.s)}` : ""}.</div>`; }).join("");
-  return win("Penalty", `${pens.length === 1 ? "A quest block was skipped." : pens.length + " quest blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
+  return win("Penalty", `${pens.length === 1 ? "A block was skipped." : pens.length + " blocks were skipped."} −${xp} XP. The shop is locked until the make-up ${pens.length === 1 ? "is" : "quests are"} done.
     ${lines}<div class="btns"><button class="btn sm" data-act="go" data-id="plan">Open penalty quests</button></div>`, "pen", "skull");
 }
 function reportDueBox(fg) {
@@ -324,14 +386,19 @@ function reportDueBox(fg) {
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="focus">Report now</button></div>`);
 }
 function vFocus() {
-  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button>`;
-  if (!g.open) {
+  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  if (g.open) { const o = g.o, subj = St.subjectOf(o.b), top = subj && St.current(subj);
+    return `${back}<header class="top"><div><div class="hdr">Dungeon · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>${focusBody(g)}`; }
+  {
     const nx = g.next;
-    return `${back}<h1>Study dungeon</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
+    return `${back}<h1>Dungeon</h1><div class="panel locked-gate"><div class="row" style="gap:10px">${px("lock", "big-lock")}<div><div class="hdr">System · Not open yet</div>
       <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
       ${nx ? `<div class="small muted">${esc(nx.b.title)}</div>${topicLine(nx.b)}` : ""}
-      <div class="small muted">A quest block opens ${S.settings.plan.openPad ?? 10} min before it starts. The report stays open ${S.settings.study.grace ?? 60} min after it ends.</div></div></div></div>`;
+      <div class="small muted">A block opens ${S.settings.plan.openPad ?? 10} min before it starts. The report stays open ${S.settings.study.grace ?? 60} min after it ends.</div></div></div></div>`;
   }
+}
+// The study Dungeon itself: timer, the topic, and the report. Shown as Home's hero while it runs.
+function focusBody(g) {
   const o = g.o, key = St.occKey(o), subj = St.subjectOf(o.b), top = subj && St.current(subj), pr = top ? St.progress(subj, top.id) : 0;
   const p = St.pomo(key), fin = St.logsFor(o).find(r => r.final), sst = S.settings.study, pen = sst.penaltyXp ?? 30;
   const left = St.pomoLeft(p), phase = p.phase === "focus" ? "Focus" : p.phase === "long" ? "Long break" : "Break";
@@ -351,15 +418,14 @@ function vFocus() {
   else {
     const opts = !subj || !top ? [["done", "Done"], ["0", "Didn't do it"]]
       : [["0", "None"], ...[10, 25, 50, 75].filter(x => pr + x < 100).map(x => [String(x), "+" + x + "%"]), ["rest", "Finished it"]];
-    rep = `<div class="panel ${g.ended ? "report-due" : ""}"><h3>${g.ended ? "Block over. Report it" : "End-of-block report"}</h3>
+    rep = `<div class="panel ${g.ended ? "report-due" : ""}" id="report"><h3>${g.ended ? "Block over. Report it" : "End-of-block report"}</h3>
       <p class="small">${top ? `How much of <b>${esc(top.t)}</b> did you get through in this block? Count it as a share of the whole topic.` : "Did you do this block?"}</p>
       <div class="chips">${opts.map(([v, l]) => `<button class="chip" data-act="blockreport" data-id="${v}">${l}</button>`).join("")}</div>
       <p class="tiny muted">${g.ended ? `Report by ${P.toHM(g.closes)}.` : "Report when the block ends."} No work done by then counts as skipped: −${pen} XP and a make-up penalty quest. The shop locks until it's cleared.</p></div>`;
   }
   const due = K.queue().length;
-  const stages = `<div class="stages"><span class="st on">1 · Topic</span><button class="st" data-act="nav" data-id="cards/review">2 · Flashcards${due ? ` <b>${due}</b>` : ` ${ic("check", "inl")}`}</button><button class="st" data-act="nav" data-id="jlpt/q">3 · JLPT</button></div>`;
-  return `${back}<header class="top"><div><div class="hdr">System · Quest · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>
-  ${stages}${timer}${topicHtml}${rep}`;
+  const stages = !Sy.has(3) ? "" : `<div class="stages"><span class="st on">1 · Topic</span><button class="st" data-act="nav" data-id="cards/review">2 · Flashcards${due ? ` <b>${due}</b>` : ` ${ic("check", "inl")}`}</button><button class="st" data-act="nav" data-id="jlpt/q">3 · JLPT</button></div>`;
+  return `${stages}${timer}${topicHtml}${rep}`;
 }
 // Phase change: buzz, beep, and a notification if the app is in the background.
 function chime(p) {
@@ -795,7 +861,7 @@ function vDungeon() {
   ${pens.length ? penaltyBox() : ""}
   ${gateCard("body", bg)}${gateCard("study", sg)}
   ${tip("dungeon", `Each dungeon opens ${S.settings.plan.openPad ?? 10} min before its quest block. Do the work inside the block, or it counts as skipped: −${S.settings.study.penaltyXp ?? 30} XP and a make-up quest.`)}
-  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="classes">Class hall</button><button data-act="go" data-id="jlpt">JLPT ladder</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
+  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcards${K.queue().length ? " · " + K.queue().length + " due" : ""}</button><button data-act="go" data-id="classes">Study</button><button data-act="go" data-id="jlpt">JLPT ladder</button><button data-act="go" data-id="study">Study topics</button><button data-act="go" data-id="train/runs">Runs</button><button data-act="go" data-id="train/pick/browse">Exercise library</button></div>`;
 }
 
 /* ================= CLASS HALL (v3.2) ================= */
@@ -805,7 +871,7 @@ function vClasses([sub, id, ch]) {
   if (sub === "d") return vDisc(id);
   if (sub === "q") return vDiscQuiz(id, ch);
   const act = Cl.active(), pc = Cl.pace(), tl = Cl.titles(), eq = (S.settings.classes || {}).equipped;
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><div class="hdr">Study dungeon</div><h1>Class hall</h1></div></header>`;
+  const head = `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>Study</h1></div>${gear("dungeon")}</header>`;
   const discRow = id => { const d = Cl.disc(id), c = Cl.currentChapter(id), L = Cl.chapters(id);
     return `<button class="panel discp" data-act="go" data-id="classes/d/${id}"><div class="row between"><b>${esc(d.name)}</b><span class="small muted">${Cl.clearedCount(id)}/${L.length}${Cl.bossPassed(id) ? " · cleared" : ""}</span></div>
       ${bar(Cl.clearedCount(id) / (L.length || 1), "var(--acc)")}
@@ -832,7 +898,7 @@ function vClasses([sub, id, ch]) {
     <button class="btn sm" data-act="discon" data-id="${d.id}" ${act.length >= Cl.CAP ? "disabled" : ""}>Start</button></div>`).join("") + (act.length >= Cl.CAP ? `<p class="tiny muted">${Cl.CAP} active is the cap. Drop one to start another.</p>` : ""), !act.length)}`;
 }
 function vDisc(id) {
-  const d = Cl.disc(id); if (!d) return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Class hall</button><h1>Not found</h1>`;
+  const d = Cl.disc(id); if (!d) return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><h1>Not found</h1>`;
   const L = Cl.chapters(id), c = Cl.currentChapter(id), on = Cl.active().includes(id), done = L.filter(x => Cl.chapterCleared(id, x.id));
   const hidden = c ? L.length - done.length - 1 : 0, custom = Cl.isCustom(id);
   const cur = c ? `<div class="panel hero"><div class="row between"><span class="hdr">Chapter ${L.indexOf(c) + 1} of ${L.length} · ~${c.hours} h</span><span class="hdr">${Cl.readPct(c.id)}% read</span></div>
@@ -843,10 +909,10 @@ function vDisc(id) {
         : Cl.readDone(id, c.id) ? `<button class="btn go" data-act="go" data-id="classes/q/${id}/${c.id}">Take the chapter quiz</button>`
         : `<button class="btn" data-act="chread" data-id="${c.id}">Reading done</button>`}</div>
       <p class="tiny muted">${custom ? "Your own chapter list: mark it done when the output exists." : Cl.readDone(id, c.id) ? "6 questions; 5 right clears the chapter. Misses become flashcards." : "Finance study blocks fill the reading bar. Tap Reading done if you studied it elsewhere; the quiz opens."}</p></div>`
-    : Cl.bossPassed(id) ? sysBox(`Discipline cleared. Title earned: <b>${esc(d.title)}</b>.`, "Equip it in the Class hall.")
+    : Cl.bossPassed(id) ? sysBox(`Discipline cleared. Title earned: <b>${esc(d.title)}</b>.`, "Equip it in Profile.")
     : `<div class="panel dgate open"><span class="k">Boss exam</span><h3 style="margin:2px 0 6px">${esc(d.title)}</h3><p class="small muted">10 questions across every chapter. 70% clears it and earns the title.</p>
       <div class="btns"><button class="btn go" data-act="go" data-id="classes/q/${id}/boss">Enter the boss exam</button></div></div>`;
-  return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Class hall</button>
+  return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button>
   <header class="top"><div><div class="hdr">Discipline · ${esc(d.title)}</div><h1>${esc(d.name)}</h1></div></header>
   <p class="small muted" style="margin:0 4px 8px">${esc(d.blurb)}</p>
   ${on ? cur : `<div class="panel"><p class="small">Not active.</p><div class="btns"><button class="btn go" data-act="discon" data-id="${id}" ${Cl.active().length >= Cl.CAP ? "disabled" : ""}>Start</button></div></div>`}
@@ -901,7 +967,7 @@ function vStudy() {
       <div class="small" style="margin-top:8px">${cur ? `Now: <b>${esc(cur.t)}</b> · ${St.progress(k, cur.id)}%` : "All done."}</div>
       <details style="margin-top:8px"><summary class="small">All topics</summary>${L.map((t, i) => { const pr = St.progress(k, t.id);
         return `<div class="item row between small ${t === cur ? "cur" : ""}"><span class="grow">${i + 1}. ${esc(t.t)}</span><span class="${pr >= 100 ? "" : "muted"}">${pr >= 100 ? ic("check", "inl") : pr + "%"}</span></div>`; }).join("")}</details>
-      ${k === "fin" && Cl.active().length ? `<p class="tiny muted">Finance blocks follow your active disciplines. The System picks the chapter.</p><div class="btns"><button class="btn sm" data-act="go" data-id="classes">Class hall</button></div>` : `<div class="btns"><button class="btn sm" data-act="topicedit" data-id="${k}">Edit list</button></div>
+      ${k === "fin" && Cl.active().length ? `<p class="tiny muted">Finance blocks follow your active disciplines. The System picks the chapter.</p><div class="btns"><button class="btn sm" data-act="go" data-id="classes">Study</button></div>` : `<div class="btns"><button class="btn sm" data-act="topicedit" data-id="${k}">Edit list</button></div>
       <p class="tiny muted">Blocks named like "${esc(SUBJECTS[k].match.split("|")[0])}…" use this list.</p>`}</div>`;
   }).join("");
   const logs = live("blockLog").filter(r => r.final).sort((a, b) => b.at - a.at).slice(0, 15);
@@ -921,7 +987,7 @@ const deckList = id => `<datalist id="${id}">${K.deckNames().map(d => `<option v
 const starterIds = lesson => STARTER[lesson].map((_, i) => "st-" + lesson.replace(/\W/g, "") + "-" + i);
 function gateClosedHtml(g, what) {
   const nx = g.next;
-  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
+  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Not open yet</div>
     <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
     <div class="small muted">${what} run inside study blocks.${nx ? " Next: " + esc(nx.b.title) + "." : ""}</div></div></div></div>`;
 }
@@ -931,7 +997,7 @@ function vCards([sub, a]) {
   if (sub === "deck") return vDeck(a);
   const back = `<button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button>`;
   const q = K.queue(), g = St.focusGate(), decks = K.deckNames(), done = K.reviewedToday();
-  const head = `${back}<header class="top"><div><div class="hdr">Study dungeon</div><h1>Flashcards</h1></div>${gear("dungeon")}</header>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Study</div><h1>Flashcards</h1></div>${gear("dungeon")}</header>`;
   const rev = `<div class="panel dgate ${g.open && q.length ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Due now</span><h3 style="margin:2px 0 4px">${q.length} card${q.length === 1 ? "" : "s"}</h3>
     <div class="small muted">${done.n ? `${done.n} reviewed today, ${Math.round(done.ok / done.n * 100)}% right` : "None reviewed today"}</div></div>
     ${g.open ? `<button class="btn ${q.length ? "go" : ""}" data-act="nav" data-id="cards/review" ${q.length ? "" : "disabled"}>Review</button>` : `<span class="small muted">${ic("lock", "inl")} ${g.next ? P.toHM(g.next.s) : "Closed"}</span>`}</div></div>`;
@@ -988,13 +1054,13 @@ function fcFace(c, showBack) {
     <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">${ja ? `<button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button>` : ""}${c.aud && (showBack || !ja) ? `<audio controls data-photo="${c.aud}"></audio>` : ""}</div>`;
 }
 function vReview() {
-  const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Study dungeon" : "Flashcards"}</button>`;
+  const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Dungeon" : "Flashcards"}</button>`;
   const g = St.focusGate();
   if (!g.open) return `${back}<h1>Flashcards</h1>${gateClosedHtml(g, "Reviews")}`;
   const q = K.queue(), done = K.reviewedToday();
   let c = rv && live("cards").find(x => x.id === rv.id);
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), opts: K.mode(c) === "mcq" ? K.options(c) : null, flip: false, pick: null } : null; }
-  const head = `${back}<header class="top"><div><div class="hdr">Study dungeon · Stage 2 · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
   if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="nav" data-id="focus">Back to the block</button><button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
   const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3` : c.s ? "Flip" : "Flip · new"}</div>`;
@@ -1052,7 +1118,7 @@ function vJlpt([sub, a]) {
   if (sub === "q") return vJlptQ(a);
   if (sub === "exam") return vExam(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><div class="hdr">Study dungeon · Stage 3</div><h1>JLPT ladder</h1></div>${gear("dungeon")}</header>`;
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Japanese</div><h1>JLPT ladder</h1></div>${gear("dungeon")}</header>`;
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
   if (wait) return head + ladder + wait;
@@ -1259,7 +1325,7 @@ function taskActHtml(id) {
 function addHtml() {
   return `<h3>Add</h3><div class="actlist">
     <button class="act" data-act="newtask">${ic("check")}<span>Task<small>The System finds it a slot</small></span></button>
-    <button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, quest block, anything fixed</small></span></button>
+    <button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, study or workout time</small></span></button>
     <button class="act" data-act="personform">${ic("user")}<span>Person<small>Add to your registry</small></span></button>
     <button class="act" data-act="go" data-id="people/log">${ic("users")}<span>Hangout<small>Log time with people</small></span></button>
     <button class="act trial" data-act="sheet" data-id="trial">${ic("flame")}<span>Trial<small>A social quest with a Battle Log</small></span></button>
@@ -1400,7 +1466,7 @@ const started = date => { const w = E.workoutOn(date); return !!(w && (w.entries
 // Shown instead of the log when no workout block is open.
 function lockedHtml(g) {
   const nx = g.next;
-  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Gate closed</div>
+  return `<div class="panel locked-gate"><div class="row" style="gap:10px">${ic("lock", "big-lock")}<div><div class="hdr">System · Not open yet</div>
     <b>${nx ? `Opens ${nx.date === E.today() ? "today" : nx.date === E.addDays(E.today(), 1) ? "tomorrow" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No workout block this week"}</b>
     <div class="small muted">${nx ? esc(nx.b.title) + " block. " : ""}Logging opens ${S.settings.plan.openPad ?? 10} min before a workout block and closes ${S.settings.plan.openPad ?? 10} min after. Once you log a set it stays open for the day.</div></div></div></div>`;
 }
@@ -1415,8 +1481,8 @@ function vTrain([view, a, b]) {
   return vTrainHome();
 }
 
-function vTrainHome() {
-  const t = E.today(), plan = E.planFor(t), w = E.workoutOn(t), gate = P.trainGate(started(t));
+function trainSession(t = E.today()) {
+  const plan = E.planFor(t), w = E.workoutOn(t), gate = P.trainGate(started(t));
   const postShift = w ? !!w.postShift : !!plan.postShift;
   const row = (ex, lab, entry, extraHtml) => {
     const tg = E.nextTarget(ex, t), st = E.stallInfo(ex.id);
@@ -1441,9 +1507,13 @@ function vTrainHome() {
     <div style="margin-top:6px">${slots}</div>
     ${extra.map(e => { const ex = E.exById(e.exercise); return `<button class="slot" data-act="go" data-id="train/log/${ex.id}"><span class="done-dot on"></span><span class="grow"><span class="lab">Extra</span><br><b>${esc(ex.name)}</b><br><span class="small muted">Today: ${esc(E.fmtSets(ex, e.sets))}</span></span><span class="chev">${ic("right")}</span></button>`; }).join("")}
     ${gate.open ? `<div class="btns"><button class="btn" data-act="go" data-id="train/pick/extra">+ Other exercise</button>${plan.run ? `<button class="btn" data-act="go" data-id="train/runs">Log a run</button>` : ""}</div>` : ""}`;
+  return session;
+}
+function vTrainHome() {
+  const t = E.today(), plan = E.planFor(t), gate = P.trainGate(started(t)), session = trainSession(t);
   const hasData = live("workouts").some(x => (x.entries || []).some(e => e.sets.length)) || live("runs").length > 0;
   // Gate closed: one card saying when, and today's session folded away instead of greyed-out rows.
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button><h1>Body dungeon</h1></div>${gear("body")}</header>
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Workout</h1></div>${gear("body")}</header>
   ${gate.open ? `<div class="hero">${session}</div>` : lockedHtml(gate) + fold("train-peek", `<b class="grow">Peek: ${esc(plan.name)}</b><span class="small muted">${plan.slots.length + plan.extra.length} exercises</span>`, session)}
   ${drawer ? sessionDrawer() : ""}
   <div class="quiet-links"><button data-act="go" data-id="train/runs">${ic("right", "inl")} Runs · longest ${Math.max(0, ...live("runs").map(r => r.km))}/${RUN_GOAL_KM} km</button><button data-act="go" data-id="train/pick/browse">${ic("right", "inl")} Exercise library</button></div>
@@ -1701,7 +1771,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.0 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v4.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -1846,7 +1916,7 @@ document.addEventListener("click", async ev => {
       put("money", { ...(cur || {}), date: t, bank, debt });
       const ref = "money:" + E.weekStart(t);
       const gains = live("xpEvents").some(e => e.ref === ref) ? [] : [E.gainXP("money", ref, "Money report")];
-      save(); announce(gains); if (!gains.length) toast("Report updated"); return render();
+      moneyQuick = false; save(); announce(gains); if (!gains.length) toast("Report updated"); return render();
     }
     case "delmoney": if (confirm("Delete this money report?")) { remove("money", id); save(); render(); } return;
     case "billform": billForm = !billForm; return render();
@@ -1968,6 +2038,12 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "skipstage": { const n = +($("#skipStage") || {}).value; if (!confirm(`Set the System to stage ${n}? Use this for testing.`)) return; Sy.skipTo(n); save(); toast("Stage " + n); return render(); }
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
     case "dismiss": dismiss(id); return render();
+    case "moneyquick": moneyQuick = !moneyQuick; return render();
+    case "questsall": showAllQuests = !showAllQuests; return render();
+    case "enter": { const g = id === "study" ? St.focusGate() : null; enter(id === "study" ? St.occKey(g.o) : "body:" + E.today()); entering = true; return render(); }
+    case "leave": { if (id === "study") { const g = St.focusGate(); if (g.open) enter(St.occKey(g.o), false); } else enter("body:" + E.today(), false); entering = true; return render(); }
+    case "toreport": { const r = $("#report"); if (r) r.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    case "firstblock": blockNew = { title: "Study", kind: "study", start: "20:00", end: "21:00", days: [1, 2, 3, 4, 5] }; blockForm = "new"; sheet = "block"; return render();
 
     // study blocks
     case "pomo": {
@@ -2290,6 +2366,8 @@ function renameStyle() {
   await Cl.loadIndex();
   renameStyle();
   if (Soc.migrateTraits()) save();
+  // First 60 seconds: one quest is already done, so the bar has moved before anything else happens.
+  if (!live("xpEvents").some(e => e.ref === "call")) { put("xpEvents", { ts: Date.now(), type: "call", xp: CALL_XP, ref: "call", label: "Answer the call" }); save(); }
   briefOpen = briefDue();
   entering = true; render();
   fullOnTap();

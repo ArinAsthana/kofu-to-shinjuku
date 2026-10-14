@@ -93,14 +93,20 @@ export const openPenalties = () => live("penalties").filter(p => { const k = pen
 // Checks the last week of quest blocks. A block that ended more than `grace` minutes ago without being done gets
 // a penalty: XP off the wallet and a make-up task the planner places. If the work turns up later (a sync from
 // another phone), the penalty is withdrawn. Ids are fixed per block and date, so two phones never double it.
+// Re-entry (v4): a day inside a run of 2+ empty days (no quest done) earns no penalty, so coming back never starts with a pile.
+const doneOn = d => live("habitLog").some(h => h.date === d) || live("tasks").some(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === d);
+const away = (d, t) => !doneOn(d) && (!doneOn(E.addDays(d, -1)) || (E.addDays(d, 1) < t && !doneOn(E.addDays(d, 1))));
 export function assess() {
   const s = st(), now = Date.now(), from = s.from || now, grace = (s.grace ?? 60) * 60000, t = E.today(), fresh = [];
+  // A make-up quest left past its deadline lapses quietly: the task goes, the record stays, nothing stacks.
+  for (const p of openPenalties()) { const k = penTask(p); if (k && k.due && k.due < t) { remove("tasks", k.id); put("penalties", { ...p, lapsed: true }); } }
   for (let i = 7; i >= 0; i--) {
     const d = E.addDays(t, -i);
     for (const o of questOcc(d)) {
       const end = absMs(d, o.e);
       if (end <= from || now < end + grace) continue;
       const id = "pen-" + d + "-" + o.b.id, ex = S.penalties.find(r => r.id === id), done = completed(o);
+      if (!ex && !done && away(d, t)) continue;
       if (!ex && !done && openPenalties().length) {
         // Cap: one open penalty quest at a time. Further misses are recorded, waived (no XP, no make-up task).
         put("penalties", { id, date: d, block: o.b.id, title: o.b.title, s: o.s, xp: 0, task: null, waived: true });
