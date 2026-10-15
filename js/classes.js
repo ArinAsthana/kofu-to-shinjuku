@@ -152,6 +152,7 @@ export function titles() {
   for (const d of INDEX) if (bossPassed(d.id)) out.push({ id: "disc:" + d.id, name: d.title, kind: "disc", cost: COST.disc, from: d.name });
   for (const l of [...new Set(J.passedLevels())]) out.push({ id: "jlpt:" + l, name: J.TITLES[l], kind: "jlpt", cost: COST.jlpt, from: "JLPT " + l });
   for (const c of CLASSES) if (classInfo(c.id).earned) out.push({ id: "class:" + c.id, name: c.name, kind: "class", cost: COST.class, from: "Class" });
+  if (S.settings.path && S.settings.path.vanguard) out.push({ id: "path:vanguard", name: "Vanguard", kind: "path", cost: COST.disc, from: "7 days ahead on the Path" });
   for (const s of SPECS) if (specInfo(s.id).earned) out.push({ id: "spec:" + s.id, name: s.name, kind: "spec", cost: COST.spec, from: "Specialisation" });
   return out.map(t => ({ ...t, owned: live("titles").some(r => r.id === t.id) }));
 }

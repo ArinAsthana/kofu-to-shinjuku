@@ -41,6 +41,8 @@ function announce(gains) {
 /* ---------- routing ---------- */
 const route = () => (location.hash.slice(1) || "home").split("/").map(decodeURIComponent);
 const go = h => { location.hash = h; };
+// Navigate, and still redraw when already on that screen (no hashchange fires then).
+const goR = h => { if (location.hash.slice(1) === h) { entering = true; render(); } else go(h); };
 let afterNav = null; // runs once after the next route change (e.g. open a form on the new screen)
 // Swipes: the day header on Plan changes the day; anywhere else changes tab. Alerts close with their red dot.
 // Sliders, fields and anything that scrolls sideways keep their own swipe.
@@ -91,7 +93,7 @@ function render() {
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { path: vPath, home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { path: r => r[0] === "gate" ? vGate(r[1]) : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -103,7 +105,7 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.awake ? awakeHtml() : milestoneHtml(cer.ms)) : "");
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.awake ? awakeHtml() : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
@@ -293,20 +295,61 @@ function vPath() {
   const intro = Pa.started() ? `<div class="row between small" style="margin:4px 2px 10px"><span class="muted">One item per stream a day. Finish early and the timeline moves up.</span></div>`
     : sysBox(`The System awakens Mon 19 Oct, 04:00.`, `${n} day${n === 1 ? "" : "s"} left. Until then nothing counts against you. Anything you finish now puts you ahead: +50% XP.`);
   const rows = Pa.STREAMS.filter(s => Pa.length(s.id)).map(s => {
-    const k = Pa.openTask(s.id), st = Pa.standing(s.id), p = Pa.pos(s.id), it = k ? { t: pathText(k) } : Pa.item(s.id, p);
+    const k = Pa.openTask(s.id), st = Pa.standing(s.id), p = Pa.pos(s.id), gt = Pa.gate(s.id), it = gt ? null : k ? { t: pathText(k) } : Pa.item(s.id, p);
     const badge = st.behind ? `<span class="tag t-pen">${st.behind} behind</span>` : st.ahead ? `<span class="tag t-ahead">+${st.ahead} ahead</span>` : "";
     const A = Pa.arc(s.id);
     const list = A.items.map(x => `<div class="arc-i ${x.done ? "done" : x.cur ? "cur" : ""}">${x.done ? ic("check", "inl") : x.cur ? px("sword") : `<i class="arc-dot"></i>`}<span>${esc(x.t)}</span></div>`).join("");
     return `<div class="panel pstream"><div class="row between"><b>${esc(s.label)}</b><span class="row" style="gap:6px">${badge}<span class="small muted">${P.dur(s.mins)}</span></span></div>
-      <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : "Stream complete."}</div>
-      ${fold("arc-" + s.id, `<span class="grow tiny mono">Arc ${A.n} · ${A.done}/${A.size}</span>`, list, false, "arcf")}
+      <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : gt ? "Gate Test before Arc " + Pa.arc(s.id).n + "." : "Stream complete."}</div>
+      ${gt ? "" : fold("arc-" + s.id, `<span class="grow tiny mono">Arc ${A.n} · ${A.done}/${A.size}</span>`, list, false, "arcf")}
       ${s.id === "mental" && z ? `<div class="tiny muted" style="margin-bottom:6px">Zetamac best ${z.best} · average ${z.avg}</div>` : ""}
-      ${k ? `<div class="btns"><button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button></div>` : it ? `<div class="btns"><button class="btn sm" data-act="pathahead" data-id="${s.id}">Go ahead</button></div>` : ""}</div>`;
+      ${gt ? gateBox(gt) : k ? `<div class="btns"><button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button></div>` : it ? `<div class="btns"><button class="btn sm" data-act="pathahead" data-id="${s.id}">Go ahead</button></div>` : ""}</div>`;
   }).join("");
-  const due = K.dueCount();
-  return `${head}${intro}${rows}
+  const due = K.dueCount(), c = Pa.cfg(), tdy = E.today();
+  const tokens = Pa.started() && (c.tokens || Pa.isRest(tdy)) ? `<div class="panel row between"><span class="small">${px("star")} Rest tokens <b class="mono">${c.tokens}/${Pa.MAX_TOKENS}</b>${Pa.isRest(tdy) ? " · today is a rest day" : ""}</span>
+    ${c.tokens && !Pa.isRest(tdy) && E.parse(tdy).getDay() ? `<button class="btn sm" data-act="pathrest">Rest today</button>` : ""}</div>` : "";
+  return `${head}${intro}${tokens}${rows}
     <button class="quiet-row" data-act="go" data-id="cards"><span class="grow">Flashcard decks${due ? ` · ${due} due` : ""}</span><span class="chev">${ic("right")}</span></button>`;
 }
+function gateBox(g) {
+  const wait = g.retakeAt > Date.now();
+  return `<div class="gatebox"><div class="row between"><b class="small">${px("skull")} Gate Test</b><span class="tiny muted">${Pa.GATE_Q} questions · ${Math.round(Pa.GATE_PASS * 100)}% · ${Pa.GATE_Q} min</span></div>
+    ${g.last ? `<div class="tiny muted">Last try ${g.last.score}/${g.last.n}. Misses are in your flashcards.</div>` : `<div class="tiny muted">The next Arc stays sealed until it's passed.</div>`}
+    <div class="btns">${wait ? `<span class="small muted">${ic("lock", "inl")} Retake opens ${new Date(g.retakeAt).toDateString() === new Date().toDateString() ? "" : "tomorrow "}${P.toHM(new Date(g.retakeAt).getHours() * 60 + new Date(g.retakeAt).getMinutes())}</span>` : `<button class="btn sm go" data-act="go" data-id="path/gate/${g.stream}">Enter the Gate</button>`}</div></div>`;
+}
+let gq = null; // the Gate Test in progress: {s, g, qs, ans, ends, res}
+function vGate(s) {
+  const st = Pa.stream(s), back = `<button class="back" data-act="nav" data-id="path">${ic("left")} Path</button>`;
+  const g = Pa.gate(s);
+  if (!st || (!g && !(gq && gq.s === s && gq.res))) return `${back}<h1>Gate</h1><p class="empty">No Gate open here.</p>`;
+  if (g && g.retakeAt > Date.now() && !(gq && gq.s === s)) return `${back}<h1>Gate</h1><p class="empty">The retake opens in ${Math.ceil((g.retakeAt - Date.now()) / 3600e3)} h.</p>`;
+  if (!gq || gq.s !== s) {
+    gq = { s, g: g.gate, qs: null, ans: [], res: null, ends: 0 };
+    Pa.loadBank(s, g.gate).then(b => { if (!gq || gq.s !== s) return; gq.qs = Pa.draw(b); gq.title = b.title; gq.ends = Date.now() + gq.qs.length * 60000; render(); })
+      .catch(() => { if (gq) { gq.err = true; render(); } });
+  }
+  const head = `${back}<header class="top"><div><div class="hdr">${esc(st.label)} · Gate ${gq.g}</div><h1>Gate Test</h1></div>${gq.qs && !gq.res ? `<span class="hdr mono" id="gateT">${mmss(Math.max(0, gq.ends - Date.now()))}</span>` : ""}</header>`;
+  if (gq.err) return head + `<p class="empty">Couldn't load the questions. Check the connection and try again.</p>`;
+  if (!gq.qs) return head + `<p class="muted">Loading…</p>`;
+  const r = gq.res;
+  const qHtml = (q, i) => { const a = gq.ans[i], ok = r && a === q.a;
+    return `<div class="panel dq ${r ? (ok ? "right" : "wrong") : ""}"><div class="k">Q${i + 1}</div><p style="white-space:pre-wrap">${esc(q.q)}</p>
+      <div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="gqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
+      ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(q.opts[q.a])}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
+  return head + (r ? sysBox(r.passed ? `Gate cleared: ${r.ok}/${r.n}. Arc ${Pa.arc(s).n} is open.` : `${r.ok}/${r.n}. The Gate holds.`, r.passed ? (r.xp ? `+${r.xp} XP` : "") : `Your misses are now flashcards in ${esc(st.label)} mistakes. The retake opens in 24 hours.`,
+      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to the Path</button></div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
+    + gq.qs.map(qHtml).join("")
+    + (r ? "" : `<div class="btns"><button class="btn go block" data-act="gqsubmit">Submit</button></div>`);
+}
+function gateSubmit() {
+  if (!gq || !gq.qs || gq.res) return;
+  gq.res = Pa.gradeGate(gq.s, gq.g, gq.qs, gq.ans, K.newCard); save();
+  if (gq.res.passed) toast(`Gate cleared · +${gq.res.xp} XP`, true);
+  window.scrollTo(0, 0); render();
+}
+const riskHtml = r => `<div class="milestone" role="dialog" aria-label="${esc(r.m.name)} at risk"><div class="ms-in">
+  <div class="hdr">System · Warning</div>${px("skull", "ms-px")}<h2 class="ms-t">${esc(r.m.name)} at risk</h2><p class="muted">At this pace ${esc(Pa.stream(r.m.stream).label)} reaches the exam material ${r.late} day${r.late === 1 ? "" : "s"} after ${esc(E.fmtDate(r.m.date))}. Go ahead to close the gap.</p>
+  <button class="btn primary block" data-act="riskgo" data-id="${r.m.id}">Go ahead now</button><button class="btn block" style="margin-top:8px" data-act="riskok" data-id="${r.m.id}">Later</button></div></div>`;
 const awakeHtml = () => `<div class="milestone" role="dialog" aria-label="The Path begins"><div class="ms-in">
   <div class="hdr">System · Awakening</div>${px("flag", "ms-px")}<h2 class="ms-t">The Path begins</h2><p class="muted">Seven streams, one item each a day. Finish early and the timeline moves up with you, for +50% XP. Leave one and it waits for tomorrow. From today, skipping has a cost again.</p>
   <button class="btn primary block" data-act="awake">Open the Path</button></div></div>`;
@@ -336,6 +379,7 @@ function questsPanel(q) {
   const items = [...q.trials.filter(e => !e.done).map(e => [e.k.title, tag("trial", "Trial")]),
     ...q.events.filter(e => !e.done).map(e => [e.k.title, e.k.penalty ? tag("pen", "Penalty") : tag("today", "Today")]),
     ...q.habits.filter(x => !x.on).map(x => [x.h.name, tag("daily", "Daily")])];
+  if (Pa.started()) items.unshift(...Pa.gates().filter(g => g.retakeAt <= Date.now()).map(g => [`Gate Test · ${Pa.stream(g.stream).label}`, tag("trial", "Gate")]));
   const top = items.slice(0, 3);
   return `<div class="panel quests"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
     ${top.length ? `<ul class="top3">${top.map(([x, tg]) => `<li><span class="grow">${esc(x)}</span>${tg}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}
@@ -442,6 +486,7 @@ function ceremony() {
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
   const m = Sy.nextMilestone(); if (m) return { ms: m };
   if (Pa.ready() && Pa.started() && !S.settings.pathAwoke) return { awake: true };
+  if (route()[0] !== "path") { const r = Pa.risk(); if (r) return { risk: r }; }
   if (Al.needsAsk()) return { alarms: true };
   if (Us.needsAsk()) return { usage: true };
   if (Sy.has(2) && E.parse(E.today()).getDay() === 0 && E.moneyDue() && lsGet(MONEYWIN_KEY) !== E.today()) return { money: true };
@@ -1956,7 +2001,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.0.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2254,16 +2299,24 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "pathfin": {
       const [tid, res] = id.split("|"), k = live("tasks").find(x => x.id === tid); if (!k) return;
       const z = num(($("#zetIn") || {}).value); sheet = null;
-      const g = Pa.finish(k, res, z); save();
+      const g = Pa.finish(k, res, z), loot = k.ahead && res === "done" ? Sy.rollLoot(E.today(), k.id) : null, up = Pa.checkAhead(); save();
+      if (up) setTimeout(() => toast(up.vanguard ? "Title unlocked: Vanguard. 7 days ahead." : `Rest token earned · ${Pa.cfg().tokens}/${Pa.MAX_TOKENS}`, true), 2200);
+      if (loot && g) g.label += " · " + loot.label, g.xp += loot.xp;
       if (!k.path.sun && Pa.closesArc(k.path.idx)) { const A = Pa.arc(k.path.stream); toast(`${g ? "+" + g.xp + " XP · " : ""}${Pa.stream(k.path.stream).label}: Arc ${A.n - 1} cleared. Arc ${A.n} open.`, true); }
       else if (g) announce([g]); else toast("Done");
       return render();
     }
     case "pathahead": {
       const k = Pa.goAhead(id); if (!k) return toast("Finish the open item first");
-      save(); toast(`Dungeon open: ${Pa.stream(id).label}, ${P.dur(k.mins)}`); entering = true; return go("home");
+      save(); toast(`Dungeon open: ${Pa.stream(id).label}, ${P.dur(k.mins)}`); return goR("home");
     }
-    case "awake": S.settings.pathAwoke = E.today(); touchSettings(); ceremonyDone = true; save(); entering = true; return go("path");
+    case "gqpick": { if (!gq || gq.res) return; const [i, j] = id.split(":").map(Number); gq.ans[i] = j; return render(); }
+    case "gqsubmit": { if (!gq) return; const miss = gq.qs.filter((q, i) => gq.ans[i] == null).length; if (miss && !confirm(`${miss} unanswered. Submit anyway?`)) return; return gateSubmit(); }
+    case "gatedone": gq = null; return goR("path");
+    case "pathrest": { if (!confirm("Use a rest token on today? Nothing new is issued and nothing slips.")) return; if (!Pa.rest()) return toast("No token to use"); save(); toast("Rest day. The Path waits."); return render(); }
+    case "riskok": Pa.seeRisk(id); ceremonyDone = true; save(); return render();
+    case "riskgo": { const m = Pa.FIXED.find(x => x.id === id); Pa.seeRisk(id); ceremonyDone = true; save(); const k = Pa.goAhead(m.stream); if (k) { save(); toast(`Dungeon open: ${Pa.stream(m.stream).label}`); return goR("home"); } return goR("path"); }
+    case "awake": S.settings.pathAwoke = E.today(); touchSettings(); ceremonyDone = true; save(); return goR("path");
     case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
     case "skipstage": { const n = +($("#skipStage") || {}).value; if (!confirm(`Set the System to stage ${n}? Use this for testing.`)) return; Sy.skipTo(n); save(); toast("Stage " + n); return render(); }
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
@@ -2612,6 +2665,7 @@ function renameStyle() {
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
   setTimeout(() => { runAssess(); render(); }, 6000);
   setInterval(tickPomo, 1000);
+  setInterval(() => { if (!gq || !gq.qs || gq.res || route()[0] !== "path") return; const el = $("#gateT"), left = gq.ends - Date.now(); if (left <= 0) return gateSubmit(); if (el) el.textContent = mmss(left); }, 1000);
   scheduleWindDown(); onSave(scheduleWindDown);
   const usageTick = async () => { if (await Us.refresh()) { save(); render(); } };
   usageTick(); setInterval(usageTick, 5 * 60000);

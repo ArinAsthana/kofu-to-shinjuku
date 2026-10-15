@@ -1,0 +1,367 @@
+{
+ "stream": "japanese",
+ "gate": 1,
+ "title": "Genki II L13–15 and interview basics",
+ "questions": [
+  {
+   "q": "このアプリを使えば、どこでも映画が（　）。",
+   "opts": [
+    "見えられます",
+    "見れられます",
+    "見られます",
+    "見ります"
+   ],
+   "a": 2,
+   "ex": "Potential of ru-verbs: drop る, add られる → 見られる. The object is usually marked with が.",
+   "item": 1
+  },
+  {
+   "q": "この部屋は駅から近い（　）、家賃も安いし、とても気に入っています。",
+   "opts": [
+    "し",
+    "のに",
+    "けど",
+    "ても"
+   ],
+   "a": 0,
+   "ex": "〜し lists several reasons together (often with も): 'it's close, and the rent is cheap too...'.",
+   "item": 2
+  },
+  {
+   "q": "（　）かばんですね。どこで買ったんですか。 (It looks nice.)",
+   "opts": [
+    "いいそうな",
+    "よさそうの",
+    "いさそうな",
+    "よさそうな"
+   ],
+   "a": 3,
+   "ex": "〜そう (looks like): いい becomes よさそう. Before a noun it works like a な-adjective: よさそうなかばん.",
+   "item": 3
+  },
+  {
+   "q": "すみません、このくつをちょっと（　）もいいですか。",
+   "opts": [
+    "はいてみる",
+    "はいてみて",
+    "はきてみて",
+    "はいてみった"
+   ],
+   "a": 1,
+   "ex": "〜てみる = try doing. Combined with 〜てもいいですか: はいてみてもいいですか (may I try them on?).",
+   "item": 4
+  },
+  {
+   "q": "A：京都に行きたいんですが、どこがいいですか。\nB：京都（　）、金閣寺がおすすめですよ。",
+   "opts": [
+    "から",
+    "のに",
+    "なら",
+    "ても"
+   ],
+   "a": 2,
+   "ex": "Noun + なら picks up the topic the other person raised: 'If it's Kyoto (you're asking about), ...'.",
+   "item": 5
+  },
+  {
+   "q": "私は一週間（　）三回ジムに行きます。",
+   "opts": [
+    "に",
+    "で",
+    "を",
+    "が"
+   ],
+   "a": 0,
+   "ex": "Frequency: period + に + number of times (一週間に三回 = three times a week).",
+   "item": 5
+  },
+  {
+   "q": "「空港」の読み方はどれですか。",
+   "opts": [
+    "そらこう",
+    "くうこう",
+    "くうごう",
+    "こうくう"
+   ],
+   "a": 1,
+   "ex": "空港 = くうこう (airport). 空 is read くう here, not そら.",
+   "item": 1
+  },
+  {
+   "q": "明日、会社の（　）があるので、スーツを着て行きます。",
+   "opts": [
+    "給料",
+    "着物",
+    "歌手",
+    "面接"
+   ],
+   "a": 3,
+   "ex": "面接 = (job) interview. You wear a suit to an interview.",
+   "item": 3
+  },
+  {
+   "q": "弟は新しいゲームを（　）。",
+   "opts": [
+    "ほしがっています",
+    "ほしいです",
+    "ほしいがっています",
+    "ほしかっています"
+   ],
+   "a": 0,
+   "ex": "ほしい describes the speaker's own wish. For a third person use ほしがっている (with を).",
+   "item": 6
+  },
+  {
+   "q": "空が暗くなってきたから、午後は雨が（　）かもしれません。",
+   "opts": [
+    "降って",
+    "降りの",
+    "降る",
+    "降るだ"
+   ],
+   "a": 2,
+   "ex": "〜かもしれない attaches to the plain form: 降るかもしれません (it might rain).",
+   "item": 7
+  },
+  {
+   "q": "誕生日に、友だちが私にマフラーを（　）。",
+   "opts": [
+    "あげました",
+    "くれました",
+    "もらいました",
+    "やりました"
+   ],
+   "a": 1,
+   "ex": "When someone gives something to me (the speaker), use くれる. あげる is for giving outward.",
+   "item": 8
+  },
+  {
+   "q": "A：最近、よく眠れないんです。\nB：寝る前にスマホを見るのを（　）どうですか。",
+   "opts": [
+    "やめて",
+    "やめると",
+    "やめるなら",
+    "やめたら"
+   ],
+   "a": 3,
+   "ex": "〜たらどうですか gives advice: 'Why don't you stop ...?' Use the past (たら) form.",
+   "item": 9
+  },
+  {
+   "q": "財布の中に百円（　）ありません。",
+   "opts": [
+    "も",
+    "だけ",
+    "しか",
+    "が"
+   ],
+   "a": 2,
+   "ex": "Number + しか + negative = only (less than expected). だけ is not used with a negative this way.",
+   "item": 10
+  },
+  {
+   "q": "昨日は宿題が多くて、五時間（　）勉強しました。",
+   "opts": [
+    "も",
+    "しか",
+    "で",
+    "に"
+   ],
+   "a": 0,
+   "ex": "Number + も = as many/long as (more than expected). しか would need a negative verb.",
+   "item": 10
+  },
+  {
+   "q": "「親切」の読み方はどれですか。",
+   "opts": [
+    "おやせつ",
+    "しんきり",
+    "しんさい",
+    "しんせつ"
+   ],
+   "a": 3,
+   "ex": "親切 = しんせつ (kind). 親 is read しん and 切 is read せつ here.",
+   "item": 6
+  },
+  {
+   "q": "姉は今、アメリカの大学に（　）しています。",
+   "opts": [
+    "留守",
+    "留学",
+    "研究",
+    "卒業"
+   ],
+   "a": 1,
+   "ex": "留学する = to study abroad. It takes に for the destination; 研究 and 卒業 do not fit with に here.",
+   "item": 7
+  },
+  {
+   "q": "疲れたね。ちょっと（　）か。 (Shall we take a break?)",
+   "opts": [
+    "休もう",
+    "休みよう",
+    "休むよう",
+    "休めよう"
+   ],
+   "a": 0,
+   "ex": "Volitional of u-verbs: change the final u to o + う → 休む → 休もう. 休もうか = shall we rest?",
+   "item": 11
+  },
+  {
+   "q": "来年は、日本の会社で（　）と思っています。",
+   "opts": [
+    "働きよう",
+    "働くよう",
+    "働こう",
+    "働かよう"
+   ],
+   "a": 2,
+   "ex": "Volitional + と思っています expresses a plan you have been holding: 働く → 働こう.",
+   "item": 12
+  },
+  {
+   "q": "パーティーの前に、飲み物を買って（　）ましょう。 (in preparation)",
+   "opts": [
+    "あり",
+    "い",
+    "くれ",
+    "おき"
+   ],
+   "a": 3,
+   "ex": "〜ておく = do something in advance/in preparation: 買っておきましょう.",
+   "item": 13
+  },
+  {
+   "q": "あそこで本を（　）人は、私の兄です。",
+   "opts": [
+    "読んでいるの",
+    "読んでいる",
+    "読んでいるな",
+    "を読んでいる"
+   ],
+   "a": 1,
+   "ex": "A clause can directly modify a noun with its plain form: 本を読んでいる人 (the person reading a book). No の or な in between.",
+   "item": 14
+  },
+  {
+   "q": "これは母（　）作ったケーキです。",
+   "opts": [
+    "を",
+    "で",
+    "が",
+    "へ"
+   ],
+   "a": 2,
+   "ex": "Inside a noun-modifying clause, the subject is marked with が (or の): 母が作ったケーキ.",
+   "item": 15
+  },
+  {
+   "q": "「意味」の読み方はどれですか。",
+   "opts": [
+    "いみ",
+    "いあじ",
+    "おもみ",
+    "いび"
+   ],
+   "a": 0,
+   "ex": "意味 = いみ (meaning). 味 is read み here, not あじ.",
+   "item": 11
+  },
+  {
+   "q": "週末のために、レストランを（　）しておきました。",
+   "opts": [
+    "予定",
+    "約束",
+    "旅行",
+    "予約"
+   ],
+   "a": 3,
+   "ex": "予約する = to make a reservation. 予定 is a plan; 約束 is a promise.",
+   "item": 12
+  },
+  {
+   "q": "（面接の最初に）はじめまして。〇〇大学の田中（　）。本日はよろしくお願いいたします。",
+   "opts": [
+    "とおっしゃいます",
+    "と申します",
+    "と申し上げます",
+    "だと思います"
+   ],
+   "a": 1,
+   "ex": "Humble self-introduction: 〜と申します. おっしゃる is honorific (for others), never for yourself.",
+   "item": 2
+  },
+  {
+   "q": "（自己紹介の最後に）本日は（　）。",
+   "opts": [
+    "よろしくお願いいたします",
+    "よろしくお願いしてください",
+    "よろしくね",
+    "よろしくお願いされます"
+   ],
+   "a": 0,
+   "ex": "Close with the humble よろしくお願いいたします. よろしくね is too casual for an interview.",
+   "item": 4
+  },
+  {
+   "q": "私が学生時代に力を（　）ことは、留学生向けのイベントの運営です。",
+   "opts": [
+    "入った",
+    "出した",
+    "入れた",
+    "取った"
+   ],
+   "a": 2,
+   "ex": "ガクチカ fixed phrase: 学生時代に力を入れたこと (what I put effort into as a student). 力を入れる is transitive.",
+   "item": 6
+  },
+  {
+   "q": "その経験から、チームで協力することの大切さを（　）。",
+   "opts": [
+    "学ばれました",
+    "学びました",
+    "教えました",
+    "学びましたよね"
+   ],
+   "a": 1,
+   "ex": "Talk about your own learning plainly in です・ます: 学びました. 学ばれる is honorific (never for yourself); よね sounds casual.",
+   "item": 8
+  },
+  {
+   "q": "（面接で話すとき）私が（　）を志望する理由は、SAP導入の実績が豊富だからです。",
+   "opts": [
+    "貴社",
+    "弊社",
+    "当社",
+    "御社"
+   ],
+   "a": 3,
+   "ex": "In spoken interviews, call the company 御社. 貴社 is for written documents; 弊社/当社 mean your own company.",
+   "item": 10
+  },
+  {
+   "q": "金融とITの両方の知識を（　）、御社で働きたいと考えております。",
+   "opts": [
+    "生かして",
+    "生きて",
+    "生かすで",
+    "生かれて"
+   ],
+   "a": 0,
+   "ex": "知識を生かす = put knowledge to use (transitive). Te-form 生かして links to the next clause.",
+   "item": 12
+  },
+  {
+   "q": "御社のコンサルタントとして、お客様の課題を（　）お手伝いをしたいと思っております。",
+   "opts": [
+    "解決するの",
+    "解決して",
+    "解決する",
+    "解決するな"
+   ],
+   "a": 2,
+   "ex": "Relative clause: plain form directly before the noun → 課題を解決するお手伝い (help that solves clients' problems).",
+   "item": 14
+  }
+ ]
+}

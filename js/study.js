@@ -6,7 +6,7 @@ import { SUBJECTS, STUDY, HABITS } from "./data.js";
 import * as E from "./engine.js";
 import * as P from "./planner.js";
 import * as Cl from "./classes.js";
-import { START_MS } from "./path.js";
+import { START_MS, isRest } from "./path.js";
 
 const st = () => S.settings.study || STUDY;
 const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
@@ -104,6 +104,7 @@ export function assess() {
   for (const p of openPenalties()) { const k = penTask(p); if (k && k.due && k.due < t) { remove("tasks", k.id); put("penalties", { ...p, lapsed: true }); } }
   for (let i = 7; i >= 0; i--) {
     const d = E.addDays(t, -i);
+    if (isRest(d)) continue; // a rest token covers the whole day
     for (const o of questOcc(d)) {
       const end = absMs(d, o.e);
       if (end <= from || now < end + grace) continue;
