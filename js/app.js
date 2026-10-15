@@ -21,6 +21,7 @@ import * as Up from "./update.js";
 import * as Lx from "./lexicon.js";
 import * as N2 from "./n2.js";
 import * as Dy from "./day.js";
+import * as Dl from "./deadlines.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -264,7 +265,7 @@ function vHome() {
     ${gear("home")}</div></header>
   ${dungeon ? "" : actLine(a1)}
   ${homeHero(hs, t)}
-  ${dungeon ? "" : dayCard() + homeTiles()}
+  ${dungeon ? "" : dayCard() + homeTiles() + dlHome()}
   ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
   ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><span class="lvrow"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></span>
     <span class="lvbar" role="progressbar" aria-label="Level ${E.level()} progress" aria-valuenow="${Math.round(E.levelProgress() * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${E.levelProgress() * 100}%"></i></span><span class="lvnext">${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to LV ${E.level() + 1}</span></button>`}
@@ -640,7 +641,7 @@ function sheetHtml(k) {
   const closeBtn = `<button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button>`;
   // Edit sheets: forms and actions for the tapped item.
   const edit = { task: () => arg ? taskActHtml(arg) : taskFormHtml(), block: () => blockFormHtml(blockForm && blockForm !== "new" ? live("blocks").find(b => b.id === blockForm) : blockNew),
-    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg), moment: momentHtml, rate: () => rateHtml(arg), offer: offerHtml, pathdone: () => pathDoneHtml(arg) }[kind];
+    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg), moment: momentHtml, rate: () => rateHtml(arg), offer: offerHtml, pathdone: () => pathDoneHtml(arg), deadline: () => arg ? dlSheetHtml(arg) : dlFormHtml() }[kind];
   return edit ? `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>` : "";
 }
 // Every gear opens the one Settings page, at the section for the screen it sits on.
@@ -1173,7 +1174,7 @@ const span = (s, e) => `${P.toHM(s)}–${P.toHM(e)}`;
 const dayLabel = d => d === E.today() ? "Today" : d === E.addDays(E.today(), 1) ? "Tomorrow" : E.fmtDate(d);
 
 const planHead = cur => `<header class="top"><div><div class="hdr">${esc(E.fmtDate(E.today()))}</div><h1>Plan</h1></div>
-    <div class="row" style="gap:8px">${gear("plan")}</div></header>
+    <div class="row" style="gap:8px"><button class="btn sm" data-act="dlform">+ Deadline</button>${gear("plan")}</div></header>
   <div class="pills">${[["plan", "Day"], ["plan/week", "Week"]].map(([k, l]) => `<button class="pill" data-act="go" data-id="${k}" aria-pressed="${cur === l.toLowerCase()}">${l}</button>`).join("")}</div>`;
 function vPlan([sub]) {
   sub = sub === "week" ? "week" : "day";
@@ -1204,7 +1205,7 @@ function vDay() {
   const t = E.today(), d = planDate || t, p = P.plan();
   const rows = P.agenda(d, p), tasksMin = rows.filter(r => r.type === "task").reduce((a, r) => a + (r.e - r.s), 0);
   const wd = P.windDownNow(), min = E.addDays(t, -7), max = E.addDays(t, 13);
-  const backlog = live("tasks").filter(k => !k.done && !p.at.get(k.id)).sort((a, b) => !!b.penalty - !!a.penalty || b.prio - a.prio);
+  const horizon = E.addDays(t, 13), backlog = live("tasks").filter(k => !k.done && !p.at.get(k.id) && !Dl.isDeadline(k) && !(k.after && k.after > horizon)).sort((a, b) => !!b.penalty - !!a.penalty || b.prio - a.prio);
   const done = live("tasks").filter(k => k.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 20);
   const taskRow = k => `<div class="q ${k.penalty ? "pen-q" : ""}"><button class="bx" data-act="taskdone" data-id="${k.id}" aria-label="Done: ${esc(k.title)}"></button>
     <button class="grow tbtn" data-act="sheet" data-id="task:${k.id}"><div class="t">${esc(k.title)}</div><div class="small muted">${P.dur(k.mins)}${k.due ? ` · due ${E.fmtDate(k.due)}` : ""} · no free slot in 2 weeks</div></button><span></span></div>`;
@@ -1212,8 +1213,9 @@ function vDay() {
   <div class="dayhead"><button class="rbtn" data-act="pday" data-id="${E.addDays(d, -1)}" ${d <= min ? "disabled" : ""} aria-label="Previous day">${ic("left")}</button>
     <button class="tbtn grow" data-act="pday" data-id="${t}"><b>${esc(dayLabel(d))}</b><div class="small muted">${d === t ? E.fmtDate(d) + " · " : ""}${tasksMin ? P.dur(tasksMin) + " of tasks" : "no tasks planned"}</div></button>
     <button class="rbtn" data-act="pday" data-id="${E.addDays(d, 1)}" ${d >= max ? "disabled" : ""} aria-label="Next day">${ic("right")}</button></div>
-  <div class="panel agenda" id="dayline" data-min="${min}" data-max="${max}">${agendaRows(d, p)}</div>
+  ${dlMarks(d)}<div class="panel agenda" id="dayline" data-min="${min}" data-max="${max}">${agendaRows(d, p)}</div>
   ${tip("plan-day", "Tasks fill free gaps by deadline, then priority, and re-plan whenever something changes. Tap a task to pin, move or edit it; tap a block to edit it. Swipe to change day.")}
+  ${dlFold()}
   ${fold("backlog", `<b class="grow">Backlog</b><span class="small ${backlog.length ? "warn" : "muted"}">${backlog.length}</span>`, `<div class="list">${backlog.map(taskRow).join("") || `<p class="empty">Every task has a slot.</p>`}</div>`, backlog.length > 0)}
   ${done.length ? fold("done-tasks", `<b class="grow">Done</b><span class="small muted">${done.length}</span>`, done.map(k => `<div class="item row between"><span class="small grow">${esc(k.title)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(k.doneAt || Date.now())))}</span></span><button class="btn sm" data-act="taskundo" data-id="${k.id}">Undo</button></div>`).join("")) : ""}`;
 }
@@ -1765,6 +1767,47 @@ function vAppraise(trialId) {
     ${aps.length > 1 ? fold("ap-hist", `<b class="grow">Earlier</b><span class="small muted">${aps.length - 1}</span>`, aps.slice(1).map(x => `<div class="item small">${esc(E.fmtDate(x.date))} · ${esc(x.by || "friend")} · avg ${(rankScores(x.scores).avg || 0).toFixed(1)}</div>`).join("")) : ""}`;
 }
 
+/* ---------- v9.2: deadlines ---------- */
+let dlMove = null; // deadline id whose move form is open
+const dlWhen = k => `${E.fmtDate(k.due)}${k.time ? " " + esc(k.time) : ""}`;
+const dlLeft = k => { const n = Dl.daysLeft(k); return n <= 0 ? "due today" : n === 1 ? "1 day" : n + " days"; };
+// Plan day: a marker for each deadline due that day. The calendar always shows deadlines.
+const dlMarks = d => Dl.on(d).map(k => `<button class="panel dlmark" data-act="sheet" data-id="deadline:${k.id}"><span class="hdr">${px("flag")} Due${k.time ? " " + esc(k.time) : ""}</span><b>${esc(k.title)}</b>${k.course ? `<span class="small muted">${esc(k.course)}</span>` : ""}</button>`).join("");
+function dlFold() {
+  const L = Dl.list(); if (!L.length) return "";
+  return fold("deadlines", `<b class="grow">Deadlines</b><span class="small muted">${L.length}</span>`, `<div class="list">${L.map(k => { const ps = Dl.prep(k.id), n = ps.filter(x => x.done).length;
+    return `<button class="item row between tbtn" data-act="sheet" data-id="deadline:${k.id}"><span class="grow"><b class="small">${esc(k.title)}</b><div class="small muted">${dlWhen(k)} · ${dlLeft(k)}${ps.length ? ` · prep ${n}/${ps.length}` : ""}</div></span>${ic("right")}</button>`; }).join("")}</div>`);
+}
+// Home: one line per deadline, only from its start date.
+function dlHome() {
+  return Dl.active().slice(0, 2).map(k => { const nx = Dl.nextSession(k.id);
+    return `<button class="panel dlline" data-act="sheet" data-id="deadline:${k.id}">${px("flag")}<span class="grow"><b>${esc(k.title)}</b> · ${dlLeft(k)}${nx ? ` · next: ${esc(Dl.sessionName(nx, k))}` : ""}</span></button>`; }).join("");
+}
+function dlFormHtml() {
+  return `<h3>Deadline</h3><div class="panel" id="dlForm">
+    <label class="f">What<input data-f="title" placeholder="e.g. Social psych paper" enterkeyhint="next"></label>
+    <div class="grid" style="margin-top:10px">
+      <label class="f">Course (optional)<input data-f="course" placeholder="Social Psychology"></label>
+      <label class="f">Kind<select data-f="kind">${Object.entries(Dl.KINDS).map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>
+      <label class="f">Due<input type="date" data-f="due" min="${E.today()}"></label>
+      <label class="f">Time (optional)<input type="time" data-f="time"></label>
+      <label class="f" style="flex-basis:100%">Start on (optional)<input type="date" data-f="start" min="${E.today()}"></label>
+    </div>
+    <p class="tiny muted">Prep sessions: paper 5 from 10 days before, exam 4 reviews from 7 days before, presentation 3 from 7 days before, other 1 from 3 days before. Done before their date: +50% XP.</p>
+    <div class="btns"><button class="btn go" data-act="dlsave">Add and plan</button><button class="btn" data-act="sheet">Cancel</button></div></div>`;
+}
+function dlSheetHtml(id) {
+  const k = Dl.get(id); if (!k) return `<p class="empty">That deadline is gone.</p>`;
+  const p = P.plan(), ps = Dl.prep(id);
+  return `<h3>${esc(k.title)}</h3><p class="small muted">${esc(Dl.KINDS[k.dlKind] || "Deadline")}${k.course ? " · " + esc(k.course) : ""} · due ${dlWhen(k)} · ${dlLeft(k)}${k.start && k.start > E.today() ? ` · starts ${E.fmtDate(k.start)}` : ""}</p>
+    <div class="list">${ps.map(x => { const at = p.at.get(x.id);
+      return `<div class="q"><button class="bx" data-act="${x.done ? "taskundo" : "taskdone"}" data-id="${x.id}" aria-pressed="${!!x.done}" aria-label="Done: ${esc(x.title)}"></button><button class="grow tbtn" data-act="sheet" data-id="task:${x.id}"><div class="t">${esc(Dl.sessionName(x, k))}</div><div class="small muted">${P.dur(x.mins)} · ${x.done ? "done" : at ? `${esc(dayLabel(at.date))} ${P.toHM(at.s)}` : x.after > E.addDays(E.today(), 13) ? "from " + E.fmtDate(x.after) : `<span class="warn">no slot yet</span>`}</div></button><span></span></div>`; }).join("") || `<p class="empty">No prep sessions.</p>`}</div>
+    ${dlMove === id ? `<div class="panel" id="dlMove" style="margin-top:10px"><label class="f">New due date<input type="date" data-f="due" value="${k.due}" min="${E.today()}"></label>
+      <div class="btns"><button class="btn go" data-act="dlmovesave" data-id="${id}">Move</button><button class="btn" data-act="dlmove" data-id="${id}">Cancel</button></div></div>` : ""}
+    <div class="actlist">
+      <button class="act" data-act="dlmove" data-id="${id}">${ic("clock")}<span>Move<small>Prep sessions move with it</small></span></button>
+      <button class="act danger" data-act="dldrop" data-id="${id}">${ic("x")}<span>Delete</span></button></div>`;
+}
 function taskFormHtml(k) {
   k = k || { mins: 60, prio: 2, energy: "high" };
   return `<div class="panel" id="taskForm">
@@ -1799,9 +1842,10 @@ function addHtml() {
   const o = {
     todo: `<button class="act" data-act="newtask">${ic("check")}<span>To-do<small>The System finds it a slot</small></span></button>`,
     block: `<button class="act" data-act="blockform" data-id="new">${ic("clock")}<span>Block<small>Class, shift, study or workout time</small></span></button>`,
+    deadline: `<button class="act" data-act="dlform">${px("flag")}<span>Deadline<small>Due date, with prep sessions placed before it</small></span></button>`,
     moment: Sy.has(4) ? `<button class="act" data-act="moment">${ic("users")}<span>Moment<small>Time with someone, and what you saw</small></span></button>` : "",
   };
-  const order = TAB_OF[route()[0]] === "people" ? ["moment", "todo", "block"] : ["todo", "block", "moment"];
+  const order = TAB_OF[route()[0]] === "people" ? ["moment", "todo", "block", "deadline"] : ["todo", "deadline", "block", "moment"];
   return `<h3>Add</h3><div class="actlist">${order.map(k => o[k]).join("")}</div>`;
 }
 /* ---------- Log a moment: one sheet makes the hangout, the field note and the Battle Log at once ---------- */
@@ -1864,7 +1908,7 @@ function weekGrid() {
     return `<div class="wg-col ${d === t ? "today" : ""}" data-act="newblockat" data-id="${d}">${blocks}${tasks}${d === t ? `<div class="wg-now" style="top:${px(nm)}px"></div>` : ""}</div>`;
   };
   return `<div class="wgrid panel">
-    <div class="wg-head"><span></span>${days.map(d => `<span class="${d === t ? "today" : ""}">${P.DAY_NAMES[E.parse(d).getDay()]}<b>${E.parse(d).getDate()}</b></span>`).join("")}</div>
+    <div class="wg-head"><span></span>${days.map(d => `<span class="${d === t ? "today" : ""}">${P.DAY_NAMES[E.parse(d).getDay()]}<b>${E.parse(d).getDate()}</b>${Dl.on(d).map(k => `<button class="wg-dl" data-act="sheet" data-id="deadline:${k.id}" aria-label="Due: ${esc(k.title)}">${esc(k.title)}</button>`).join("")}</span>`).join("")}</div>
     <div class="wg-body" style="height:${24 * H}px;--h:${H}px">
       <div class="wg-times">${[...Array(24)].map((_, h) => `<span style="top:${h * H}px">${h % 3 === 0 ? E.pad(h) : ""}</span>`).join("")}</div>
       ${days.map(col).join("")}
@@ -2684,11 +2728,28 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       put("tasks", { ...k, done: true, doneAt: Date.now() });
       if (k.penalty) { save(); toast(St.openPenalties().length ? "Penalty quest cleared" : "Penalty cleared. Shop unlocked."); return render(); }
       const ref = "task:" + id, gains = live("xpEvents").some(e => e.ref === ref) ? [] : [E.gainXP("task", ref, k.title)];
+      // v9.2: a deadline's prep session done before its own due date pays the ahead bonus.
+      if (gains.length && Dl.aheadOf(k)) { put("xpEvents", { ts: Date.now(), type: "task", xp: Math.round(XP.task * Dl.AHEAD), ref: ref + ":ahead", label: "Ahead · " + k.title }); gains.push({ xp: Math.round(XP.task * Dl.AHEAD), label: "Ahead" }); }
       save(); announce(gains); if (!gains.length) toast("Done"); return render();
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return;
-      if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
+      if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); E.revokeXP("task:" + id + ":ahead"); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
     case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
+    case "dlform": dlMove = null; sheet = "deadline"; render(); $("#dlForm input")?.focus(); return;
+    case "dlsave": {
+      const f = readForm("#dlForm"); if (!f.title) { toast("Name the deadline"); return $("#dlForm input")?.focus(); }
+      if (!f.due) return toast("Pick the due date");
+      if (f.due < E.today()) return toast("That date has passed");
+      const r = Dl.add({ title: f.title, course: f.course, kind: f.kind, due: f.due, time: f.time, start: f.start });
+      sheet = "deadline:" + r.d.id; save(); toast(`Due ${E.fmtDate(f.due)} · ${r.sessions.length} prep session${r.sessions.length === 1 ? "" : "s"} from ${E.fmtDate(r.sessions[0].after)}`); return render();
+    }
+    case "dlmove": dlMove = dlMove === id ? null : id; return render();
+    case "dlmovesave": {
+      const f = readForm("#dlMove"); if (!f.due || f.due < E.today()) return toast("Pick a date from today on");
+      Dl.move(id, f.due); dlMove = null; save(); toast("Moved to " + E.fmtDate(f.due) + ". Prep sessions moved with it."); return render();
+    }
+    case "dldrop": if (!confirm("Delete this deadline and its open prep sessions? Finished sessions keep their XP.")) return;
+      Dl.drop(id); sheet = null; save(); return render();
     case "taskform": if (!id) { taskForm = null; sheet = null; return render(); } taskForm = id; sheet = "task:" + id; return render();
     case "tipx": { const t = tipsSeen(); t[id] = 1; try { localStorage.setItem(TIP_KEY, JSON.stringify(t)); } catch (e) {} return render(); }
     case "newblockat": {

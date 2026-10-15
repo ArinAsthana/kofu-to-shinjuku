@@ -8,8 +8,9 @@ import * as St from "./study.js";
 import * as Sy from "./system.js";
 import { isNative } from "./sync.js";
 import * as K from "./cards.js";
+import * as Dl from "./deadlines.js";
 
-export const TYPES = [["block", "Block starting", "At the start, and 5 min before a Dungeon"], ["wind", "Wind-down", "1 h before bed"], ["pen", "Penalty deadline", "30 min before it lapses"], ["brief", "Morning brief", "First block or 08:00, whichever is earlier"], ["jp", "Japanese nudges", "Free gaps of 15 min or more, and opening a watched app with reviews due. Up to 3 a day"]];
+export const TYPES = [["block", "Block starting", "At the start, and 5 min before a Dungeon"], ["wind", "Wind-down", "1 h before bed"], ["pen", "Penalty deadline", "30 min before it lapses"], ["brief", "Morning brief", "First block or 08:00, whichever is earlier"], ["dl", "Deadlines", "On the start day and the day before it's due"], ["jp", "Japanese nudges", "Free gaps of 15 min or more, and opening a watched app with reviews due. Up to 3 a day"]];
 const PREF_KEY = "kts-alarms", ASK_KEY = "kts-alarm-ask", SIG_KEY = "kts-alarm-sig", CHANNEL = "system";
 const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
 const LN = () => window.Capacitor.Plugins.LocalNotifications || window.Capacitor.registerPlugin("LocalNotifications");
@@ -85,6 +86,15 @@ export function upcoming() {
     if (on.brief) { const first = segs.filter(g => g.s >= 4 * 60).sort((a, b) => a.s - b.s)[0]; add(at(d, Math.min(first ? first.s : 480, 480)), "[SYSTEM] Daily quests have arrived", "Open the System to accept today's quests.", "home"); }
   }
   if (on.jp && Sy.has(3)) { const n = K.queue().length; for (let i = 0; i < 3; i++) { const d = E.addDays(t, i); for (const g of gaps(d)) add(at(d, g.s), `[SYSTEM] ${Math.min(30, g.e - g.s)} min free`, n && i === 0 ? `Clear ${n} Japanese review${n === 1 ? "" : "s"}? Quick start is one tap.` : "A Japanese quick start fits here.", "jlpt"); } }
+  // v9.2: deadlines, at 08:00 or when the morning's sleep ends.
+  if (on.dl) for (let i = 0; i < 3; i++) {
+    const d = E.addDays(t, i), wake = P.segments(d).filter(g => g.b.kind === "sleep" && g.s <= 480 && g.e > 480).reduce((m, g) => Math.max(m, g.e), 480);
+    for (const k of Dl.list(d)) {
+      const n = Dl.prep(k.id).filter(x => !x.done).length;
+      if (k.start === d && k.due !== d && !Dl.prep(k.id).some(x => x.done)) add(at(d, wake), `[SYSTEM] ${k.title}: start today`, `${n} prep session${n === 1 ? "" : "s"} placed. Due ${E.fmtDate(k.due)}.`, "plan");
+      if (E.addDays(k.due, -1) === d) add(at(d, wake), `[SYSTEM] ${k.title} is due tomorrow`, `${k.time ? "At " + k.time + ". " : ""}${n ? n + " prep session" + (n === 1 ? "" : "s") + " left." : "Prep done."}`, "plan");
+    }
+  }
   if (on.pen) for (const p of St.openPenalties()) {
     const k = live("tasks").find(x => x.id === p.task);
     if (k && k.due) add(at(k.due, 1410), "[SYSTEM] Penalty quest expires in 30 minutes", k.title, "plan");

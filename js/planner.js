@@ -132,7 +132,7 @@ const order = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (b.p
 // Returns Map(taskId -> {date, s, e, late}) and the list of tasks that found no slot.
 export function plan() {
   const t = E.today(), n = snap(nowMin() + 5), taken = {}, out = new Map(), unplaced = [];
-  const open = live("tasks").filter(x => !x.done);
+  const open = live("tasks").filter(x => !x.done && x.kind !== "deadline"); // v9.2: a deadline is a marker, not work
   for (const k of open.filter(x => x.pin && x.pin.date >= t)) {
     const s = toMin(k.pin.start); (taken[k.pin.date] = taken[k.pin.date] || []).push([s, s + k.mins]);
     out.set(k.id, { date: k.pin.date, s, e: s + k.mins, pinned: true, late: k.due && k.pin.date > k.due });
@@ -141,6 +141,7 @@ export function plan() {
     let spot = null;
     for (let i = 0; i < 14 && !spot; i++) {
       const date = E.addDays(t, i);
+      if (k.after && date < k.after) continue; // v9.2: a prep session waits for its start day
       for (const [fs, fe] of [...(watchTask(k) ? watchFree(date, taken, i === 0 ? n : 0) : []), ...freeOn(date, taken, i === 0 ? n : 0)]) {
         let s = snap(fs);
         while (s + k.mins <= fe) { if (k.energy !== "high" || !tooTired(date, s, s + k.mins)) { spot = { date, s, e: s + k.mins }; break; } s += 15; }
