@@ -295,8 +295,11 @@ function vPath() {
   const rows = Pa.STREAMS.filter(s => Pa.length(s.id)).map(s => {
     const k = Pa.openTask(s.id), st = Pa.standing(s.id), p = Pa.pos(s.id), it = k ? { t: pathText(k) } : Pa.item(s.id, p);
     const badge = st.behind ? `<span class="tag t-pen">${st.behind} behind</span>` : st.ahead ? `<span class="tag t-ahead">+${st.ahead} ahead</span>` : "";
+    const A = Pa.arc(s.id);
+    const list = A.items.map(x => `<div class="arc-i ${x.done ? "done" : x.cur ? "cur" : ""}">${x.done ? ic("check", "inl") : x.cur ? px("sword") : `<i class="arc-dot"></i>`}<span>${esc(x.t)}</span></div>`).join("");
     return `<div class="panel pstream"><div class="row between"><b>${esc(s.label)}</b><span class="row" style="gap:6px">${badge}<span class="small muted">${P.dur(s.mins)}</span></span></div>
       <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : "Stream complete."}</div>
+      ${fold("arc-" + s.id, `<span class="grow tiny mono">Arc ${A.n} · ${A.done}/${A.size}</span>`, list, false, "arcf")}
       ${s.id === "mental" && z ? `<div class="tiny muted" style="margin-bottom:6px">Zetamac best ${z.best} · average ${z.avg}</div>` : ""}
       ${k ? `<div class="btns"><button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button></div>` : it ? `<div class="btns"><button class="btn sm" data-act="pathahead" data-id="${s.id}">Go ahead</button></div>` : ""}</div>`;
   }).join("");
@@ -1047,6 +1050,13 @@ function vClasses([sub, id, ch]) {
   ${fold("cl-topics", `<b class="grow">Block topics, reports and penalties</b>`, vStudy())}
   <div class="quiet-links"><button data-act="go" data-id="cards">Flashcard decks</button></div>`;
 }
+// v6 Arcs: chapters open 5 at a time as a checklist; the rest stay sealed until the Arc is cleared.
+function discArc(id, L, c) {
+  const i = c ? L.indexOf(c) : L.length - 1, a = Math.floor(i / Pa.ARC), arcL = L.slice(a * Pa.ARC, a * Pa.ARC + Pa.ARC), sealed = L.length - (a * Pa.ARC + arcL.length);
+  return `<div class="panel"><div class="row between"><b>Arc ${a + 1}</b><span class="small muted mono">${arcL.filter(x => Cl.chapterCleared(id, x.id)).length}/${arcL.length}</span></div>
+    ${arcL.map(x => { const ok = Cl.chapterCleared(id, x.id), cur = c && x.id === c.id; return `<div class="arc-i ${ok ? "done" : cur ? "cur" : ""}">${ok ? ic("check", "inl") : cur ? px("sword") : `<i class="arc-dot"></i>`}<span>${esc(x.title)}</span></div>`; }).join("")}
+    ${sealed > 0 ? `<div class="sealed" style="margin-top:8px">${ic("lock", "inl")} Next Arc sealed until these ${arcL.length} are cleared</div>` : ""}</div>`;
+}
 function vDisc(id) {
   const d = Cl.disc(id); if (!d) return `<button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><h1>Not found</h1>`;
   const L = Cl.chapters(id), c = Cl.currentChapter(id), on = Cl.active().includes(id), done = L.filter(x => Cl.chapterCleared(id, x.id));
@@ -1066,8 +1076,7 @@ function vDisc(id) {
   <header class="top"><div><div class="hdr">Discipline · ${esc(d.title)}</div><h1>${esc(d.name)}</h1></div></header>
   <p class="small muted" style="margin:0 4px 8px">${esc(d.blurb)}</p>
   ${on ? cur : `<div class="panel"><p class="small">Not active.</p><div class="btns"><button class="btn go" data-act="discon" data-id="${id}" ${Cl.active().length >= Cl.CAP ? "disabled" : ""}>Start</button></div></div>`}
-  ${done.length ? fold("dc-done-" + id, `<b class="grow">Cleared</b><span class="small muted">${done.length}</span>`, done.map(x => `<div class="item small">${ic("check", "inl")} ${esc(x.title)}</div>`).join("")) : ""}
-  ${hidden > 0 ? `<div class="sealed">${ic("lock", "inl")} ${hidden} more chapter${hidden === 1 ? "" : "s"} sealed</div>` : ""}
+  ${on && L.length ? discArc(id, L, c) : ""}
   ${chEdit ? `<div class="panel"><h3>Your own chapters</h3><p class="tiny muted">One per line: Title | what to read | what to produce | hours. Use your book's contents page. Quizzes only cover the starter chapters, so your own chapters are marked done by hand; the boss exam stays.</p>
       <textarea data-f="chapters" rows="12" style="font-size:13px">${esc(L.map(x => [x.title, x.read, x.produce, x.hours].join(" | ")).join("\n"))}</textarea>
       <div class="btns"><button class="btn go" data-act="chsave" data-id="${id}">Save</button><button class="btn" data-act="chedit">Cancel</button>${custom ? `<button class="btn danger" data-act="chreset" data-id="${id}">Back to the starter list</button>` : ""}</div></div>`
@@ -1947,7 +1956,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.0 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.0.1 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2245,7 +2254,10 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "pathfin": {
       const [tid, res] = id.split("|"), k = live("tasks").find(x => x.id === tid); if (!k) return;
       const z = num(($("#zetIn") || {}).value); sheet = null;
-      const g = Pa.finish(k, res, z); save(); if (g) announce([g]); else toast("Done"); return render();
+      const g = Pa.finish(k, res, z); save();
+      if (!k.path.sun && Pa.closesArc(k.path.idx)) { const A = Pa.arc(k.path.stream); toast(`${g ? "+" + g.xp + " XP · " : ""}${Pa.stream(k.path.stream).label}: Arc ${A.n - 1} cleared. Arc ${A.n} open.`, true); }
+      else if (g) announce([g]); else toast("Done");
+      return render();
     }
     case "pathahead": {
       const k = Pa.goAhead(id); if (!k) return toast("Finish the open item first");

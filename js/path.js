@@ -76,6 +76,18 @@ export function summary(t = E.today()) {
   return { ahead: Math.min(...st.map(x => x.ahead)) };
 }
 
+/* ---------- Arcs (v6 §8): items open 5 at a time ---------- */
+export const ARC = 5;
+// The open Arc: its number (from 1), how many of its items are done, and the items themselves.
+export function arc(s) {
+  const p = pos(s), a = Math.floor(Math.min(p, Math.max(0, length(s) - 1)) / ARC), from = a * ARC;
+  const items = [];
+  for (let i = from; i < Math.min(from + ARC, length(s)); i++) items.push({ idx: i, t: item(s, i).t, done: i < p, cur: i === p });
+  return { n: a + 1, done: items.filter(x => x.done).length, size: items.length, items };
+}
+// True when finishing this item closes its Arc.
+export const closesArc = idx => (idx + 1) % ARC === 0;
+
 /* ---------- issuing ---------- */
 const xpFor = mins => 5 + Math.round(mins / 3); // 15m: 10, 30m: 15, 45m: 20
 function taskFor(s, idx, t, extra = {}) {

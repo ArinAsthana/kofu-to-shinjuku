@@ -592,3 +592,9 @@ body.has-dbar .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 .tag.t-ahead{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 50%,transparent)}
 .pstream{margin-bottom:8px}
 .pstream .small{overflow-wrap:anywhere}
+.arcf{margin-top:8px}
+.arc-i{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:5px 0;color:var(--soft)}
+.arc-i .px,.arc-i svg{flex:none;width:12px;height:auto;margin-top:3px}
+.arc-i.done{color:var(--dim);text-decoration:line-through}
+.arc-i.cur{color:var(--fg);font-weight:600}
+.arc-dot{flex:none;width:6px;height:6px;margin:6px 3px 0;border:1px solid var(--soft)}
