@@ -467,6 +467,23 @@ const awakeHtml = () => `<div class="milestone" role="dialog" aria-label="The Pa
 
 // v5.3: a small snapshot for the Android home-screen widget (WidgetPlugin.java). Sent only when it changes.
 let widgetSig = "", widgetT = null;
+// Sleep and class stretches today and tomorrow, as [start ms, end ms]: no nudge lands inside one.
+function quietSpans() {
+  const out = [], t = E.today();
+  for (const d of [t, E.addDays(t, 1)]) for (const g of P.segments(d)) if (["sleep", "nap", "class"].includes(g.b.kind)) { const s = E.parse(d).getTime(); out.push([s + g.s * 60000, s + g.e * 60000]); }
+  return out;
+}
+// v8.3: a widget button or nudge asked for a screen ("jpgo/15" starts a quick start). Native only.
+async function pendingRoute() {
+  const C = window.Capacitor; if (!(C && C.isPluginAvailable && C.isPluginAvailable("Widget"))) return;
+  try {
+    const W = C.Plugins.Widget || C.registerPlugin("Widget"), r = ((await W.pending()) || {}).route;
+    if (!r || !W.pending) return;
+    const m = /^jpgo\/(\d+)$/.exec(r);
+    if (m && Sy.has(NEEDS.jlpt)) return jpStart(+m[1]);
+    if (!m) goR(r);
+  } catch (e) {}
+}
 function pushWidget() {
   if (!(window.Capacitor && window.Capacitor.isPluginAvailable && window.Capacitor.isPluginAvailable("Widget"))) return;
   clearTimeout(widgetT);
@@ -479,7 +496,9 @@ function pushWidget() {
     const quests = [...q.trials.map(e => ({ t: e.k.title, done: !!e.done })), ...q.path.list.map(k => ({ t: k.title, done: !!k.done })), ...q.events.map(e => ({ t: e.k.title, done: !!e.done })), ...q.habits.map(x => ({ t: habitName(x.h, q), done: x.on }))]
       .sort((a, b) => a.done - b.done).slice(0, 3);
     const m = Us.available() && Us.isGranted() ? Us.today() : null;
-    const snapshot = { now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "" };
+    // v8.3: the widget's Japanese row and the native watched-app nudge (due count, the toggle, watched apps, quiet stretches).
+    const jp = Sy.has(NEEDS.jlpt) ? { due: K.queue().filter(c => c.intro).length, nudge: !!Al.prefs().jp, apps: Us.cfg().apps, quiet: quietSpans() } : null;
+    const snapshot = { now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "", jp };
     const sig = JSON.stringify(snapshot); if (sig === widgetSig) return;
     widgetSig = sig;
     const W = window.Capacitor.Plugins.Widget || window.Capacitor.registerPlugin("Widget");
@@ -2954,7 +2973,8 @@ function renameStyle() {
   scheduleWindDown(); onSave(scheduleWindDown);
   const usageTick = async () => { if (await Us.refresh()) { save(); render(); } };
   usageTick(); setInterval(usageTick, 5 * 60000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") usageTick(); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { usageTick(); pendingRoute(); } });
+  pendingRoute();
   let alT = null; Al.init({ go, render }); onSave(() => { clearTimeout(alT); alT = setTimeout(Al.reschedule, 2000); });
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.
   setInterval(() => {
