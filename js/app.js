@@ -104,6 +104,9 @@ function render() {
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
   document.body.dataset.tab = tab;
   document.body.classList.toggle("silent", jpsOn() && !!jps.silent);
+  // v9.1: workout mode. The page turns deep navy while a workout runs, and back to red when it ends.
+  const navy = homeState(E.today()).k === "body"; document.documentElement.classList.toggle("navy", navy);
+  const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = navy ? "#0B1633" : "#E0211F";
   const h1 = $("#app header.top h1") || $("#app > h1"); if (h1) h1.insertAdjacentHTML("afterbegin", px(HEAD_PX[tab] || "eye", "hpx"));
   const app = $("#app"), entering0 = entering;
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
@@ -231,6 +234,14 @@ function homeTiles() {
 }
 // v9 §4 and §7: a class gap shows its one finance item; the Outreach slot shows its goals.
 function dayCard() {
+  const nw = Dy.watchNow();
+  if (nw) {
+    const its = Dy.watchItems(), d = Dy.watchDone();
+    return `<div class="panel daycard nwatch"><div class="row between"><span class="hdr">${px("eye")} Night watch · until ${P.toHM(nw.e)}</span><span class="small mono">${d.n} done${d.ahead ? ` · +50% · ${d.ahead} ahead` : ""}</span></div>
+      <p class="tiny muted" style="margin:4px 0 6px">Shift work is done. The rest of the night is yours. Nothing here times out, so a customer can interrupt any time.${d.n < Dy.NW_AT ? ` ${Dy.NW_AT} items: +${Dy.NW_BONUS} XP.` : ""}</p>
+      ${its.map(x => `<div class="item row between"><div class="grow"><b class="small">${esc(x.label)}</b><div class="small muted">${esc(x.t)}</div></div>${x.k ? `<button class="btn sm go" data-act="taskdone" data-id="${x.k.id}">Report</button>` : `<button class="btn sm go" data-act="pathahead" data-id="${x.s}">Go ahead</button>`}</div>`).join("") || `<div class="small muted">Both streams are waiting on a Gate Test.</div>`}
+      ${Sy.has(NEEDS.jlpt) ? `<div class="btns"><button class="btn sm" data-act="jpgo" data-id="5">Break: 5 min 日本語</button></div>` : ""}</div>`;
+  }
   const gp = Dy.gapNow();
   if (gp) {
     const gi = gp.fin ? Dy.gapItem() : null;
@@ -2565,7 +2576,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "pathfin": {
       const [tid, res] = id.split("|"), k = live("tasks").find(x => x.id === tid); if (!k) return;
       const z = num(($("#zetIn") || {}).value); sheet = null;
-      const g = Pa.finish(k, res, z), loot = k.ahead && res === "done" ? Sy.rollLoot(E.today(), k.id) : null, up = Pa.checkAhead(); save();
+      const g = Pa.finish(k, res, z), loot = k.ahead && res === "done" ? Sy.rollLoot(E.today(), k.id) : null, up = Pa.checkAhead(), nwb = Dy.watchBonus(); save();
+      if (nwb) setTimeout(() => toast(`Night watch · +${nwb} XP`, true), 2600);
       if (up) setTimeout(() => toast(up.vanguard ? "Title unlocked: Vanguard. 7 days ahead." : `Rest token earned · ${Pa.cfg().tokens}/${Pa.MAX_TOKENS}`, true), 2200);
       if (loot && g) g.label += " · " + loot.label, g.xp += loot.xp;
       if (!k.path.sun && Pa.closesArc(k.path.idx)) { const A = Pa.arc(k.path.stream); toast(`${g ? "+" + g.xp + " XP · " : ""}${Pa.stream(k.path.stream).label}: Arc ${A.n - 1} cleared. Arc ${A.n} open.`, true); }

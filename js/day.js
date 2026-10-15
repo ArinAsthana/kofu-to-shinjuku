@@ -92,6 +92,34 @@ export function dayList(t = E.today()) {
   return rows.sort((a, b) => a.s - b.s);
 }
 
+/* ---------- v9.1 §8: Night watch ---------- */
+// 00:00 to the end of a night shift. Finance items one after another with Go ahead; 3 or more done earns a bonus once.
+export const NW_BONUS = 30, NW_AT = 3;
+export function watchNow(now = new Date()) {
+  const t = E.ymd(now), nw = P.nightWatch(t), m = now.getHours() * 60 + now.getMinutes();
+  return nw && m < nw.e ? { ...nw, date: t } : null;
+}
+// Path items finished during tonight's watch, and how many of them were ahead.
+export function watchDone(t = E.today()) {
+  const nw = P.nightWatch(t); if (!nw) return { n: 0, ahead: 0 };
+  const from = E.parse(t).getTime(), to = from + nw.e * 60000;
+  const ks = live("tasks").filter(k => k.path && k.done && k.doneAt >= from && k.doneAt < to + 30 * 60000);
+  return { n: ks.length, ahead: ks.filter(k => live("path").some(r => r.id === k.id && r.ahead)).length };
+}
+// The items on offer: the next Accounting and SAP/Murex items.
+export function watchItems() {
+  if (!Pa.ready() || !Pa.started()) return [];
+  return ["accounting", "sapmurex"].filter(s => Pa.length(s) && !Pa.gate(s)).map(s => {
+    const st = Pa.stream(s), k = Pa.openTask(s), it = k ? null : Pa.item(s, Pa.pos(s));
+    return k || it ? { s, label: st.label, k, t: k ? k.title.slice(st.label.length + 3) : it.t, mins: st.mins } : null;
+  }).filter(Boolean);
+}
+export function watchBonus(t = E.today()) {
+  const ref = "nw:" + t; if (watchDone(t).n < NW_AT || live("xpEvents").some(e => e.ref === ref)) return 0;
+  put("xpEvents", { ts: Date.now(), type: "path", xp: NW_BONUS, ref, label: "Night watch" });
+  return NW_BONUS;
+}
+
 /* ---------- v9 §9: the older decks ---------- */
 // The Genki starter decks leave Study, reviews and the due count. Their cards and history stay; one tap restores them.
 export const OLD_DECK = /^Genki L\d+$/;

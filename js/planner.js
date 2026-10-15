@@ -105,8 +105,22 @@ function freeOn(date, taken, from) {
   if (cur < hi) free.push([cur, hi]);
   return free.filter(([s, e]) => e - s >= 15);
 }
+// v9.1: Night watch. On a shift night the shift work is done by 00:00, so 00:00 to the shift's end is study time.
+export const isNightShift = b => b.kind === "work" && /shift/i.test(b.title || "");
+export function nightWatch(date) { const g = segments(date).find(x => x.tail && isNightShift(x.b)); return g ? { s: 0, e: g.e, b: g.b } : null; }
+// Night watch takes focus work only: Path items and high-energy tasks.
+const watchTask = k => !!k.path || k.energy === "high";
+function watchFree(date, taken, from) {
+  const nw = nightWatch(date); if (!nw) return [];
+  const busy = (taken[date] || []).slice().sort((a, b) => a[0] - b[0]), free = []; let cur = Math.max(nw.s, from || 0);
+  for (const [s, e] of busy) { if (s > cur) free.push([cur, Math.min(s, nw.e)]); cur = Math.max(cur, e); if (cur >= nw.e) break; }
+  if (cur < nw.e) free.push([cur, nw.e]);
+  return free.filter(([s, e]) => e - s >= 15);
+}
 // Focus tasks stay out of the 8 hours after a night shift ends (post-shift fog) and must finish by 22:00.
+// Night watch itself (v9.1) is the exception: that is when the focus work happens.
 function tooTired(date, s, e) {
+  const nw = nightWatch(date); if (nw && s >= nw.s && e <= nw.e) return false;
   if (e > 22 * 60) return true;
   return segments(date).some(g => g.b.kind === "work" && g.tail && s < g.e + 8 * 60);
 }
@@ -127,7 +141,7 @@ export function plan() {
     let spot = null;
     for (let i = 0; i < 14 && !spot; i++) {
       const date = E.addDays(t, i);
-      for (const [fs, fe] of freeOn(date, taken, i === 0 ? n : 0)) {
+      for (const [fs, fe] of [...(watchTask(k) ? watchFree(date, taken, i === 0 ? n : 0) : []), ...freeOn(date, taken, i === 0 ? n : 0)]) {
         let s = snap(fs);
         while (s + k.mins <= fe) { if (k.energy !== "high" || !tooTired(date, s, s + k.mins)) { spot = { date, s, e: s + k.mins }; break; } s += 15; }
         if (spot) break;

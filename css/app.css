@@ -710,3 +710,8 @@ body.silent::before{opacity:.12}
 body.silent .panel,body.silent .tile{border-color:rgba(242,239,232,.08)}
 .jpsearch input{width:100%}
 .jpsearch .lexlist{margin-top:8px}
+/* v9.1: workout mode */
+html{transition:background-color .6s ease}
+html.navy{--bg:#0B1633;--bg2:#081026;background:#0B1633;--fg:var(--paper);--soft:rgba(242,239,232,.8);--dim:rgba(242,239,232,.6);--rule:rgba(242,239,232,.2);--plus:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11'%3E%3Cpath d='M5 0h1v11H5zM0 5h11v1H0z' fill='%23F2EFE8' fill-opacity='.4'/%3E%3C/svg%3E")}
+html.navy body::before{filter:hue-rotate(225deg) saturate(.7) brightness(.55)}
+.nwatch .item{padding:8px 0}
