@@ -202,11 +202,13 @@ function vHome() {
     <span class="lvbar" role="progressbar" aria-label="Level ${E.level()} progress" aria-valuenow="${Math.round(E.levelProgress() * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${E.levelProgress() * 100}%"></i></span><span class="lvnext">${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to LV ${E.level() + 1}</span></button>`}
   ${dungeon ? dungeonBar(hs) : ""}`;
 }
+// v7: the due pile as one big button within thumb reach (Home and Study).
+function reviewBtn() { const n = K.queue().length; return n ? `<button class="btn go block big rvbig" data-act="go" data-id="cards/review">${px("scroll")} Review ${n} due</button>` : ""; }
 // Act I as one line, with its own money check-in so it works before the Store opens.
 function actLine(a1) {
   const due = E.moneyDue(), last = E.moneyReports().slice(-1)[0];
   return `<div class="panel actline"><div class="row between"><span class="hdr">${px("crown")} Act I · ${a1.week > 0 ? `${yen(a1.week)} this week` : "Escape Kofu"}</span>
-    <button class="link" data-act="moneyquick">${due ? "Check in" : moneyQuick ? "Close" : "Update"}</button></div>${bar(a1.shown, "var(--acc)")}
+    <button class="btn sm" data-act="moneyquick">${due ? "Check in" : moneyQuick ? "Close" : "Update"}</button></div>${bar(a1.shown, "var(--acc)")}
     ${moneyQuick ? `<div class="grid" id="moneyForm" style="margin-top:6px">
       <label class="f">Bank (¥)<input type="number" inputmode="numeric" data-f="bank" placeholder="${last ? last.bank : ""}"></label>
       <label class="f">Debt left (¥)<input type="number" inputmode="numeric" data-f="debt" placeholder="${last ? last.debt : ""}"></label></div>
@@ -459,6 +461,7 @@ function questsPanel(q) {
   return `<div class="panel quests"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
     ${top.length ? `<ul class="top3">${top.map(([x, tg]) => `<li><span class="grow">${esc(x)}</span>${tg}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}
     ${pathLine(q)}${usageLine()}
+    ${reviewBtn()}
     <div class="btns"><button class="btn sm" data-act="questsall">${showAllQuests ? "Hide" : `Show all (${q.total})`}</button></div>
     ${showAllQuests ? questsAll(q) : ""}</div>`;
 }
@@ -1152,7 +1155,7 @@ function vClasses([sub, id, ch]) {
     : `<div class="hero"><div class="row between"><span class="hdr">${px("scroll")} ${esc(hd.name)}${hc ? ` · chapter ${Cl.chapters(hid).indexOf(hc) + 1} of ${Cl.chapters(hid).length}` : ""}</span>${hc ? `<span class="hdr">${Cl.readPct(hc.id)}%</span>` : ""}</div>
       <div class="now-t">${hc ? esc(hc.title) : Cl.bossPassed(hid) ? "Cleared" : "Boss exam open"}</div>
       <div class="btns"><button class="btn go" data-act="go" data-id="classes/d/${hid}">${hc && Cl.readDone(hid, hc.id) ? "Take the quiz" : "Start"}</button>
-        <button class="btn" data-act="go" data-id="cards/review">${px("scroll")} Flashcards${due ? " · " + due + " due" : ""}</button></div></div>`;
+</div></div>${reviewBtn()}`;
   // Japanese is a discipline here: Genki lessons are its chapters, the JLPT ladder its progress, N-level mocks its boss.
   const jpL = St.topics("jp"), jpCur = St.current("jp"), jpOpen = (jpL[0] && St.progress("jp", jpL[0].id) >= 100) || live("jlptItems").length > 0 || live("jlptExams").length > 0;
   const jpRow = !jpOpen ? "" : `<button class="panel discp" data-act="go" data-id="jlpt"><div class="row between"><b>Japanese</b><span class="small muted">${jpL.filter(x => St.progress("jp", x.id) >= 100).length}/${jpL.length}</span></div>
@@ -1344,13 +1347,13 @@ function vReview() {
   const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
     const answered = rv.pick != null, right = c.back.trim();
-    return `${head}<div class="panel fc">${tag}${fcFace(c, false)}</div>
-      <div class="opts">${rv.opts.map((o, i) => `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
-      ${answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}`;
+    return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div>
+      <div class="rv-dock"><div class="opts">${rv.opts.map((o, i) => `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
+      ${answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}</div></div>`;
   }
-  if (!rv.flip) return `${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="btns"><button class="btn primary block" data-act="rvflip">Show answer</button></div>`;
-  return `${head}<div class="panel fc">${tag}${fcFace(c, true)}</div>
-    <div class="grades">${[[1, "Again"], [2, "Hard"], [3, "Good"], [4, "Easy"]].map(([gr, l]) => `<button class="grade g${gr}" data-act="rvgrade" data-id="${gr}"><b>${l}</b><span>${K.preview(c, gr)}</span></button>`).join("")}</div>`;
+  if (!rv.flip) return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="rv-dock"><button class="btn primary block" data-act="rvflip">Show answer</button></div></div>`;
+  return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, true)}</div>
+    <div class="rv-dock grades">${[[1, "Again"], [2, "Hard"], [3, "Good"], [4, "Easy"]].map(([gr, l]) => `<button class="grade g${gr}" data-act="rvgrade" data-id="${gr}"><b>${l}</b><span>${K.preview(c, gr)}</span></button>`).join("")}</div></div>`;
 }
 async function recStart() {
   try {
@@ -1802,7 +1805,6 @@ function trainSession(t = E.today()) {
     return row(ex, sl.label, entry);
   }).join("") + plan.extra.map(id => { const ex = E.exById(id); return row(ex, "Added", w && (w.entries || []).find(e => e.exercise === id)); }).join("");
   const extra = w ? (w.entries || []).filter(e => e.sets.length && !plan.slots.some(k => E.slotState(k).current === e.exercise) && !plan.extra.includes(e.exercise)) : [];
-  const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const flags = E.painFlags();
   const session = `
     <div class="row between"><div><div class="small muted">${E.fmtDate(t)} · ${esc(plan.where)}</div><h3 style="margin:2px 0 0">${esc(plan.name)}</h3></div>
@@ -1816,6 +1818,7 @@ function trainSession(t = E.today()) {
 }
 function vTrainHome() {
   const t = E.today(), plan = E.planFor(t), gate = P.trainGate(started(t)), session = trainSession(t);
+  const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const hasData = live("workouts").some(x => (x.entries || []).some(e => e.sets.length)) || live("runs").length > 0;
   // Gate closed: one card saying when, and today's session folded away instead of greyed-out rows.
   return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Workout</h1></div>${gear("body")}</header>
