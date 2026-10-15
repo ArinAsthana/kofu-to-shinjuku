@@ -23,7 +23,7 @@ export const STREAMS = [
 export const stream = id => STREAMS.find(s => s.id === id);
 const SUN_MINS = 20;
 
-let WEEK = {}, SUN = {}, RES = [];
+let WEEK = {}, SUN = {}, RES = [], FLOORS = [], RAIDS = [];
 // "45m Genki II…" repeats the stream's own length; a split item ("30m … | 15m …") keeps its parts.
 const clean = t => t.includes(" | ") ? t : t.replace(/^\d+m /, "");
 export async function load() {
@@ -33,6 +33,8 @@ export async function load() {
       WEEK[s.id] = rows.filter(r => r.day !== "Sun" && r[s.id]).map(r => ({ t: clean(r[s.id]), phase: r.phase, date: r.date }));
       SUN[s.id] = rows.filter(r => r.day === "Sun" && r.date > START).map(r => r[s.id] ? { t: clean(r[s.id]), phase: r.phase } : null);
     }
+    FLOORS = []; for (const r of rows) if (!FLOORS.length || FLOORS[FLOORS.length - 1].phase !== r.phase) FLOORS.push({ n: FLOORS.length + 1, phase: r.phase, name: r.phase.replace(/^\d+\s*/, ""), from: r.date });
+    RAIDS = rows.filter(r => r.milestone && r.date >= START).map(r => ({ id: "raid-" + r.date, date: r.date, name: r.milestone.replace(/\s*\(target date\)/, ""), big: /CBT \(target|^JLPT|GRADUATION/.test(r.milestone) }));
   } catch (e) { WEEK = {}; SUN = {}; }
   try { RES = await (await fetch("data/path/resources.json")).json(); } catch (e) { RES = []; }
 }
@@ -262,3 +264,37 @@ export function risk(t = E.today()) {
   return null;
 }
 export function seeRisk(id) { cfg().warned[id] = E.today(); touch(); }
+
+/* ---------- v6.2: Floors and Raids ---------- */
+// A Floor is the plan's phase by calendar date. Only the current one is ever shown; the next stays unnamed.
+export function floor(t = E.today()) {
+  let f = FLOORS[0] || null;
+  for (const x of FLOORS) if (x.from <= t) f = x;
+  return f ? { ...f, total: FLOORS.length, last: f.n === FLOORS.length } : null;
+}
+// The Floor reveal window: a Floor not yet seen (Floor 1 is part of the awakening).
+export function newFloor(t = E.today()) {
+  if (!ready() || !started(t)) return null;
+  const f = floor(t), c = cfg(); return f && f.n > (c.floor || 1) ? f : null;
+}
+export function seeFloor(n) { cfg().floor = n; touch(); }
+// Raids: the plan's milestones on their real dates. One appears 14 days before and stays 3 days after, until cleared.
+export const RAID_AHEAD = 14, RAID_AFTER = 3, XP_RAID = 40, XP_RAID_BIG = 100;
+const raidLog = id => live("path").find(r => r.kind === "raid" && r.id === id);
+export const raidCleared = id => !!raidLog(id);
+export function raids(t = E.today()) {
+  return RAIDS.filter(r => E.daysBetween(t, r.date) <= RAID_AHEAD).map(r => ({ ...r, days: E.daysBetween(t, r.date), cleared: raidCleared(r.id) }));
+}
+// Open Raids for Home and the Path page, soonest first.
+export const openRaids = (t = E.today()) => started(t) ? raids(t).filter(r => !r.cleared && r.days >= -RAID_AFTER).sort((a, b) => a.days - b.days) : [];
+export function clearRaid(id, t = E.today()) {
+  const r = RAIDS.find(x => x.id === id); if (!r || raidCleared(id)) return 0;
+  const xp = r.big ? XP_RAID_BIG : XP_RAID, at = Date.now();
+  put("path", { id, kind: "raid", date: t, at, xp, name: r.name });
+  put("xpEvents", { ts: at, type: "raid", xp, ref: "path:" + id, label: "Raid cleared: " + r.name });
+  return xp;
+}
+export function unclearRaid(id) {
+  const r = raidLog(id); if (!r) return;
+  remove("path", id); E.revokeXP("path:" + id);
+}

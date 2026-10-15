@@ -16,6 +16,7 @@ import * as Cl from "./classes.js";
 import * as Al from "./alarms.js";
 import * as Us from "./usage.js";
 import * as Pa from "./path.js";
+import * as Ap from "./apps.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -93,7 +94,7 @@ function render() {
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { path: r => r[0] === "gate" ? vGate(r[1]) : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -105,7 +106,7 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.awake ? awakeHtml() : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
@@ -253,7 +254,7 @@ function dungeonBar(hs) {
   return `<div class="dbar"><span class="grow small">${px("sword")} Workout</span><button class="btn sm" data-act="go" data-id="train/pick/browse">Library</button><button class="btn sm" data-act="leave" data-id="body">Leave</button></div>`;
 }
 // Today's quests: the three that matter most, tagged. "Show all" opens the rest.
-const tag = (k, l) => `<span class="tag t-${k}">${k === "trial" ? px("flag") + " " : k === "pen" ? px("skull") + " " : ""}${l}</span>`;
+const tag = (k, l) => `<span class="tag t-${k}">${k === "trial" ? px("flag") + " " : k === "pen" || k === "raid" ? px("skull") + " " : ""}${l}</span>`;
 // v5.2: today's phone minutes against the limit, one line. Nothing else about usage is shown.
 function usageLine() {
   if (!Us.available() || !Us.isGranted() || !Sy.has(1)) return "";
@@ -289,7 +290,8 @@ function pathDoneHtml(id) {
 }
 function vPath() {
   const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
-  const head = `${back}<header class="top"><div><div class="hdr">Job readiness</div><h1>The Path</h1></div></header>`;
+  const fl = Pa.started() && Pa.floor();
+  const head = `${back}<header class="top"><div><div class="hdr">${fl ? `Floor ${fl.n} · ${esc(fl.name)}` : "Job readiness"}</div><h1>The Path</h1></div></header>`;
   if (!Pa.ready()) return `${head}<p class="empty">The Path couldn't load. Check the connection and reopen.</p>`;
   const n = Pa.daysToStart(), z = Pa.zetamac();
   const intro = Pa.started() ? `<div class="row between small" style="margin:4px 2px 10px"><span class="muted">One item per stream a day. Finish early and the timeline moves up.</span></div>`
@@ -308,8 +310,73 @@ function vPath() {
   const due = K.dueCount(), c = Pa.cfg(), tdy = E.today();
   const tokens = Pa.started() && (c.tokens || Pa.isRest(tdy)) ? `<div class="panel row between"><span class="small">${px("star")} Rest tokens <b class="mono">${c.tokens}/${Pa.MAX_TOKENS}</b>${Pa.isRest(tdy) ? " · today is a rest day" : ""}</span>
     ${c.tokens && !Pa.isRest(tdy) && E.parse(tdy).getDay() ? `<button class="btn sm" data-act="pathrest">Rest today</button>` : ""}</div>` : "";
-  return `${head}${intro}${tokens}${rows}
+  const nApp = live("applications").filter(a => !Ap.closed(a)).length;
+  return `${head}${intro}${raidsPanel()}${tokens}${rows}
+    <button class="quiet-row" data-act="go" data-id="path/apps"><span class="grow">Applications${nApp ? ` · ${nApp} active` : ""}</span><span class="chev">${ic("right")}</span></button>
     <button class="quiet-row" data-act="go" data-id="cards"><span class="grow">Flashcard decks${due ? ` · ${due} due` : ""}</span><span class="chev">${ic("right")}</span></button>`;
+}
+/* ---------- v6.2: Raids, Applications, Resources ---------- */
+// An Offer logs the offer for Act I, as "I got an offer" does.
+function appOffer(a) {
+  if (a.status !== "Offer" || (S.settings.system || {}).offerAt) return;
+  Sy.logOffer(true); save();
+  const d = prompt(`Offer from ${a.firm} logged. Job start date (YYYY-MM-DD)? Leave empty if you don't know yet.`, "");
+  if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) { Sy.setLoan({ takeover: d.trim() }); save(); }
+}
+// Plan milestones (14 days ahead) and application dates (7 days ahead), soonest first.
+function allRaids() {
+  if (!Pa.ready() || !Pa.started()) return [];
+  return [...Pa.openRaids().map(r => ({ ...r, kind: "path" })), ...Ap.raids().map(r => ({ id: r.a.id, name: `${r.a.firm}: ${r.what}`, date: r.date, days: r.days, kind: "app" }))].sort((a, b) => a.days - b.days);
+}
+const inDays = d => d === 0 ? "today" : d === 1 ? "tomorrow" : d > 0 ? `in ${d} days` : `${-d} day${d === -1 ? "" : "s"} ago`;
+function raidsPanel() {
+  const rs = allRaids(); if (!rs.length) return "";
+  return `<div class="panel raids"><div class="hdr">${px("skull")} Raids</div>${rs.map(r => `<div class="item row between"><div class="grow"><b class="small">${esc(r.name)}</b><div class="tiny ${r.days <= 2 ? "bad-t" : "muted"}">${esc(E.fmtDate(r.date))} · ${inDays(r.days)}</div></div>
+    ${r.kind === "path" ? `<button class="btn sm ${r.days <= 0 ? "go" : ""}" data-act="raidclear" data-id="${r.id}">Cleared</button>` : `<button class="btn sm" data-act="go" data-id="path/apps/${r.id}">Open</button>`}</div>`).join("")}</div>`;
+}
+function vApps(id) {
+  const back = `<button class="back" data-act="nav" data-id="${id ? "path/apps" : "path"}">${ic("left")} ${id ? "Applications" : "Path"}</button>`;
+  if (id) {
+    const a = id === "new" ? { status: "To apply" } : live("applications").find(x => x.id === id);
+    if (!a) return `${back}<p class="empty">That application is gone.</p>`;
+    const opt = (L, v) => L.map(x => `<option ${x === v ? "selected" : ""}>${esc(x)}</option>`).join("");
+    const inp = (f, l, type = "text", ph = "") => `<label class="f">${l}<input data-f="${f}" type="${type}" value="${esc(a[f] || "")}" placeholder="${ph}"${f === "channel" ? ` list="dl-chan"` : ""}></label>`;
+    return `${back}<header class="top"><div><div class="hdr">Job hunt</div><h1>${id === "new" ? "New application" : esc(a.firm)}</h1></div></header>
+    <div class="panel" id="appForm">${inp("firm", "Firm", "text", "Accenture")}${inp("role", "Role", "text", "Business consultant")}
+      <label class="f">Track<select data-f="track">${opt(Ap.TRACKS, a.track || Ap.TRACKS[0])}</select></label>
+      ${inp("channel", "Channel", "text", "careerforum.net")}<datalist id="dl-chan">${Ap.CHANNELS.map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+      <label class="f">Status<select data-f="status">${opt(Ap.STATUSES, a.status)}</select></label>
+      ${inp("deadline", "Deadline", "date")}${inp("contact", "Contact", "text", "Name, email")}
+      ${inp("next", "Next step", "text", "Submit ES")}${inp("nextDate", "Next step date", "date")}
+      <div class="btns"><button class="btn go" data-act="appsave" data-id="${id}">Save</button><button class="btn" data-act="go" data-id="path/apps">Cancel</button>${id !== "new" ? `<button class="btn danger" data-act="appdel" data-id="${id}">Delete</button>` : ""}</div></div>`;
+  }
+  const L = Ap.all(), open = L.filter(a => !Ap.closed(a)), done = L.filter(Ap.closed);
+  const row = a => { const w = Ap.when(a), d = w && E.daysBetween(E.today(), w), nx = Ap.STATUSES[Ap.STATUSES.indexOf(a.status) + 1];
+    return `<div class="panel app-r"><div class="row between"><b>${esc(a.firm)}</b><span class="tag ${a.status === "Offer" ? "t-ahead" : a.status === "Rejected" ? "t-pen" : ""}">${esc(a.status)}</span></div>
+      <div class="small muted">${[a.role, a.track].filter(Boolean).map(esc).join(" · ")}</div>
+      ${w ? `<div class="small ${d <= 2 ? "bad-t" : ""}" style="margin-top:4px">${esc(a.nextDate ? a.next || "Next step" : "Deadline")} · ${esc(E.fmtDate(w))} · ${inDays(d)}</div>` : ""}
+      <div class="btns">${Ap.closed(a) ? "" : `<button class="btn sm go" data-act="appnext" data-id="${a.id}">${esc(nx === "Rejected" ? "Offer" : nx)}</button><button class="btn sm" data-act="apprej" data-id="${a.id}">Rejected</button>`}<button class="btn sm" data-act="go" data-id="path/apps/${a.id}">Edit</button></div></div>`; };
+  return `${back}<header class="top"><div><div class="hdr">Job hunt</div><h1>Applications</h1></div></header>
+  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/apps/new">${ic("plus")} New application</button></div>
+  ${open.length ? open.map(row).join("") : `<p class="empty">None yet. Add each firm as you find it; dates within 7 days become Raids on Home.</p>`}
+  ${done.length ? fold("apps-closed", `<b class="grow">Closed</b><span class="small muted">${done.length}</span>`, done.map(row).join("")) : ""}`;
+}
+function vRes() {
+  const R = Pa.resources(), by = {};
+  R.forEach(r => (by[r.stream] = by[r.stream] || []).push(r));
+  return `<button class="back" data-act="nav" data-id="settings">${ic("left")} Settings</button><header class="top"><div><div class="hdr">Library</div><h1>Resources</h1></div></header>
+  ${Object.keys(by).map(k => `<h2>${esc(k)}</h2><div class="panel">${by[k].map(r => `<div class="item"><b class="small">${esc(r.resource)}</b><div class="tiny muted">${esc(r.usedFor)} · ${esc(r.where)}</div></div>`).join("")}</div>`).join("") || `<p class="empty">Couldn't load. Check the connection and reopen.</p>`}`;
+}
+// Profile → Path: where Arin stands. Opens after the first 7 active days.
+function profilePath() {
+  if (!Pa.ready() || !Pa.started() || Sy.activeDays() < 7) return "";
+  const f = Pa.floor(), z = Pa.zetamac(), done = Pa.raids().filter(r => r.cleared);
+  const st = Pa.STREAMS.filter(s => Pa.length(s.id)).map(s => { const x = Pa.standing(s.id);
+    return `<div class="row between small item"><span>${esc(s.label)}</span><span class="mono ${x.behind ? "bad-t" : x.ahead ? "good-t" : "muted"}">${x.behind ? x.behind + " behind" : x.ahead ? "+" + x.ahead + " ahead" : "on schedule"}</span></div>`; }).join("");
+  return `<h2>Path <span class="n">Floor ${f.n}</span></h2><div class="panel"><div class="hdr">${px("gate")} ${esc(f.name)}</div>${st}
+    ${z ? `<div class="small muted" style="margin-top:8px">Zetamac best ${z.best} · average ${z.avg} over ${z.n}</div>` : ""}
+    ${done.length ? `<div class="small" style="margin-top:8px"><b>Raids cleared</b></div>${done.map(r => `<div class="row between small item"><span class="grow">${esc(r.name)}</span><button class="link" data-act="raidundo" data-id="${r.id}">Undo</button></div>`).join("")}` : ""}
+    <div class="btns"><button class="btn sm" data-act="go" data-id="path">Open the Path</button></div></div>`;
 }
 function gateBox(g) {
   const wait = g.retakeAt > Date.now();
@@ -350,6 +417,9 @@ function gateSubmit() {
 const riskHtml = r => `<div class="milestone" role="dialog" aria-label="${esc(r.m.name)} at risk"><div class="ms-in">
   <div class="hdr">System · Warning</div>${px("skull", "ms-px")}<h2 class="ms-t">${esc(r.m.name)} at risk</h2><p class="muted">At this pace ${esc(Pa.stream(r.m.stream).label)} reaches the exam material ${r.late} day${r.late === 1 ? "" : "s"} after ${esc(E.fmtDate(r.m.date))}. Go ahead to close the gap.</p>
   <button class="btn primary block" data-act="riskgo" data-id="${r.m.id}">Go ahead now</button><button class="btn block" style="margin-top:8px" data-act="riskok" data-id="${r.m.id}">Later</button></div></div>`;
+const floorHtml = f => `<div class="milestone" role="dialog" aria-label="Floor ${f.n}"><div class="ms-in">
+  <div class="hdr">System · Floor ${f.n}</div>${px("gate", "ms-px")}<h2 class="ms-t">${esc(f.name)}</h2><p class="muted">${f.last ? "The last Floor. Everything so far was for this." : "A new Floor opens. The streams carry on where you are; what they ask of you steps up."}</p>
+  <button class="btn primary block" data-act="floorok" data-id="${f.n}">Enter Floor ${f.n}</button></div></div>`;
 const awakeHtml = () => `<div class="milestone" role="dialog" aria-label="The Path begins"><div class="ms-in">
   <div class="hdr">System · Awakening</div>${px("flag", "ms-px")}<h2 class="ms-t">The Path begins</h2><p class="muted">Seven streams, one item each a day. Finish early and the timeline moves up with you, for +50% XP. Leave one and it waits for tomorrow. From today, skipping has a cost again.</p>
   <button class="btn primary block" data-act="awake">Open the Path</button></div></div>`;
@@ -379,7 +449,8 @@ function questsPanel(q) {
   const items = [...q.trials.filter(e => !e.done).map(e => [e.k.title, tag("trial", "Trial")]),
     ...q.events.filter(e => !e.done).map(e => [e.k.title, e.k.penalty ? tag("pen", "Penalty") : tag("today", "Today")]),
     ...q.habits.filter(x => !x.on).map(x => [x.h.name, tag("daily", "Daily")])];
-  if (Pa.started()) items.unshift(...Pa.gates().filter(g => g.retakeAt <= Date.now()).map(g => [`Gate Test · ${Pa.stream(g.stream).label}`, tag("trial", "Gate")]));
+  if (Pa.started()) items.unshift(...Pa.gates().filter(g => g.retakeAt <= Date.now()).map(g => [`Gate Test · ${Pa.stream(g.stream).label}`, tag("trial", "Gate")]),
+    ...allRaids().filter(r => r.days <= 7).slice(0, 2).map(r => [r.name, tag("raid", `Raid · ${r.days <= 0 ? "today" : r.days + "d"}`)]));
   const top = items.slice(0, 3);
   return `<div class="panel quests"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
     ${top.length ? `<ul class="top3">${top.map(([x, tg]) => `<li><span class="grow">${esc(x)}</span>${tg}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}
@@ -486,6 +557,7 @@ function ceremony() {
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
   const m = Sy.nextMilestone(); if (m) return { ms: m };
   if (Pa.ready() && Pa.started() && !S.settings.pathAwoke) return { awake: true };
+  const fl = Pa.newFloor(); if (fl) return { floor: fl };
   if (route()[0] !== "path") { const r = Pa.risk(); if (r) return { risk: r }; }
   if (Al.needsAsk()) return { alarms: true };
   if (Us.needsAsk()) return { usage: true };
@@ -678,6 +750,7 @@ function vProfile() {
   return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>
   <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
+  ${profilePath()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
   <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
     ${ups.length ? `<div class="list" style="margin-top:8px">${ups.slice(-5).reverse().map(u => `<div class="row between small"><span>Level ${u.lv}</span><span class="muted mono">${esc(E.fmtDate(u.date))}</span></div>`).join("")}</div>` : ""}</div>
@@ -1984,7 +2057,7 @@ function vSettings([sec] = []) {
   ${sx("dungeon", "Dungeon", dungeonSettings())}
   ${Us.available() && Sy.has(1) ? sx("usage", "Phone limit", usageSettings(), Us.isGranted() ? Us.cfg().limitMin + " min" : "off") : ""}
   ${Al.available() && Sy.has(1) ? sx("alarms", "Alarms", alarmSettings(), Al.granted() ? "on" : "off") : ""}
-  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
+  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
   ${sx("money", "Money and Store", moneySettings())}
   ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
@@ -2001,7 +2074,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.1 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.2 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2313,10 +2386,22 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "gqpick": { if (!gq || gq.res) return; const [i, j] = id.split(":").map(Number); gq.ans[i] = j; return render(); }
     case "gqsubmit": { if (!gq) return; const miss = gq.qs.filter((q, i) => gq.ans[i] == null).length; if (miss && !confirm(`${miss} unanswered. Submit anyway?`)) return; return gateSubmit(); }
     case "gatedone": gq = null; return goR("path");
+    case "raidclear": { const xp = Pa.clearRaid(id); if (!xp) return; save(); toast(`Raid cleared · +${xp} XP`, true); return render(); }
+    case "raidundo": { if (!confirm("Undo this Raid? Its XP goes too.")) return; Pa.unclearRaid(id); save(); return render(); }
+    case "appsave": {
+      const f = readForm("#appForm"); if (!f.firm) return toast("Add the firm");
+      const r = Ap.save(f, id === "new" ? null : id); save(); appOffer(r.rec);
+      if (r.xp) toast(`+${r.xp} XP · ${r.rec.firm}: ${r.rec.status}`, true); else toast("Saved");
+      return go("path/apps");
+    }
+    case "appnext": { const r = Ap.advance(id); if (!r) return; save(); appOffer(r.rec); toast(`+${r.xp} XP · ${r.rec.firm}: ${r.rec.status}`, true); return r.rec.status === "Offer" ? render() : go("path/apps/" + id); }
+    case "apprej": { const a = live("applications").find(x => x.id === id); if (!a || !confirm(`Mark ${a.firm} as rejected?`)) return; Ap.save({ status: "Rejected", next: "", nextDate: "" }, id); save(); toast("Logged. Next one."); return render(); }
+    case "appdel": { if (!confirm("Delete this application?")) return; Ap.del(id); save(); return go("path/apps"); }
     case "pathrest": { if (!confirm("Use a rest token on today? Nothing new is issued and nothing slips.")) return; if (!Pa.rest()) return toast("No token to use"); save(); toast("Rest day. The Path waits."); return render(); }
     case "riskok": Pa.seeRisk(id); ceremonyDone = true; save(); return render();
     case "riskgo": { const m = Pa.FIXED.find(x => x.id === id); Pa.seeRisk(id); ceremonyDone = true; save(); const k = Pa.goAhead(m.stream); if (k) { save(); toast(`Dungeon open: ${Pa.stream(m.stream).label}`); return goR("home"); } return goR("path"); }
-    case "awake": S.settings.pathAwoke = E.today(); touchSettings(); ceremonyDone = true; save(); return goR("path");
+    case "floorok": Pa.seeFloor(+id); ceremonyDone = true; save(); return goR("path");
+    case "awake": S.settings.pathAwoke = E.today(); Pa.seeFloor((Pa.floor() || { n: 1 }).n); touchSettings(); ceremonyDone = true; save(); return goR("path");
     case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
     case "skipstage": { const n = +($("#skipStage") || {}).value; if (!confirm(`Set the System to stage ${n}? Use this for testing.`)) return; Sy.skipTo(n); save(); toast("Stage " + n); return render(); }
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
