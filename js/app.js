@@ -193,6 +193,35 @@ function homeState(t = E.today()) {
   const cb = Sy.comeback(t); if (cb && !cb.claimed) return { k: "comeback", cb };
   return { k: "next" };
 }
+/* ---------- v8.2: Japanese quick start ---------- */
+// 5, 15 or 30 minutes, filled in order: due reviews, today's new cards, the grammar item, fluency. Time up: XP and loot.
+const JPS_KEY = "kts-jps";
+let jps = (() => { try { const x = JSON.parse(localStorage.getItem(JPS_KEY)); return x && x.ends > Date.now() - 6 * 3600e3 ? x : null; } catch (e) { return null; } })();
+function jpsSave() { try { jps ? localStorage.setItem(JPS_KEY, JSON.stringify(jps)) : localStorage.removeItem(JPS_KEY); } catch (e) {} }
+const jpsOn = () => !!(jps && !jps.res);
+const jpsLeft = () => jps ? Math.max(0, jps.ends - Date.now()) : 0;
+function jpStart(m) {
+  jps = { mins: m, at: Date.now(), ends: Date.now() + m * 60000, xp0: E.xpTotal(), n0: K.reviewedToday().n, d0: E.today() }; jpsSave();
+  return goR(K.queue().length ? "cards/review" : "jlpt");
+}
+function jpEnd() {
+  if (!jpsOn()) return;
+  const loot = jps.mins >= 15 && Date.now() >= jps.ends ? Sy.rollLoot(E.today(), "jps-" + jps.at) : null; save();
+  jps = { ...jps, res: { xp: Math.max(0, E.xpTotal() - jps.xp0), n: K.reviewedToday().n - (jps.d0 === E.today() ? jps.n0 : 0), loot: loot && loot.xp } }; jpsSave();
+  toast(`Session over · +${jps.res.xp} XP`, true); goR("jlpt");
+}
+const jpsTimer = () => jpsOn() ? `<span class="hdr mono jps-t" id="jpsT">${mmss(jpsLeft())}</span>` : "";
+// The quick start row (Home and the Japanese screen), or the running session's bar.
+function jpQuick() {
+  if (jpsOn()) return `<div class="row between jps-bar"><span class="small">${px("sword")} Quick start · ${jps.mins} min</span><span class="row" style="gap:8px">${jpsTimer()}<button class="btn sm" data-act="jpend">End</button></span></div>`;
+  return `<div class="jps-row">${[5, 15, 30].map(m => `<button class="btn sm ${m === 15 ? "go" : ""}" data-act="jpgo" data-id="${m}">${m} min</button>`).join("")}</div>`;
+}
+// Home: today's Japanese in one line, under Now. Lexicon totals live only on the Lexicon screen.
+function jpCard() {
+  if (!Sy.has(NEEDS.jlpt)) return "";
+  const q = K.queue(), due = q.filter(c => c.intro).length, nw = q.length - due, g = N2.ready() && N2.doneToday().length;
+  return `<div class="panel jpq"><button class="quiet-row" data-act="go" data-id="jlpt"><span class="grow">日本語 · ${due} due · ${nw} new · grammar ${g ? ic("check", "inl") : "open"}</span><span class="chev">${ic("right")}</span></button>${jpQuick()}</div>`;
+}
 function vHome() {
   const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
   const dungeon = hs.k === "study" || hs.k === "body";
@@ -202,6 +231,7 @@ function vHome() {
     ${gear("home")}</div></header>
   ${dungeon ? "" : actLine(a1)}
   ${homeHero(hs, t)}
+  ${dungeon ? "" : jpCard()}
   ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
   ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><span class="lvrow"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></span>
     <span class="lvbar" role="progressbar" aria-label="Level ${E.level()} progress" aria-valuenow="${Math.round(E.levelProgress() * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${E.levelProgress() * 100}%"></i></span><span class="lvnext">${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to LV ${E.level() + 1}</span></button>`}
@@ -1417,7 +1447,8 @@ function vReview() {
   const q = K.queue(), done = K.reviewedToday(); // v6: open anytime, not only inside a block
   let c = rv && K.get(rv.id);
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), ask: K.mode(c) === "mcq" ? K.ask(c) : null, flip: false, pick: null } : null; }
-  const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div>${jpsOn() ? jpsTimer() : `<span class="small muted">${done.n} today</span>`}</header>`;
+  if (!c && jpsOn()) return `${head}${sysBox("Cards cleared.", "Next in this session: today's grammar item, then fluency.", `<div class="btns"><button class="btn sm go" data-act="nav" data-id="jlpt">Next</button><button class="btn sm" data-act="jpend">End session</button></div>`)}`;
   if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="learnmore">Learn 10 new</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
   const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3${c.lex ? ` · ${rv.ask.q === "reading" ? "Reading?" : "Meaning?"}` : ""}` : c.s ? "Flip" : "Flip · new"}</div>`;
@@ -1494,7 +1525,8 @@ function vJlpt([sub, a]) {
   if (sub === "q") return vJlptQ(a);
   if (sub === "exam") return vExam(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + n2Panel();
+  const res = jps && jps.res ? sysBox(`Session over: ${jps.res.n} card${jps.res.n === 1 ? "" : "s"} · +${jps.res.xp} XP`, jps.res.loot ? `Loot drop: +${jps.res.loot} XP.` : "Short sessions add up. Come back at the next gap.", `<div class="btns"><button class="btn sm" data-act="jpclose">Close</button></div>`) : "";
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + res + `<div class="panel jpq">${jpQuick()}</div>` + n2Panel();
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
   const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`;
@@ -2499,6 +2531,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       else announce([{ xp: g.xp, label: "日本語 · " + g.label }, g.habit]);
       return render();
     }
+    case "jpgo": return jpStart(+id);
+    case "jpend": return jpEnd();
+    case "jpclose": jps = null; jpsSave(); return render();
     case "n2undo": { if (!confirm("Undo the last N2 item? Its XP goes too.")) return; N2.undo(); save(); return render(); }
     case "n2fl": { const xp = N2.fluencyDone(id, !live("xpEvents").some(e => e.ref === id)); save(); if (xp) toast(`+${xp} XP · Fluency`); return render(); }
     case "n2exam": N2.setExam(id); save(); toast(`Exam Raid: JLPT ${id}, Sun 4 Jul 2027`); return render();
@@ -2914,6 +2949,7 @@ function renameStyle() {
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
   setTimeout(() => { runAssess(); render(); }, 6000);
   setInterval(tickPomo, 1000);
+  setInterval(() => { if (!jpsOn()) return; if (jps.ends < Date.now() - 10 * 60000) { jps = null; return jpsSave(); } if (jpsLeft() <= 0) return jpEnd(); const el = $("#jpsT"); if (el) el.textContent = mmss(jpsLeft()); }, 1000);
   setInterval(() => { if (!gq || !gq.qs || gq.res || route()[0] !== "path") return; const el = $("#gateT"), left = gq.ends - Date.now(); if (left <= 0) return gateSubmit(); if (el) el.textContent = mmss(left); }, 1000);
   scheduleWindDown(); onSave(scheduleWindDown);
   const usageTick = async () => { if (await Us.refresh()) { save(); render(); } };
