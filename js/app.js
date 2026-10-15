@@ -20,6 +20,7 @@ import * as Ap from "./apps.js";
 import * as Up from "./update.js";
 import * as Lx from "./lexicon.js";
 import * as N2 from "./n2.js";
+import * as Dy from "./day.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -102,6 +103,7 @@ function render() {
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
   document.body.dataset.tab = tab;
+  document.body.classList.toggle("silent", jpsOn() && !!jps.silent);
   const h1 = $("#app header.top h1") || $("#app > h1"); if (h1) h1.insertAdjacentHTML("afterbegin", px(HEAD_PX[tab] || "eye", "hpx"));
   const app = $("#app"), entering0 = entering;
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
@@ -201,7 +203,8 @@ function jpsSave() { try { jps ? localStorage.setItem(JPS_KEY, JSON.stringify(jp
 const jpsOn = () => !!(jps && !jps.res);
 const jpsLeft = () => jps ? Math.max(0, jps.ends - Date.now()) : 0;
 function jpStart(m) {
-  jps = { mins: m, at: Date.now(), ends: Date.now() + m * 60000, xp0: E.xpTotal(), n0: K.reviewedToday().n, d0: E.today() }; jpsSave();
+  // v9: started during a class, it runs silent (no audio, dark page) with a "Back to class" exit.
+  jps = { mins: m, at: Date.now(), ends: Date.now() + m * 60000, xp0: E.xpTotal(), n0: K.reviewedToday().n, d0: E.today(), silent: Dy.inClass() }; jpsSave();
   return goR(K.queue().length ? "cards/review" : "jlpt");
 }
 function jpEnd() {
@@ -213,14 +216,33 @@ function jpEnd() {
 const jpsTimer = () => jpsOn() ? `<span class="hdr mono jps-t" id="jpsT">${mmss(jpsLeft())}</span>` : "";
 // The quick start row (Home and the Japanese screen), or the running session's bar.
 function jpQuick() {
-  if (jpsOn()) return `<div class="row between jps-bar"><span class="small">${px("sword")} Quick start · ${jps.mins} min</span><span class="row" style="gap:8px">${jpsTimer()}<button class="btn sm" data-act="jpend">End</button></span></div>`;
+  if (jpsOn()) return `<div class="row between jps-bar"><span class="small">${px("sword")} ${jps.silent ? "Silent · in class" : `Quick start · ${jps.mins} min`}</span><span class="row" style="gap:8px">${jpsTimer()}<button class="btn sm" data-act="jpend">${jps.silent ? "Back to class" : "End"}</button></span></div>`;
   return `<div class="jps-row">${[5, 15, 30].map(m => `<button class="btn sm ${m === 15 ? "go" : ""}" data-act="jpgo" data-id="${m}">${m} min</button>`).join("")}</div>`;
 }
-// Home: today's Japanese in one line, under Now. Lexicon totals live only on the Lexicon screen.
-function jpCard() {
-  if (!Sy.has(NEEDS.jlpt)) return "";
-  const q = K.queue(), due = q.filter(c => c.intro).length, nw = q.length - due, g = N2.ready() && N2.doneToday().length;
-  return `<div class="panel jpq"><button class="quiet-row" data-act="go" data-id="jlpt"><span class="grow">日本語 · ${due} due · ${nw} new · grammar ${g ? ic("check", "inl") : "open"}</span><span class="chev">${ic("right")}</span></button>${jpQuick()}</div>`;
+// v9 §3: two tiles under Now. PLAN shows the next block; 日本語 starts a 5-minute session in one tap.
+function homeTiles() {
+  const nn = P.nowNext(), nx = nn.next, nxt = nx ? (nx.type === "task" ? nx.k.title : nx.b ? nx.b.title : "") : "";
+  const jp = Sy.has(NEEDS.jlpt), due = jp ? K.queue().filter(c => c.intro).length : 0;
+  return `<div class="tiles">
+    <button class="tile" data-act="nav" data-id="plan"><span class="hdr">${px("cal")} Plan</span><b class="tile-t">${nx ? esc(nxt) : "Nothing next"}</b><span class="small muted">${nx ? P.toHM(nx.s) : "Free"}</span></button>
+    ${jp ? `<div class="tile jp"><button class="tile-main" data-act="go" data-id="jlpt"><span class="hdr">日本語</span><b class="tile-t">${jpsOn() ? `<span id="jpsT">${mmss(jpsLeft())}</span>` : due || !K.queue().length ? `${due} due` : `${K.queue().length} new`}</b><span class="small muted">${jpsOn() ? "in session" : "5 min"}</span></button>
+      <button class="tile-go" data-act="${jpsOn() ? "go" : "jpgo"}" data-id="${jpsOn() ? "cards/review" : "5"}" aria-label="${jpsOn() ? "Resume" : "Start 5 minutes of Japanese"}">${ic("play")}</button></div>` : ""}
+  </div>`;
+}
+// v9 §4 and §7: a class gap shows its one finance item; the Outreach slot shows its goals.
+function dayCard() {
+  const gp = Dy.gapNow();
+  if (gp) {
+    const gi = gp.fin ? Dy.gapItem() : null;
+    if (gi) return `<div class="panel daycard"><div class="hdr">${px("coin")} Gap · until ${P.toHM(gp.e)}</div><div class="small" style="margin:4px 0 8px"><b>${esc(gi.label)}</b> · ${esc(gi.t)}</div>
+      <div class="btns">${gi.k ? `<button class="btn sm go" data-act="taskdone" data-id="${gi.k.id}">Report</button>` : `<button class="btn sm go" data-act="pathahead" data-id="${gi.s}">Start · ${P.dur(gi.mins)}</button>`}</div></div>`;
+    if (Sy.has(NEEDS.jlpt)) return `<div class="panel daycard"><div class="hdr">${px("coin")} Gap · until ${P.toHM(gp.e)}</div><div class="small" style="margin:4px 0 8px">Short gap: a few Japanese cards.</div><div class="btns"><button class="btn sm go" data-act="jpgo" data-id="5">5 min</button></div></div>`;
+  }
+  if (Dy.outreachNow()) {
+    const og = Dy.outreachGoals();
+    return `<div class="panel daycard"><div class="hdr">${px("flag")} Outreach</div>${og.length ? og.map(g => `<div class="item row between"><span class="grow small">${esc(g.t)}</span>${g.kind === "apps" ? (g.k ? `<button class="btn sm" data-act="taskdone" data-id="${g.k.id}">Report</button>` : `<button class="btn sm" data-act="pathahead" data-id="apps">Start</button>`) : `<button class="btn sm" data-act="nav" data-id="people">Open</button>`}</div>`).join("") : `<div class="small muted">No outreach goals today.</div>`}</div>`;
+  }
+  return "";
 }
 function vHome() {
   const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
@@ -231,7 +253,7 @@ function vHome() {
     ${gear("home")}</div></header>
   ${dungeon ? "" : actLine(a1)}
   ${homeHero(hs, t)}
-  ${dungeon ? "" : jpCard()}
+  ${dungeon ? "" : dayCard() + homeTiles()}
   ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
   ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><span class="lvrow"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></span>
     <span class="lvbar" role="progressbar" aria-label="Level ${E.level()} progress" aria-valuenow="${Math.round(E.levelProgress() * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${E.levelProgress() * 100}%"></i></span><span class="lvnext">${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to LV ${E.level() + 1}</span></button>`}
@@ -653,23 +675,25 @@ const milestoneHtml = m => `<div class="milestone" role="dialog" aria-label="${e
 const BRIEF_KEY = "kts-brief";
 let briefOpen = false;
 function briefDue() { const d = new Date(); if (d.getHours() < 4) return false; try { return localStorage.getItem(BRIEF_KEY) !== E.today(); } catch (e) { return false; } }
+// v9 §2: the Today window, once a morning. Today's blocks in order (classes with rooms, gaps with their item, outreach,
+// shift), the Japanese line and nothing else.
 function briefHtml() {
-  const t = E.today(), q = todayQuests(t), pens = St.openPenalties();
-  const blocks = St.questOcc(t).sort((a, b) => a.s - b.s), nx = Sy.nextStage();
+  const t = E.today(), pens = St.openPenalties(), gi = Dy.gapItem();
   const empty = d => !live("habitLog").some(h => h.date === d) && !live("tasks").some(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === d);
   const back = live("habitLog").length > 0 && empty(E.addDays(t, -1)) && empty(E.addDays(t, -2));
-  return `<div class="modal-scrim" data-act="briefclose"></div><div class="modal brief" role="dialog" aria-label="Today's quests">
-    <div class="hdr">System · ${esc(E.fmtDate(t))}</div><h2 class="bh">${back ? "Welcome back" : "Daily quests have arrived"}</h2>
+  const row = r => {
+    if (r.type === "gap") return `<div class="bl gap-l"><span class="mono">${span(r.s, r.e)}</span> <span class="muted">Gap</span>${r.fin && gi ? `<div class="small topic-l">${ic("target", "inl")} ${esc(gi.label)}: ${esc(gi.t)}</div>` : `<div class="small topic-l">${ic("target", "inl")} 日本語 · a few cards</div>`}</div>`;
+    const b = r.b, subj = b.kind === "quest" && St.subjectOf(b), top = subj && St.current(subj), og = b.id === Dy.OUTREACH.id ? Dy.outreachGoals() : [];
+    return `<div class="bl"><span class="mono">${span(r.s, r.e)}</span> <b>${esc(b.title)}</b>${b.room ? ` <span class="small muted">· ${esc(b.room)}</span>` : ""}${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}${og.map(g => `<div class="small topic-l">${ic("target", "inl")} ${esc(g.t)}</div>`).join("")}</div>`;
+  };
+  const list = Dy.dayList(t), q = K.queue(), due = q.filter(c => c.intro).length;
+  return `<div class="modal-scrim" data-act="briefclose"></div><div class="modal brief" role="dialog" aria-label="Today">
+    <div class="hdr">System · ${esc(E.fmtDate(t))}</div><h2 class="bh">${back ? "Welcome back" : "Today"}</h2>
     ${back ? `<p class="small">No penalties for the days away. Clear any one quest today for +${Sy.COMEBACK_XP} XP.</p>` : ""}
     ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} ${penWhat(p)} · shop locked until done</div>`).join("")}` : ""}
-    ${blocks.length ? `<div class="bsec">Blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
-      return `<div class="bl"><span class="mono">${span(o.s, o.e)}</span> <b>${esc(o.b.title)}</b>${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}</div>`; }).join("")}` : ""}
-    ${q.path.total - q.path.done ? `<div class="bsec">Path</div><div class="bl">${q.path.total - q.path.done} item${q.path.total - q.path.done === 1 ? "" : "s"} · ${P.dur(q.path.list.filter(k => !k.done).reduce((x, k) => x + k.mins, 0))} · ${pathStand()}</div>` : Pa.ready() && !Pa.started() ? `<div class="bsec">Path</div><div class="bl">The System awakens in ${Pa.daysToStart()} day${Pa.daysToStart() === 1 ? "" : "s"}</div>` : ""}
-    <div class="bsec">Today</div>${q.events.filter(e => !e.done).map(({ k, at }) => `<div class="bl"><span class="mono">${span(at.s, at.e)}</span> ${esc(k.title)}</div>`).join("") || `<div class="bl muted">No to-dos planned today.</div>`}
-    <div class="bsec">Daily</div><div class="bl">${q.habits.map(({ h }) => esc(h.name)).join(" · ")}</div>
-    ${nx ? `<div class="bsec">Sealed</div><div class="bl">${px("lock")} ${esc(Sy.STAGES[Sy.stage()].hint)}</div>` : ""}
-    <p class="tiny muted" style="margin-top:10px">${Sy.has(1) ? "Skipped blocks cost" : "Blocks don't cost anything yet. Later, skipped blocks will cost"} ${S.settings.study.penaltyXp ?? 30} XP and earn a penalty quest.</p>
-    <div class="btns"><button class="btn primary block" data-act="briefclose">Accept</button></div></div>`;
+    <div class="bsec">Schedule</div>${list.map(row).join("") || `<div class="bl muted">Nothing planned. A free day.</div>`}
+    ${Sy.has(NEEDS.jlpt) ? `<div class="bsec">日本語</div><div class="bl">${due} due · ${q.length - due} new${N2.ready() && N2.current() ? ` · grammar: ${esc(N2.current().g)}` : ""}</div>` : ""}
+    <div class="btns"><button class="btn primary block" data-act="briefclose">Start the day</button></div></div>`;
 }
 
 /* ---------- study blocks and penalties ---------- */
@@ -1345,14 +1369,12 @@ function vCards([sub, a]) {
     <textarea data-f="bulk" rows="8" placeholder="泳ぐ | to swim&#10;先輩 | senior"></textarea>
     <label class="f" style="margin-top:8px">Deck<input data-f="deck" list="dl-bulk" value="${esc(lastDeck())}"></label>${deckList("dl-bulk")}
     <div class="btns"><button class="btn go" data-act="bulkadd">Add cards</button><button class="btn" data-act="bulk">Cancel</button></div></div>` : "";
-  const starters = Object.keys(STARTER).map(l => { const n = K.inDeck(l).length;
-    return `<div class="item row between"><span class="grow">${esc(l)} <span class="small muted">· ${STARTER[l].length} cards</span></span>${n ? `<span class="small muted">${ic("check", "inl")} ${n} in decks</span>` : `<button class="btn sm" data-act="starter" data-id="${esc(l)}">Add</button>`}</div>`; }).join("");
   return `${head}${rev}
   ${tip("cards", "New cards are multiple choice. Get one right 3 times over 2 different days and it becomes a flip card you grade yourself. Miss a flip card twice in a row and it goes back to choices.")}
   <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="cards/edit/new">${ic("plus")} New card</button><button class="btn" data-act="bulk">Bulk paste</button></div>
   ${bulk}
-  <h2>Decks <span class="n">${cardsCount()}</span></h2>${deckRows || `<p class="empty">No cards yet. Add one, paste a list, or start with a Genki deck below.</p>`}
-  ${fold("cards-starter", `<b class="grow">Starter decks · Genki II</b><span class="small muted">L13–23</span>`, `<p class="tiny muted">Each lesson's grammar points with short example sentences, plus a few words. A starting point: edit them and add your own.</p>${starters}`, !decks.length)}`;
+  <h2>Decks <span class="n">${cardsCount()}</span></h2>${deckRows || `<p class="empty">No cards yet. Add one or paste a list. Japanese vocabulary lives in the Lexicon.</p>`}
+`;
 }
 const cardsCount = () => K.cards().length;
 // Keeps what's typed in the card editor when it re-renders (image added, recording done).
@@ -1466,11 +1488,12 @@ function vReview() {
   const q = K.queue(), done = K.reviewedToday(); // v6: open anytime, not only inside a block
   let c = rv && K.get(rv.id);
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), ask: K.mode(c) === "mcq" ? K.ask(c) : null, flip: false, pick: null } : null; }
-  const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div>${jpsOn() ? jpsTimer() : `<span class="small muted">${done.n} today</span>`}</header>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div>${jpsOn() ? `<span class="row" style="gap:8px">${jpsTimer()}${jps.silent ? `<button class="btn sm" data-act="jpend">Back to class</button>` : ""}</span>` : `<span class="small muted">${done.n} today</span>`}</header>`;
   if (!c && jpsOn()) return `${head}${sysBox("Cards cleared.", "Next in this session: today's grammar item, then fluency.", `<div class="btns"><button class="btn sm go" data-act="nav" data-id="jlpt">Next</button><button class="btn sm" data-act="jpend">End session</button></div>`)}`;
   if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="learnmore">Learn 10 new</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
-  const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3${c.lex ? ` · ${rv.ask.q === "reading" ? "Reading?" : "Meaning?"}` : ""}` : c.s ? "Flip" : "Flip · new"}</div>`;
+  const know = c.lex ? `<button class="link rvknow" data-act="rvknow" data-id="${c.id}">I know this · turn off</button>` : "";
+  const tag = `${know}<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3${c.lex ? ` · ${rv.ask.q === "reading" ? "Reading?" : "Meaning?"}` : ""}` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
     const answered = rv.pick != null, right = rv.ask.ans;
     return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, answered && c.lex, !answered && rv.ask.q === "reading")}</div>
@@ -1540,12 +1563,24 @@ function n2Panel() {
     ${dt.length ? `<div class="row between tiny muted" style="margin-top:6px"><span>${dt.length} item${dt.length === 1 ? "" : "s"} done today</span><button class="link" data-act="n2undo">Undo last</button></div>` : ""}
     ${fl.length ? `<div class="qsec">Fluency <span>side quests</span></div><div class="list">${fl.map(flRow).join("")}</div>` : ""}</div>`;
 }
+// v9 §3: search the whole Lexicon from the top of the Japanese screen; each result has its on/off switch.
+let jpq = "";
+function jpSearch() {
+  if (!Lx.ready()) return "";
+  const q = jpq.trim(), m = q ? Lx.recs() : null;
+  const hits = q ? [...Lx.rows("vocab", null, "all", q, m), ...Lx.rows("kanji", null, "all", q, m)].slice(0, 12) : [];
+  const row = e => { const off = Lx.status(m.get(e.id)) === "off";
+    return `<div class="lexrow ${off ? "is-off" : ""}"><div class="lexmain"><span class="lw ja">${esc(Lx.face(e))}</span><span class="lr ja">${esc(Lx.reading(e))}</span><span class="lm">${esc(e.meaning || "")}</span></div>
+      <button class="sw ${off ? "" : "on"}" role="switch" aria-checked="${!off}" aria-label="Study ${esc(Lx.face(e))}" data-act="lexoff" data-id="${e.id}"><i></i></button></div>`; };
+  return `<div class="panel lexbar jpsearch"><input type="search" data-ch="jpq" placeholder="I know this word: search kanji, kana or English" value="${esc(jpq)}">
+    ${q ? (hits.length ? `<div class="lexlist">${hits.map(row).join("")}</div>` : `<p class="small muted" style="margin:8px 0 0">Nothing found.</p>`) : ""}</div>`;
+}
 function vJlpt([sub, a]) {
   if (sub === "q") return vJlptQ(a);
   if (sub === "exam") return vExam(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
   const res = jps && jps.res ? sysBox(`Session over: ${jps.res.n} card${jps.res.n === 1 ? "" : "s"} · +${jps.res.xp} XP`, jps.res.loot ? `Loot drop: +${jps.res.loot} XP.` : "Short sessions add up. Come back at the next gap.", `<div class="btns"><button class="btn sm" data-act="jpclose">Close</button></div>`) : "";
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + res + `<div class="panel jpq">${jpQuick()}</div>` + n2Panel();
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res + `<div class="panel jpq">${jpQuick()}</div>` + n2Panel();
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
   const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`;
@@ -2193,6 +2228,8 @@ function archivesHtml() {
         <label class="f">EMI (₹)<input type="number" inputmode="numeric" data-ch="loan" data-id="emi" value="${l.emi}"></label>
         <label class="f">Rate (% a year)<input type="number" step="0.1" inputmode="decimal" data-ch="loan" data-id="rate" value="${r1(l.rate * 100)}"></label></div>
       <p class="tiny muted">The rupee rate isn't live; update it now and then. Balance is estimated from ₹${l.inr.toLocaleString("en-IN")} on ${E.fmtDate(l.asOf)}.</p>`; })()}</details>
+    ${Dy.archived().length ? `<details style="margin-top:10px"><summary class="small">Old decks</summary><p class="tiny muted" style="margin-top:8px">Archived in v9: out of reviews and the due count. Cards and history are kept.</p>
+      <div class="list">${Dy.archived().map(d => `<div class="item row between"><span class="small">${esc(d)} <span class="muted">· ${live("cards").filter(c => c.deck === d).length} cards</span></span><button class="btn sm" data-act="deckrestore" data-id="${esc(d)}">Restore</button></div>`).join("")}</div></details>` : ""}
     <details style="margin-top:10px"><summary class="small">Glossary</summary><div class="list" style="margin-top:6px">${GLOSSARY.map(([w, d]) => `<div class="small item"><b>${w}</b> <span class="muted">· ${d}</span></div>`).join("")}</div></details>
     <details style="margin-top:10px"><summary class="small">Stage</summary><p class="small" style="margin-top:8px">Stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)} · ${Sy.activeDays()} active days.</p>
       <div class="row" style="gap:8px"><select id="skipStage" style="max-width:220px">${Sy.STAGES.map(x => `<option value="${x.n}" ${x.n === Sy.stage() ? "selected" : ""}>${x.n} · ${esc(x.name)}</option>`).join("")}</select><button class="btn sm" data-act="skipstage">Skip to stage</button></div>
@@ -2735,7 +2772,10 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "lexst": lx = { ...lx, st: id, n: 60, open: null }; return render();
     case "lexmore": lx.n += 100; return render();
     case "lexopen": lx.open = lx.open === id ? null : id; return render();
-    case "lexsay": { const e = Lx.entry(id); if (e && !K.speak(Lx.face(e))) toast("No Japanese voice on this phone"); return; }
+    case "lexsay": if (jpsOn() && jps.silent) return toast("Silent in class");
+    { const e = Lx.entry(id); if (e && !K.speak(Lx.face(e))) toast("No Japanese voice on this phone"); return; }
+    case "deckrestore": Dy.restoreDeck(id); save(); toast(id + " restored"); return render();
+    case "rvknow": { K.setOff(id, true); rv = null; save(); toast("Turned off. It won't come back."); return render(); }
     case "lexoff": { const r = live("cards").find(x => x.id === id); K.setOff(id, !(r && r.off)); save(); return render(); }
     case "lexsel": lx.sel = lx.sel ? null : new Set(); return render();
     case "lexpick": { if (!lx.sel) return; lx.sel.has(id) ? lx.sel.delete(id) : lx.sel.add(id); return render(); }
@@ -2749,7 +2789,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "sortpick": return sortPick(id === "know");
     case "sortundo": { if (!srt || !srt.hist.length) return; const h = srt.hist.pop(); K.setOff(h.id, h.was); srt.i = Math.max(0, srt.i - 1); srt.show = false; save(); return render(); }
     case "sortexit": srt = null; return go("lex");
-    case "say": { const c = K.get(id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
+    case "say": if (jpsOn() && jps.silent) return toast("Silent in class");
+    { const c = K.get(id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
     case "rvpick": {
       const c = rv && K.get(rv.id); if (!c || rv.pick != null) return;
       rv.pick = +id; announce(K.answerMcq(c, rv.ask.opts[+id] === rv.ask.ans)); save(); return render();
@@ -2863,6 +2904,7 @@ document.addEventListener("change", async ev => {
   if (sel && trialForm) { Object.assign(trialForm, readForm("#trialForm")); trialForm[sel.dataset.actCh === "trialnote" ? "note" : "person"] = sel.value; trialForm.title = null; trialForm.keepTitle = false; return render(); }
   const el = ev.target.closest("[data-ch]"); if (!el) return;
   const k = el.dataset.ch;
+  if (k === "jpq") { jpq = el.value; render(); const i = $('input[data-ch="jpq"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; }
   if (k === "lexq") { lx = { ...lx, q: el.value, n: 60, open: null }; return render(); }
   if (k === "leximport") {
     const f = el.files && el.files[0]; if (!f) return;
@@ -2954,6 +2996,8 @@ function renameStyle() {
   await Cl.loadIndex();
   await Pa.load(); if (Pa.issue()) save();
   await N2.load();
+  if (await Dy.upgradeTimetable()) save();
+  if (Dy.archiveOld()) save();
   await Lx.load();
   renameStyle();
   if (Soc.migrateTraits()) save();

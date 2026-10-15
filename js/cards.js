@@ -40,7 +40,8 @@ export function preview(c, g) {
 
 /* ---------- decks and stages ---------- */
 export const JA_RE = /[぀-ヿ㐀-鿿]/;
-export const cards = () => live("cards").filter(c => !c.lex); // the deck cards; Lexicon cards are listed in the Lexicon
+// The deck cards; Lexicon cards are listed in the Lexicon. v9: archived decks (settings.cards.archived) are left out.
+export const cards = () => { const ar = (S.settings.cards && S.settings.cards.archived) || []; return live("cards").filter(c => !c.lex && !ar.includes(c.deck)); };
 
 /* ---------- v8: Lexicon cards ----------
    A Lexicon card's record holds progress only. Its content comes from the imported decks on this phone. */
