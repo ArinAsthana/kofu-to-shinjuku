@@ -18,7 +18,7 @@
   --plus:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11'%3E%3Cpath d='M5 0h1v11H5zM0 5h11v1H0z' fill='%230B0B0B'/%3E%3C/svg%3E");
 }
 /* black windows: everything inside reads white on black, with red as the accent */
-.panel,.q,.strip,.fold,.unl,.hero,.sys,.card,.combo,.sheet,.modal,.drawer,nav .in,.rbtn,.fab,.toast,.opt,.grade,.ms-in,.wg-b{
+.panel,.tile,.q,.strip,.fold,.unl,.hero,.sys,.card,.combo,.sheet,.modal,.drawer,nav .in,.rbtn,.fab,.toast,.opt,.grade,.ms-in,.wg-b{
   color-scheme:dark;
   --fg:var(--paper); --soft:rgba(242,239,232,.7); --dim:rgba(242,239,232,.55); --rule:rgba(242,239,232,.15); --on-fg:var(--ink);
   --raise:rgba(242,239,232,.07); --field:rgba(242,239,232,.06); --track:rgba(242,239,232,.15);
@@ -693,3 +693,20 @@ input:not([type=checkbox]):not([type=radio]),select{min-height:44px}
 .jps-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
 .jps-row .btn{min-height:44px}
 .jps-bar{margin-top:8px;gap:8px}
+/* v9: the day loop */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.tile{position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;min-height:84px;padding:10px 12px;background:#000;color:var(--fg);border:1px solid rgba(242,239,232,.18);font:inherit}
+.tile .hdr{display:flex;align-items:center;gap:6px}
+.tile-t{font-size:15px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tile.jp{flex-direction:row;padding:0;align-items:stretch}
+.tile-main{flex:1;display:flex;flex-direction:column;gap:2px;text-align:left;padding:10px 12px;background:none;border:0;color:inherit;font:inherit;min-width:0}
+.tile-go{width:52px;min-height:44px;display:grid;place-items:center;background:var(--acc);color:var(--acc-ink);border:0}
+.tile-go .ic{width:22px;height:22px;fill:currentColor}
+.daycard .item{padding:6px 0}
+.rvknow{display:block;margin:0 0 6px auto;font-size:13px;min-height:32px}
+.bl.gap-l .mono{opacity:.8}
+body.silent{background:#000}
+body.silent::before{opacity:.12}
+body.silent .panel,body.silent .tile{border-color:rgba(242,239,232,.08)}
+.jpsearch input{width:100%}
+.jpsearch .lexlist{margin-top:8px}
