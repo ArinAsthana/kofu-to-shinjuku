@@ -17,4 +17,14 @@ public class WidgetPlugin extends Plugin {
         NowWidget.refreshAll(getContext());
         call.resolve();
     }
+
+    /** v8.3: the screen a widget button or nudge asked for, once (then cleared). */
+    @PluginMethod
+    public void pending(PluginCall call) {
+        android.content.SharedPreferences p = getContext().getSharedPreferences(NowWidget.PREFS, 0);
+        JSObject r = new JSObject();
+        r.put("route", p.getString("pendingRoute", ""));
+        p.edit().remove("pendingRoute").apply();
+        call.resolve(r);
+    }
 }

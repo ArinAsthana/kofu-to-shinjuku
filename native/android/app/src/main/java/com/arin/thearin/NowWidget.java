@@ -40,8 +40,9 @@ public class NowWidget extends AppWidgetProvider {
         if (!small) {
             JSONArray q = s.optJSONArray("quests");
             int[] rows = { R.id.w_q1, R.id.w_q2, R.id.w_q3 };
+            // v8.3: two quests, so the Japanese row fits in 4×2.
             for (int i = 0; i < rows.length; i++) {
-                JSONObject x = q != null ? q.optJSONObject(i) : null;
+                JSONObject x = q != null && i < 2 ? q.optJSONObject(i) : null;
                 if (x == null) {
                     v.setViewVisibility(rows[i], View.GONE);
                     continue;
@@ -50,6 +51,11 @@ public class NowWidget extends AppWidgetProvider {
                 v.setTextViewText(rows[i], (x.optBoolean("done") ? "✓  " : "■  ") + x.optString("t"));
             }
             v.setTextViewText(R.id.w_level, s.optString("level", ""));
+            JSONObject jp = s.optJSONObject("jp");
+            v.setTextViewText(R.id.w_jp, jp != null && jp.optInt("due") > 0 ? "日本語 " + jp.optInt("due") : "日本語");
+            int[] btn = { R.id.w_jp5, R.id.w_jp15, R.id.w_jp30 };
+            int[] min = { 5, 15, 30 };
+            for (int i = 0; i < btn.length; i++) v.setOnClickPendingIntent(btn[i], MainActivity.route(c, "jpgo/" + min[i], min[i]));
             v.setTextViewText(R.id.w_usage, s.optString("usage", ""));
         }
         Intent open = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());

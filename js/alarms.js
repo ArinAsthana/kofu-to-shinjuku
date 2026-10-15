@@ -9,7 +9,7 @@ import * as Sy from "./system.js";
 import { isNative } from "./sync.js";
 import * as K from "./cards.js";
 
-export const TYPES = [["block", "Block starting", "At the start, and 5 min before a Dungeon"], ["wind", "Wind-down", "1 h before bed"], ["pen", "Penalty deadline", "30 min before it lapses"], ["brief", "Morning brief", "First block or 08:00, whichever is earlier"], ["jp", "Japanese nudges", "A free gap of 15 min or more, up to 3 a day"]];
+export const TYPES = [["block", "Block starting", "At the start, and 5 min before a Dungeon"], ["wind", "Wind-down", "1 h before bed"], ["pen", "Penalty deadline", "30 min before it lapses"], ["brief", "Morning brief", "First block or 08:00, whichever is earlier"], ["jp", "Japanese nudges", "Free gaps of 15 min or more, and opening a watched app with reviews due. Up to 3 a day"]];
 const PREF_KEY = "kts-alarms", ASK_KEY = "kts-alarm-ask", SIG_KEY = "kts-alarm-sig", CHANNEL = "system";
 const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
 const LN = () => window.Capacitor.Plugins.LocalNotifications || window.Capacitor.registerPlugin("LocalNotifications");
@@ -61,8 +61,8 @@ const asleep = ms => { // quiet hours follow sleep blocks
 };
 
 // v8.2: Japanese nudges. Free gaps of 15 min or more between 08:00 and 22:00 (outside every block, so never in class
-// or asleep), at most 3 a day: the longest ones, nudged at their start.
-export const GAP_MIN = 15, NUDGES = 3;
+// or asleep), at most 2 a day: the longest ones, nudged at their start.
+export const GAP_MIN = 15, NUDGES = 2; // plus one native watched-app nudge (NudgeReceiver.java): 3 a day at most
 export function gaps(d) {
   const busy = P.segments(d).map(g => [g.s, g.e]).sort((a, b) => a[0] - b[0]), out = [];
   let cur = 8 * 60;

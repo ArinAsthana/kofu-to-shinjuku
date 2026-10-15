@@ -46,6 +46,26 @@
     <TextView android:id="@+id/w_q2" style="@style/WidgetQuest" />
     <TextView android:id="@+id/w_q3" style="@style/WidgetQuest" />
 
+    <!-- v8.3: Japanese quick start. Each button opens the app straight into a 5, 15 or 30 min session. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/w_jp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="日本語"
+            android:textColor="#FFF2EFE8"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+        <TextView android:id="@+id/w_jp5" style="@style/WidgetJpBtn" android:text="5 MIN" />
+        <TextView android:id="@+id/w_jp15" style="@style/WidgetJpBtn" android:text="15 MIN" />
+        <TextView android:id="@+id/w_jp30" style="@style/WidgetJpBtn" android:text="30 MIN" />
+    </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

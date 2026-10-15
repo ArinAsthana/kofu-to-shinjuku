@@ -31,4 +31,16 @@
         <item name="android:textSize">13sp</item>
         <item name="android:visibility">gone</item>
     </style>
+    <!-- v8.3: the widget's Japanese quick-start buttons. -->
+    <style name="WidgetJpBtn">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">30dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="android:background">@drawable/widget_btn</item>
+        <item name="android:gravity">center</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">#FFF2EFE8</item>
+        <item name="android:textSize">12sp</item>
+    </style>
 </resources>

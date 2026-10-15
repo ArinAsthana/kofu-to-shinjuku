@@ -35,6 +35,11 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_small_info" />
         </receiver>
 
+        <!-- v8.3 watched-app nudge: a 15-min inexact check, re-armed after a reboot. -->
+        <receiver android:name=".NudgeReceiver" android:exported="false">
+            <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -53,4 +58,6 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <!-- v6.3 self-update: lets the app hand a downloaded APK to Android's installer (one tap to confirm). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- v8.3: re-arm the watched-app nudge after a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>
