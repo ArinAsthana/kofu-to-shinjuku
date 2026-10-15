@@ -15,6 +15,7 @@ export const RECORD_STORES = [
   "fieldNotes", "appraisals", // schema 9: fieldNotes {person, trait, habit, status tried|worked|notme}; appraisals {date, by, scores}
   "jlptItems", "jlptExams", // schema 8: JLPT results, see jlpt.js (questions themselves are static files in data/jlpt)
   "discLog", "titles", // schema 10: class system, see classes.js
+  "path", "applications", // schema 13: the Path (path.js), one record per finished item; job applications {firm, track, role, channel, deadline, status, contact, next, nextDate}
   "cards", "reviewDays", // schema 7: flashcards (see cards.js); reviewDays one record a day {id "rv-<date>", date, n, ok}. Card media stays in the photos store.
 ];
 
@@ -149,6 +150,8 @@ const MIGRATIONS = {
   10: s => { s.settings = s.settings || {}; const x = s.settings.system = s.settings.system || {}; if (x.stage == null) { x.stage = 0; x.unlockedAt = { 0: localIso(new Date()).slice(0, 10) }; } return s; },
   // 11 -> 12: v5.2 phone-usage quest. Adds settings.usage (watched apps, daily limit, minutes per day); nothing existing changes.
   11: s => { s.settings = s.settings || {}; if (!s.settings.usage) s.settings.usage = { ...USAGE, apps: USAGE.apps.slice(), days: {}, judged: {} }; return s; },
+  // 12 -> 13: v6 the Path. Two new empty stores; nothing existing changes.
+  12: s => { s.path = s.path || []; s.applications = s.applications || []; return s; },
   8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {

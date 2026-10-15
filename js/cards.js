@@ -58,10 +58,18 @@ export const stageLabel = c => mode(c) === "mcq" ? `Choice · ${(c.mcqOk || []).
 /* ---------- queue ---------- */
 const settings = () => S.settings.cards || { newPerDay: 15 };
 const AHEAD = 20 * 60000; // when nothing is due, cards coming back within 20 min are shown early
+// v6: "Learn 10 new" raises today's new-card limit, for studying ahead. Returns how many new cards that opened.
+const extraToday = () => { const x = settings().extra; return x && x.date === E.today() ? x.n : 0; };
+export function learnMore(n) {
+  const left = cards().filter(c => !c.intro).length - queue().filter(c => !c.intro).length;
+  const add = Math.min(n, Math.max(0, left)); if (!add) return 0;
+  S.settings.cards = { ...settings(), extra: { date: E.today(), n: extraToday() + add } }; S.settings.u = Date.now();
+  return add;
+}
 export function queue(now = Date.now()) {
   const all = cards(), t = E.today();
   const seen = all.filter(c => c.intro), introToday = seen.filter(c => c.intro === t).length;
-  const fresh = all.filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).slice(0, Math.max(0, (settings().newPerDay ?? 15) - introToday));
+  const fresh = all.filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).slice(0, Math.max(0, (settings().newPerDay ?? 15) + extraToday() - introToday));
   let due = seen.filter(c => (c.due || 0) <= now);
   if (!due.length && !fresh.length) due = seen.filter(c => (c.due || 0) <= now + AHEAD);
   return [...due.sort((a, b) => (a.due || 0) - (b.due || 0)), ...fresh];

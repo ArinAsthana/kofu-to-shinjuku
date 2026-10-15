@@ -9,6 +9,7 @@ import * as P from "./planner.js";
 import * as St from "./study.js";
 import * as Sy from "./system.js";
 import { isNative } from "./sync.js";
+import { START } from "./path.js";
 
 const ASK_KEY = "kts-usage-ask";
 const plug = () => window.Capacitor.Plugins.Usage || window.Capacitor.registerPlugin("Usage");
@@ -58,6 +59,7 @@ function judge() {
 function settle(d, ok) {
   const u = cfg(); u.judged[d] = ok ? "ok" : "over";
   if (ok) { const ref = "usage:" + d; if (!live("xpEvents").some(e => e.ref === ref)) put("xpEvents", { ts: Date.now(), type: "usage", xp: XP.habit, ref, label: `Phone under ${u.limitMin} min` }); return; }
+  if (d < START) return; // v6: nothing counts against Arin before the Path starts
   const id = "pen-use-" + d; if (live("penalties").some(p => p.id === id)) return;
   const title = `Phone over ${u.limitMin} min`;
   // One open penalty at a time, as with blocks: a further one is recorded but waived.

@@ -584,3 +584,11 @@ body.has-dbar .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 /* v5.2 phone limit line in Quests */
 .usage-l{margin-top:10px;padding-top:8px;border-top:1px solid var(--rule)}
 .usage-l .px{width:14px;height:auto;margin-right:6px;vertical-align:-1px}
+/* v6: the Path */
+.good-t{color:var(--ok)}
+.path-l{width:100%;margin-top:10px;padding:8px 0 0;border:0;border-top:1px solid var(--rule);background:none;color:var(--fg);font-size:13px;text-align:left;gap:8px}
+.path-l .px{width:14px;height:auto;margin-right:6px;vertical-align:-1px}
+.path-l .chev{display:inline-flex}
+.tag.t-ahead{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 50%,transparent)}
+.pstream{margin-bottom:8px}
+.pstream .small{overflow-wrap:anywhere}
