@@ -688,3 +688,8 @@ input:not([type=checkbox]):not([type=radio]),select{min-height:44px}
 .srt-dock{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .n2p .n2g{margin:6px 0 8px;font-size:15px;line-height:1.4;overflow-wrap:anywhere}
 .n2p .qsec{margin-top:10px}
+.jpq{padding:8px 10px}
+.jpq .quiet-row{margin:0}
+.jps-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.jps-row .btn{min-height:44px}
+.jps-bar{margin-top:8px;gap:8px}
