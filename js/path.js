@@ -15,7 +15,7 @@ export const STREAMS = [
   { id: "mental", label: "Mental Math", mins: 15 },
   { id: "case", label: "Case", mins: 30 },
   { id: "aptitude", label: "Aptitude", mins: 30 },
-  { id: "japanese", label: "Japanese", mins: 45 },
+  // v8: Japanese left the Path. It runs from the N2 plan in any free gap (Study → Japanese); its old records stay.
   { id: "accounting", label: "Accounting", mins: 30 },
   { id: "sapmurex", label: "SAP/Murex", mins: 45 },
   { id: "apps", label: "Applications", mins: 45 },
@@ -69,7 +69,7 @@ const logOf = s => live("path").filter(r => r.stream === s && !r.sun && r.kind !
 export const pos = s => logOf(s).reduce((a, r) => Math.max(a, r.idx + 1), 0);
 export const item = (s, idx) => (WEEK[s] || [])[idx] || null;
 export const length = s => (WEEK[s] || []).length;
-export const pathTasks = () => live("tasks").filter(k => k.path);
+export const pathTasks = () => live("tasks").filter(k => k.path && stream(k.path.stream));
 // An item started with Go ahead, while its time runs (plus 30 min to report).
 export function running(now = new Date()) {
   const t = E.ymd(now), m = now.getHours() * 60 + now.getMinutes();
@@ -109,8 +109,11 @@ function taskFor(s, idx, t, extra = {}) {
 }
 // Run on open and every minute. Returns true when anything changed.
 export function issue(t = E.today()) {
-  if (!ready() || !started(t)) return false;
+  if (!ready()) return false;
   let changed = false;
+  // v8: an unfinished item from a stream that left the Path (Japanese) is withdrawn; finished ones stay.
+  for (const k of live("tasks")) if (k.path && !stream(k.path.stream) && !k.done) { remove("tasks", k.id); changed = true; }
+  if (!started(t)) return changed;
   if (isRest(t)) return false;
   // A Sunday item is for its Sunday only.
   for (const k of pathTasks()) if (k.path.sun && !k.done && k.due < t) { remove("tasks", k.id); changed = true; }
@@ -179,10 +182,10 @@ export function zetamac() {
 }
 
 /* ---------- Gate Tests (v6 §8): after every 3rd Arc ---------- */
-export const TESTED = ["case", "aptitude", "japanese", "accounting", "sapmurex"];
+export const TESTED = ["case", "aptitude", "accounting", "sapmurex"];
 export const GATE_EVERY = 3 * ARC, GATE_Q = 15, GATE_PASS = 0.7, RETAKE_MS = 24 * 3600e3, XP_GATE = 60, XP_GATE_TOP = 30;
 // Question banks written so far (data/path/gates/<stream>-<n>.json). A gate without a bank doesn't block.
-export const BANKS = { case: [1], aptitude: [1], japanese: [1], accounting: [1], sapmurex: [1] };
+export const BANKS = { case: [1], aptitude: [1], accounting: [1], sapmurex: [1] };
 const attempts = (s, g) => live("path").filter(r => r.kind === "gate" && r.stream === s && r.gate === g);
 export const gatePassed = (s, g) => attempts(s, g).some(r => r.passed);
 // The Gate holding this stream, if any. retakeAt: when a failed Gate opens again.
@@ -238,7 +241,6 @@ export function rest(d = E.today()) {
 export const FIXED = [
   { id: "boki3", name: "Boki 3級 CBT", date: "2026-12-12", stream: "accounting" },
   { id: "boki2", name: "Boki 2級 CBT", date: "2027-05-29", stream: "accounting" },
-  { id: "n3", name: "JLPT N3", date: "2027-07-04", stream: "japanese" },
 ];
 // Items the plan has done before the date, against when this stream gets there at one item a working day.
 export function projection(m, t = E.today()) {

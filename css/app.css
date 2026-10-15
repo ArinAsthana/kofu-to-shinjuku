@@ -656,3 +656,33 @@ input:not([type=checkbox]):not([type=radio]),select{min-height:44px}
 .rv-page{display:flex;flex-direction:column;min-height:calc(100dvh - 140px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
 .rv-page>.rv-dock{margin-top:auto}
 .quiet-links button::before{content:none}
+/* ---------- v8 Lexicon ---------- */
+.pills.seg{width:100%;display:grid;grid-template-columns:1fr 1fr}
+.lvchips{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:6px;margin-bottom:10px}
+.lvchip{background:var(--ink);color:var(--paper);border:1.5px solid rgba(242,239,232,.2);padding:8px 8px 6px;min-height:56px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left}
+.lvchip.on{border-color:var(--paper)}
+.lvchip b{font:700 14px var(--mono)}
+.lvchip .mono{font-size:13px;color:rgba(242,239,232,.7)}
+.lvbar{display:flex;width:100%;height:4px;background:rgba(242,239,232,.15);margin-top:4px}
+.lvbar i{display:block;height:100%}.lvbar .k{background:#B6F36A}.lvbar .l{background:#FF3B2F}
+.lexbar .pills.st{width:100%;margin-bottom:8px}
+.lexbar input{width:100%}
+.lexlist{display:grid;gap:4px;margin-top:10px}
+.lexrow{background:var(--ink);color:var(--paper);display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:4px 10px 4px 0}
+.lexrow.is-off .lexmain{opacity:.5}
+.lexrow.sel{outline:2px solid #FF3B2F;outline-offset:-2px}
+.lexmain{border:0;background:none;color:inherit;text-align:left;padding:10px 12px;min-height:52px;display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;min-width:0}
+.lexmain .lw{font-size:20px;font-weight:700}
+.lexmain .lr{font-size:14px;color:rgba(242,239,232,.75);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lexmain .lm{grid-column:1/-1;font-size:14px;color:rgba(242,239,232,.85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lexdet{grid-column:1/-1;padding:0 12px 10px}
+.lexck{width:44px;height:44px;display:grid;place-items:center;border:1.5px solid rgba(242,239,232,.4)}
+.sw{width:52px;height:32px;border:0;background:rgba(242,239,232,.2);position:relative;flex:none;margin:6px 0;cursor:pointer}
+.sw i{position:absolute;top:4px;left:4px;width:24px;height:24px;background:var(--paper);transition:left .15s}
+.sw.on{background:#FF3B2F}.sw.on i{left:24px}
+.sw::before{content:"";position:absolute;inset:-8px}
+.fc-read{font-size:20px;margin-top:10px;color:rgba(242,239,232,.85)}
+.fc-ex{margin-top:10px;font-size:16px;line-height:1.6}
+.fc-front.kanji{font-size:64px;line-height:1.1}
+.srt-card{touch-action:pan-y;user-select:none;min-height:220px;cursor:pointer}
+.srt-dock{display:grid;grid-template-columns:1fr 1fr;gap:8px}

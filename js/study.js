@@ -106,6 +106,7 @@ export function assess() {
     const d = E.addDays(t, -i);
     if (isRest(d)) continue; // a rest token covers the whole day
     for (const o of questOcc(d)) {
+      if (subjectOf(o.b) === "jp") continue; // v8: Japanese has no block and no penalty; it fits into any gap
       const end = absMs(d, o.e);
       if (end <= from || now < end + grace) continue;
       const id = "pen-" + d + "-" + o.b.id, ex = S.penalties.find(r => r.id === id), done = completed(o);
