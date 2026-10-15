@@ -15,6 +15,7 @@ import * as Sy from "./system.js";
 import * as Cl from "./classes.js";
 import * as Al from "./alarms.js";
 import * as Us from "./usage.js";
+import * as Pa from "./path.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -79,17 +80,18 @@ const openTabs = () => TABS.filter(t => Sy.has(t[3]));
 // Old links still land somewhere: the Dungeon is a Home state, Status is Profile, topics live in Study, People is a tab.
 const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
 // The stage each area needs. Locked areas are invisible, so a link to one lands on Home.
-const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, cards: 3, jlpt: 3, people: 4 };
+// v6: flashcards open at any stage and outside blocks.
+const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 3, people: 4 };
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
-const TAB_OF = { home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
+const HEAD_PX = { path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { path: vPath, home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -101,7 +103,7 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : milestoneHtml(cer.ms)) : "");
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.awake ? awakeHtml() : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
@@ -144,15 +146,16 @@ document.addEventListener("toggle", ev => {
 // Today's quests. Event quests = the to-do list planned for today (penalty quests first). Normal quests = the daily habits.
 function todayQuests(t = E.today()) {
   const p = P.plan();
-  const open = live("tasks").filter(k => !k.done && !k.trial && p.at.get(k.id)?.date === t).map(k => ({ k, at: p.at.get(k.id) }));
-  const doneT = live("tasks").filter(k => k.done && !k.trial && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }));
+  const open = live("tasks").filter(k => !k.done && !k.trial && !k.path && p.at.get(k.id)?.date === t).map(k => ({ k, at: p.at.get(k.id) }));
+  const doneT = live("tasks").filter(k => k.done && !k.trial && !k.path && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }));
+  const path = Pa.today(t); // v6: the Path's items, shown as their own line
   // Trials: placed today or due by today, plus any cleared today. They get their own section at the top.
   const trials = [...Soc.openTrials().filter(k => p.at.get(k.id)?.date === t || (k.due && k.due <= t)).map(k => ({ k })),
     ...Soc.trials().filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }))];
   const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
   const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
   const call = live("xpEvents").some(e => e.ref === "call" && E.ymd(new Date(e.ts)) === t);
-  return { trials, events, habits, call, done: doneT.length + trials.filter(x => x.done).length + habits.filter(x => x.on).length + (call ? 1 : 0), total: trials.length + events.length + habits.length + (call ? 1 : 0) };
+  return { trials, events, habits, call, path, done: doneT.length + path.done + trials.filter(x => x.done).length + habits.filter(x => x.on).length + (call ? 1 : 0), total: trials.length + events.length + path.total + habits.length + (call ? 1 : 0) };
 }
 const habitRow = ({ h, on }) => `<div class="q ${on ? "done" : ""}">
   <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
@@ -222,6 +225,13 @@ function homeHero(hs, t) {
   if (hs.k === "comeback") return `<div class="hero"><span class="hdr">${px("flame")} Welcome back</span><div class="now-t">Comeback quest</div>
       <div class="small muted">Clear any one quest today for +${Sy.COMEBACK_XP} XP. Missed days don't pile up.</div>
       <div class="btns"><button class="btn go" data-act="questsall">Pick a quest</button></div></div>`;
+  // v6: an item started with Go ahead is the Dungeon until it's reported.
+  const ga = Pa.running();
+  if (ga) { const [h, m] = ga.pin.start.split(":").map(Number), st = h * 60 + m;
+    return `<div class="hero"><div class="row between"><span class="hdr">${px("sword")} Path · ${esc(Pa.stream(ga.path.stream).label)}</span><span class="hdr">${nm < st + ga.mins ? P.dur(st + ga.mins - nm) + " left" : "Report"}</span></div>
+      <div class="now-t" style="font-size:19px">${esc(pathText(ga))}</div>
+      <div class="bar"><i style="width:${Math.min(1, Math.max(0, (nm - st) / ga.mins)) * 100}%;background:var(--sys)"></i></div>
+      <div class="btns"><button class="btn go" data-act="taskdone" data-id="${ga.id}">Report</button><button class="btn" data-act="go" data-id="path">Path</button></div></div>`; }
   // Next block: what's on now (if anything) and what's next.
   const nn = P.nowNext(), cur = nn.now, pct = cur ? Math.min(1, Math.max(0, (nm - cur.s) / Math.max(1, cur.e - cur.s))) : 0;
   const nowTitle = wd ? "Close the day" : cur ? (cur.type === "task" ? cur.k.title : cur.b.title) : "Free time";
@@ -249,6 +259,55 @@ function usageLine() {
   if (m == null) return "";
   return `<div class="usage-l row between small ${m > lim ? "bad-t" : m > lim * 0.8 ? "warn" : ""}"><span>${px("eye")} Phone ${j === "ok" ? "· cleared" : j === "over" ? "· over" : ""}</span><span class="mono">${m} / ${lim} min</span></div>`;
 }
+/* ---------- v6: the Path ---------- */
+// Home shows one line: today's count and the ahead/behind figure. Before the start, the countdown.
+function pathStand() {
+  const m = Pa.summary();
+  return m.behind ? `<span class="bad-t">${esc(m.stream.label)} ${m.behind} behind</span>` : m.ahead ? `<span class="good-t">+${m.ahead} day${m.ahead === 1 ? "" : "s"} ahead</span>` : `<span class="muted">On schedule</span>`;
+}
+function pathLine(q) {
+  if (!Pa.ready()) return "";
+  if (!Pa.started()) { const n = Pa.daysToStart();
+    return `<button class="path-l row between small" data-act="go" data-id="path"><span>${px("flag")} The System awakens in ${n} day${n === 1 ? "" : "s"}</span><span class="row" style="gap:6px">${pathStand()}<span class="chev">${ic("right")}</span></span></button>`; }
+  return `<button class="path-l row between small" data-act="go" data-id="path"><span>${px("flag")} Path today <b class="mono">${q.path.done}/${q.path.total}</b></span><span class="row" style="gap:6px">${pathStand()}<span class="chev">${ic("right")}</span></span></button>`;
+}
+const pathText = k => k.title.slice(Pa.stream(k.path.stream).label.length + 3);
+const pathRow = k => `<div class="q ${k.done ? "done" : ""}">
+  <button class="bx" data-act="${k.done ? "taskundo" : "taskdone"}" data-id="${k.id}" aria-pressed="${!!k.done}" aria-label="${esc(k.title)} done">${k.done ? ic("check") : ""}</button>
+  <div class="grow"><div class="t">${esc(Pa.stream(k.path.stream).label)}${k.path.sun ? " · Sunday" : ""}</div><div class="small muted">${esc(pathText(k))}</div></div>
+  <div class="xp">${P.dur(k.mins)}</div></div>`;
+function pathDoneHtml(id) {
+  const k = live("tasks").find(x => x.id === id); if (!k || !k.path) return `<p class="empty">Not found.</p>`;
+  const ahead = !k.path.sun && E.today() < Pa.schedDate(k.path.idx);
+  return `<div class="hdr">${px("flag")} Path · ${esc(Pa.stream(k.path.stream).label)}</div><h3 style="margin:6px 0">${esc(pathText(k))}</h3>
+    ${ahead ? `<p class="small good-t">Ahead of schedule: +50% XP if it's Done.</p>` : ""}
+    ${k.path.stream === "mental" && !k.path.sun ? `<label class="f">Zetamac score (best of the two runs)<input id="zetIn" type="number" inputmode="numeric" placeholder="${Pa.zetamac()?.last ?? ""}"></label>` : ""}
+    <div class="btns"><button class="btn go" data-act="pathfin" data-id="${k.id}|done">Done</button><button class="btn" data-act="pathfin" data-id="${k.id}|partly">Partly</button></div>
+    <p class="tiny muted">Partly: half XP, and the stream still moves on. Not done: leave it. It waits for tomorrow and nothing else piles up.</p>`;
+}
+function vPath() {
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Job readiness</div><h1>The Path</h1></div></header>`;
+  if (!Pa.ready()) return `${head}<p class="empty">The Path couldn't load. Check the connection and reopen.</p>`;
+  const n = Pa.daysToStart(), z = Pa.zetamac();
+  const intro = Pa.started() ? `<div class="row between small" style="margin:4px 2px 10px"><span class="muted">One item per stream a day. Finish early and the timeline moves up.</span></div>`
+    : sysBox(`The System awakens Mon 19 Oct, 04:00.`, `${n} day${n === 1 ? "" : "s"} left. Until then nothing counts against you. Anything you finish now puts you ahead: +50% XP.`);
+  const rows = Pa.STREAMS.filter(s => Pa.length(s.id)).map(s => {
+    const k = Pa.openTask(s.id), st = Pa.standing(s.id), p = Pa.pos(s.id), it = k ? { t: pathText(k) } : Pa.item(s.id, p);
+    const badge = st.behind ? `<span class="tag t-pen">${st.behind} behind</span>` : st.ahead ? `<span class="tag t-ahead">+${st.ahead} ahead</span>` : "";
+    return `<div class="panel pstream"><div class="row between"><b>${esc(s.label)}</b><span class="row" style="gap:6px">${badge}<span class="small muted">${P.dur(s.mins)}</span></span></div>
+      <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : "Stream complete."}</div>
+      ${s.id === "mental" && z ? `<div class="tiny muted" style="margin-bottom:6px">Zetamac best ${z.best} · average ${z.avg}</div>` : ""}
+      ${k ? `<div class="btns"><button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button></div>` : it ? `<div class="btns"><button class="btn sm" data-act="pathahead" data-id="${s.id}">Go ahead</button></div>` : ""}</div>`;
+  }).join("");
+  const due = K.dueCount();
+  return `${head}${intro}${rows}
+    <button class="quiet-row" data-act="go" data-id="cards"><span class="grow">Flashcard decks${due ? ` · ${due} due` : ""}</span><span class="chev">${ic("right")}</span></button>`;
+}
+const awakeHtml = () => `<div class="milestone" role="dialog" aria-label="The Path begins"><div class="ms-in">
+  <div class="hdr">System · Awakening</div>${px("flag", "ms-px")}<h2 class="ms-t">The Path begins</h2><p class="muted">Seven streams, one item each a day. Finish early and the timeline moves up with you, for +50% XP. Leave one and it waits for tomorrow. From today, skipping has a cost again.</p>
+  <button class="btn primary block" data-act="awake">Open the Path</button></div></div>`;
+
 // v5.3: a small snapshot for the Android home-screen widget (WidgetPlugin.java). Sent only when it changes.
 let widgetSig = "", widgetT = null;
 function pushWidget() {
@@ -260,7 +319,7 @@ function pushWidget() {
     const now = pens.length ? { label: "PENALTY QUEST", title: penWhat(pens[0]).replace(/&[^;]+;/g, ""), time: "" }
       : nn.now ? { label: "NOW", title: it(nn.now), time: `${P.toHM(nn.now.s)}–${P.toHM(nn.now.e)}` }
       : nn.next ? { label: "NEXT", title: it(nn.next), time: P.toHM(nn.next.s) } : { label: "SYSTEM", title: "Nothing left today", time: "" };
-    const quests = [...q.trials.map(e => ({ t: e.k.title, done: !!e.done })), ...q.events.map(e => ({ t: e.k.title, done: !!e.done })), ...q.habits.map(x => ({ t: x.h.name, done: x.on }))]
+    const quests = [...q.trials.map(e => ({ t: e.k.title, done: !!e.done })), ...q.path.list.map(k => ({ t: k.title, done: !!k.done })), ...q.events.map(e => ({ t: e.k.title, done: !!e.done })), ...q.habits.map(x => ({ t: x.h.name, done: x.on }))]
       .sort((a, b) => a.done - b.done).slice(0, 3);
     const m = Us.available() && Us.isGranted() ? Us.today() : null;
     const snapshot = { now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "" };
@@ -277,13 +336,14 @@ function questsPanel(q) {
   const top = items.slice(0, 3);
   return `<div class="panel quests"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
     ${top.length ? `<ul class="top3">${top.map(([x, tg]) => `<li><span class="grow">${esc(x)}</span>${tg}</li>`).join("")}</ul>` : `<div class="small muted">All cleared today.</div>`}
-    ${usageLine()}
+    ${pathLine(q)}${usageLine()}
     <div class="btns"><button class="btn sm" data-act="questsall">${showAllQuests ? "Hide" : `Show all (${q.total})`}</button></div>
     ${showAllQuests ? questsAll(q) : ""}</div>`;
 }
 function questsAll(q) {
   return `<div class="qall">${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
     ${q.trials.length ? `<div class="qsec trial">${px("flag")} Trial <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}
+    ${q.path.total ? `<div class="qsec">Path <span>${q.path.done}/${q.path.total}</span></div><div class="list">${q.path.list.map(pathRow).join("")}</div>` : ""}
     <div class="qsec">Today <span>${q.events.length ? `${q.events.filter(e => e.done).length}/${q.events.length}` : "nothing planned"}</span></div>${q.events.length ? `<div class="list">${q.events.map(eventRow).join("")}</div>` : ""}
     <div class="qsec">Daily <span>${q.habits.filter(x => x.on).length}/${q.habits.length}</span></div><div class="list">${q.habits.map(habitRow).join("")}</div>
     <div class="btns"><button class="btn sm" data-act="brief">Today's brief</button></div></div>`;
@@ -366,7 +426,7 @@ function sheetHtml(k) {
   const closeBtn = `<button class="rbtn" data-act="sheet" aria-label="Close">${ic("x")}</button>`;
   // Edit sheets: forms and actions for the tapped item.
   const edit = { task: () => arg ? taskActHtml(arg) : taskFormHtml(), block: () => blockFormHtml(blockForm && blockForm !== "new" ? live("blocks").find(b => b.id === blockForm) : blockNew),
-    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg), moment: momentHtml, rate: () => rateHtml(arg), offer: offerHtml }[kind];
+    add: addHtml, person: personFormHtml, trial: () => trialSheetHtml(arg), battle: () => battleHtml(arg), moment: momentHtml, rate: () => rateHtml(arg), offer: offerHtml, pathdone: () => pathDoneHtml(arg) }[kind];
   return edit ? `<div class="modal-scrim" data-act="sheet"></div><div class="sheet" role="dialog"><div class="row between sheet-h"><span></span>${closeBtn}</div>${edit()}</div>` : "";
 }
 // Every gear opens the one Settings page, at the section for the screen it sits on.
@@ -378,6 +438,7 @@ function ceremony() {
   if (Sy.has(1) && ["study", "body"].includes(homeState().k)) return null; // never during a Dungeon
   const u = Sy.pendingUnlock(); if (u) return { unlock: u };
   const m = Sy.nextMilestone(); if (m) return { ms: m };
+  if (Pa.ready() && Pa.started() && !S.settings.pathAwoke) return { awake: true };
   if (Al.needsAsk()) return { alarms: true };
   if (Us.needsAsk()) return { usage: true };
   if (Sy.has(2) && E.parse(E.today()).getDay() === 0 && E.moneyDue() && lsGet(MONEYWIN_KEY) !== E.today()) return { money: true };
@@ -419,6 +480,7 @@ function briefHtml() {
     ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} ${penWhat(p)} · shop locked until done</div>`).join("")}` : ""}
     ${blocks.length ? `<div class="bsec">Blocks</div>${blocks.map(o => { const subj = St.subjectOf(o.b), top = subj && St.current(subj);
       return `<div class="bl"><span class="mono">${span(o.s, o.e)}</span> <b>${esc(o.b.title)}</b>${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}</div>`; }).join("")}` : ""}
+    ${q.path.total - q.path.done ? `<div class="bsec">Path</div><div class="bl">${q.path.total - q.path.done} item${q.path.total - q.path.done === 1 ? "" : "s"} · ${P.dur(q.path.list.filter(k => !k.done).reduce((x, k) => x + k.mins, 0))} · ${pathStand()}</div>` : Pa.ready() && !Pa.started() ? `<div class="bsec">Path</div><div class="bl">The System awakens in ${Pa.daysToStart()} day${Pa.daysToStart() === 1 ? "" : "s"}</div>` : ""}
     <div class="bsec">Today</div>${q.events.filter(e => !e.done).map(({ k, at }) => `<div class="bl"><span class="mono">${span(at.s, at.e)}</span> ${esc(k.title)}</div>`).join("") || `<div class="bl muted">No to-dos planned today.</div>`}
     <div class="bsec">Daily</div><div class="bl">${q.habits.map(({ h }) => esc(h.name)).join(" · ")}</div>
     ${nx ? `<div class="bsec">Sealed</div><div class="bl">${px("lock")} ${esc(Sy.STAGES[Sy.stage()].hint)}</div>` : ""}
@@ -518,6 +580,7 @@ function tickPomo() {
 }
 function runAssess() {
   if (Sy.ensureLoanBill()) save();
+  if (Pa.issue()) save();
   const fresh = [...(Sy.has(1) ? St.assess() : []), ...(Sy.has(4) ? Soc.assess() : [])];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
@@ -1084,7 +1147,7 @@ function vCards([sub, a]) {
   const head = `${back}<header class="top"><div><div class="hdr">Study</div><h1>Flashcards</h1></div>${gear("dungeon")}</header>`;
   const rev = `<div class="panel dgate ${g.open && q.length ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Due now</span><h3 style="margin:2px 0 4px">${q.length} card${q.length === 1 ? "" : "s"}</h3>
     <div class="small muted">${done.n ? `${done.n} reviewed today, ${Math.round(done.ok / done.n * 100)}% right` : "None reviewed today"}</div></div>
-    ${g.open ? `<button class="btn ${q.length ? "go" : ""}" data-act="nav" data-id="cards/review" ${q.length ? "" : "disabled"}>Review</button>` : `<span class="small muted">${ic("lock", "inl")} ${g.next ? P.toHM(g.next.s) : "Closed"}</span>`}</div></div>`;
+    ${q.length ? `<button class="btn go" data-act="nav" data-id="cards/review">Review</button>` : `<button class="btn" data-act="learnmore">Learn 10 new</button>`}</div></div>`;
   const deckRows = decks.map(d => { const all = K.inDeck(d), due = K.dueCount(d);
     return `<button class="panel tbtn row between" style="width:100%;margin:0 0 8px" data-act="go" data-id="cards/deck/${encodeURIComponent(d)}"><span class="grow" style="text-align:left"><b>${esc(d)}</b><div class="small muted">${all.length} card${all.length === 1 ? "" : "s"}${K.flipOnly(d) ? " · flip only until it has 4" : ""}</div></span><span class="small ${due ? "" : "muted"}">${due} due</span></button>`; }).join("");
   const bulk = bulkOpen ? `<div class="panel" id="bulkForm"><h3>Bulk paste</h3><p class="tiny muted">One card per line: front | back. A tab works too, so you can paste two spreadsheet columns.</p>
@@ -1140,13 +1203,12 @@ function fcFace(c, showBack) {
 function vReview() {
   const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Dungeon" : "Flashcards"}</button>`;
   const g = St.focusGate();
-  if (!g.open) return `${back}<h1>Flashcards</h1>${gateClosedHtml(g, "Reviews")}`;
-  const q = K.queue(), done = K.reviewedToday();
+  const q = K.queue(), done = K.reviewedToday(); // v6: open anytime, not only inside a block
   let c = rv && live("cards").find(x => x.id === rv.id);
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), opts: K.mode(c) === "mcq" ? K.options(c) : null, flip: false, pick: null } : null; }
   const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
   if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
-    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="nav" data-id="focus">Back to the block</button><button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
+    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="learnmore">Learn 10 new</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
   const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
     const answered = rv.pick != null, right = c.back.trim();
@@ -1402,7 +1464,7 @@ function taskActHtml(id) {
       <button class="act" data-act="taskdone" data-id="${k.id}">${ic("check")}<span>Done</span></button>
       ${at ? `<button class="act" data-act="${at.pinned ? "unpin" : "pin"}" data-id="${k.id}">${ic("pin")}<span>${at.pinned ? "Unpin (let it move)" : "Pin to this slot"}</span></button>` : ""}
       <button class="act" data-act="taskform" data-id="${k.id}">${ic("edit")}<span>Edit or move</span></button>
-      ${k.penalty ? "" : `<button class="act danger" data-act="deltask" data-id="${k.id}">${ic("x")}<span>Delete</span></button>`}
+      ${k.penalty || k.path ? "" : `<button class="act danger" data-act="deltask" data-id="${k.id}">${ic("x")}<span>Delete</span></button>`}
     </div>`;
 }
 // The one + button: To-do, Block, Moment, with the current tab's most likely pick first.
@@ -1885,7 +1947,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v5.3 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.0 · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2180,6 +2242,16 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "alarmtoggle": Al.toggle(id); return render();
     case "moneywin": try { localStorage.setItem(MONEYWIN_KEY, E.today()); } catch (e) {} ceremonyDone = true; if (id) { entering = true; return go(id); } return render();
     case "milestone": Sy.seeMilestone(id); ceremonyDone = true; save(); return render();
+    case "pathfin": {
+      const [tid, res] = id.split("|"), k = live("tasks").find(x => x.id === tid); if (!k) return;
+      const z = num(($("#zetIn") || {}).value); sheet = null;
+      const g = Pa.finish(k, res, z); save(); if (g) announce([g]); else toast("Done"); return render();
+    }
+    case "pathahead": {
+      const k = Pa.goAhead(id); if (!k) return toast("Finish the open item first");
+      save(); toast(`Dungeon open: ${Pa.stream(id).label}, ${P.dur(k.mins)}`); entering = true; return go("home");
+    }
+    case "awake": S.settings.pathAwoke = E.today(); touchSettings(); ceremonyDone = true; save(); entering = true; return go("path");
     case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
     case "skipstage": { const n = +($("#skipStage") || {}).value; if (!confirm(`Set the System to stage ${n}? Use this for testing.`)) return; Sy.skipTo(n); save(); toast("Stage " + n); return render(); }
     case "briefclose": briefOpen = false; try { localStorage.setItem(BRIEF_KEY, E.today()); } catch (e) {} return render();
@@ -2229,13 +2301,15 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "taskdone": {
       const k = live("tasks").find(x => x.id === id); if (!k) return;
       if (k.trial) { sheet = "battle:" + id; return render(); } // a trial closes through its Battle Log
+      if (k.path && !k.done) { sheet = "pathdone:" + id; return render(); } // Done or Partly (and the Zetamac score)
       if (sheet && sheet.startsWith("task")) sheet = null;
       put("tasks", { ...k, done: true, doneAt: Date.now() });
       if (k.penalty) { save(); toast(St.openPenalties().length ? "Penalty quest cleared" : "Penalty cleared. Shop unlocked."); return render(); }
       const ref = "task:" + id, gains = live("xpEvents").some(e => e.ref === ref) ? [] : [E.gainXP("task", ref, k.title)];
       save(); announce(gains); if (!gains.length) toast("Done"); return render();
     }
-    case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return; E.revokeXP("task:" + id); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
+    case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return;
+      if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
     case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
     case "taskform": if (!id) { taskForm = null; sheet = null; return render(); } taskForm = id; sheet = "task:" + id; return render();
     case "tipx": { const t = tipsSeen(); t[id] = 1; try { localStorage.setItem(TIP_KEY, JSON.stringify(t)); } catch (e) {} return render(); }
@@ -2333,6 +2407,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       rv.pick = +id; announce(K.answerMcq(c, rv.opts[+id] === c.back.trim())); save(); return render();
     }
     case "rvnext": rv = null; return render();
+    case "learnmore": { const n = K.learnMore(10); if (!n) return toast("No new cards left. Add some first"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
     case "rvflip": if (rv) rv.flip = true; return render();
     case "rvgrade": {
       const c = rv && live("cards").find(x => x.id === rv.id); if (!c) return;
@@ -2513,6 +2588,7 @@ function renameStyle() {
 (async function boot() {
   await load();
   await Cl.loadIndex();
+  await Pa.load(); if (Pa.issue()) save();
   renameStyle();
   if (Soc.migrateTraits()) save();
   // First 60 seconds: one quest is already done, so the bar has moved before anything else happens.

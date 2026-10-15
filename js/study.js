@@ -6,6 +6,7 @@ import { SUBJECTS, STUDY, HABITS } from "./data.js";
 import * as E from "./engine.js";
 import * as P from "./planner.js";
 import * as Cl from "./classes.js";
+import { START_MS } from "./path.js";
 
 const st = () => S.settings.study || STUDY;
 const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
@@ -96,8 +97,9 @@ export const openPenalties = () => live("penalties").filter(p => { const k = pen
 // Re-entry (v4): a day inside a run of 2+ empty days (no quest done) earns no penalty, so coming back never starts with a pile.
 const doneOn = d => live("habitLog").some(h => h.date === d) || live("tasks").some(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === d);
 const away = (d, t) => !doneOn(d) && (!doneOn(E.addDays(d, -1)) || (E.addDays(d, 1) < t && !doneOn(E.addDays(d, 1))));
+// v6: no penalty for anything before the Path starts (START_MS).
 export function assess() {
-  const s = st(), now = Date.now(), from = s.from || now, grace = (s.grace ?? 60) * 60000, t = E.today(), fresh = [];
+  const s = st(), now = Date.now(), from = Math.max(s.from || now, START_MS), grace = (s.grace ?? 60) * 60000, t = E.today(), fresh = [];
   // A make-up quest left past its deadline lapses quietly: the task goes, the record stays, nothing stacks.
   for (const p of openPenalties()) { const k = penTask(p); if (k && k.due && k.due < t) { remove("tasks", k.id); put("penalties", { ...p, lapsed: true }); } }
   for (let i = 7; i >= 0; i--) {

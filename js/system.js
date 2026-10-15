@@ -6,6 +6,7 @@ import { S, live, put } from "./store.js";
 import * as E from "./engine.js";
 import * as J from "./jlpt.js";
 import * as Cl from "./classes.js";
+import { START } from "./path.js";
 
 // Hidden target: family spending × 25 (the 4% rule). ¥130M is the default until a country is chosen.
 export const FI = { target: 130000000, born: "2004-01-14", finalGate: "2049-01-14", perYear: 3750000, realReturn: 0.05 };
@@ -186,8 +187,9 @@ export const STAGES = [
 const st5 = () => { const x = sys(); if (x.stage == null) x.stage = 0; x.unlockedAt = x.unlockedAt || {}; if (!x.unlockedAt[0]) x.unlockedAt[0] = E.today(); return x; };
 export const stage = () => st5().stage;
 export const has = n => stage() >= n;
+// v6: counting restarts when the Path starts (Mon 19 Oct); the stage already reached stays.
 export function activeDays() {
-  const from = st5().unlockedAt[0];
+  const from = st5().unlockedAt[0] > START ? st5().unlockedAt[0] : START;
   return new Set([...live("habitLog").map(h => h.date), ...live("tasks").filter(k => k.done && k.doneAt).map(k => E.ymd(new Date(k.doneAt)))].filter(d => d >= from)).size;
 }
 const trialCleared = () => live("tasks").some(k => k.trial && k.done);
