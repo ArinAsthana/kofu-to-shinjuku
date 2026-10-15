@@ -74,6 +74,8 @@ const kvPut = (k, v) => tx("kv", "readwrite", s => s.put(v, k));
 const kvDel = k => tx("kv", "readwrite", s => s.delete(k));
 const kvKeys = () => tx("kv", "readonly", s => s.getAllKeys());
 
+// v8: the imported Japanese decks (static content, on this phone only, never synced or exported).
+export const lexKv = { get: () => kvGet("lexicon"), put: v => kvPut("lexicon", v), del: () => kvDel("lexicon") };
 export const photos = {
   put: (id, blob) => tx("photos", "readwrite", s => s.put(blob, id)),
   get: id => tx("photos", "readonly", s => s.get(id)),

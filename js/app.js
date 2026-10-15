@@ -18,6 +18,7 @@ import * as Us from "./usage.js";
 import * as Pa from "./path.js";
 import * as Ap from "./apps.js";
 import * as Up from "./update.js";
+import * as Lx from "./lexicon.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -87,15 +88,15 @@ const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study:
 // v6: flashcards open at any stage and outside blocks.
 const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 3, people: 4 };
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
-const TAB_OF = { path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
+const HEAD_PX = { lex: "scroll", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -1329,26 +1330,95 @@ function vCardEdit(id) {
     <p class="tiny muted">Images and recordings stay on this phone. Export them with the backup file in More.</p>
     <div class="btns"><button class="btn go" data-act="cardsave">Save</button><button class="btn" data-act="cardcancel">Cancel</button>${c ? `<button class="btn danger" data-act="carddel">Delete</button>` : ""}</div></div>`;
 }
-function fcFace(c, showBack) {
+function fcFace(c, showBack, noSay) {
+  if (c.lex) return lexFace(c, showBack, noSay);
   const ja = K.jaText(c);
   return `${c.img ? `<img class="fc-img" data-photo="${c.img}" alt="">` : ""}<div class="fc-front ${K.JA_RE.test(c.front) ? "ja" : ""}">${esc(c.front)}</div>
     ${showBack ? `<div class="fc-back ${K.JA_RE.test(c.back) ? "ja" : ""}">${esc(c.back)}</div>` : ""}
     <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">${ja ? `<button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button>` : ""}${c.aud && (showBack || !ja) ? `<audio controls data-photo="${c.aud}"></audio>` : ""}</div>`;
 }
+/* ================= LEXICON (v8) ================= */
+// Every imported word and kanji, by level, each with an on/off switch. Off = "I know it": never asked.
+let lx = { type: "vocab", level: null, st: "all", q: "", n: 60, sel: null, open: null };
+const LX_ST = [["all", "All"], ["new", "New"], ["learning", "Learning"], ["known", "Known"], ["off", "Off"]];
+function lexImportHtml() {
+  return `<div class="panel"><h3>Import your decks</h3><p class="small muted">Open <b>the-arin-japanese-decks.json</b> from the project files. It stays on this phone; only your progress syncs. Import it once on each phone you use.</p>
+    <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" accept="application/json,.json" data-ch="leximport" hidden></label></div></div>`;
+}
+function vLex() {
+  const back = `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} Japanese</button>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Japanese</div><h1>Lexicon</h1></div>${Lx.ready() ? `<button class="btn sm" data-act="lexsel">${lx.sel ? "Done" : "Select"}</button>` : ""}</header>`;
+  if (!Lx.ready()) return head + lexImportHtml();
+  const m = Lx.recs(), lv = Lx.LEVELS[lx.type];
+  if (lx.level && !lv.includes(lx.level)) lx.level = null;
+  const chip = l => { const c = Lx.counts(lx.type, l, m), on = lx.level === l;
+    return `<button class="lvchip ${on ? "on" : ""}" data-act="lexlvl" data-id="${l || ""}" aria-pressed="${on}"><b>${l || "All"}</b><span class="mono">${c.all.toLocaleString("en-US")}</span>
+      <i class="lvbar"><i style="width:${(c.known + c.off) / (c.all || 1) * 100}%" class="k"></i><i style="width:${c.learning / (c.all || 1) * 100}%" class="l"></i></i></button>`; };
+  const L = Lx.rows(lx.type, lx.level, lx.st, lx.q, m), shown = L.slice(0, lx.n);
+  const row = e => { const r = m.get(e.id), st = Lx.status(r), off = st === "off", sel = lx.sel && lx.sel.has(e.id), open = lx.open === e.id;
+    return `<div class="lexrow ${off ? "is-off" : ""} ${sel ? "sel" : ""}">
+      <button class="lexmain" data-act="${lx.sel ? "lexpick" : "lexopen"}" data-id="${e.id}"><span class="lw ja">${esc(Lx.face(e))}</span><span class="lr ja">${esc(Lx.reading(e))}</span><span class="lm">${esc(e.meaning || "")}</span></button>
+      ${lx.sel ? `<span class="lexck">${sel ? ic("check") : ""}</span>` : `<button class="sw ${off ? "" : "on"}" role="switch" aria-checked="${!off}" aria-label="Study ${esc(Lx.face(e))}" data-act="lexoff" data-id="${e.id}"><i></i></button>`}
+      ${open ? `<div class="lexdet">${st !== "new" ? `<span class="tag">${st}</span> ` : ""}${e.type === "kanji" ? `${e.examples ? `<div class="ja small">${esc(e.examples).replace(/\n/g, "<br>")}</div>` : ""}` : `${e.ex ? `<div class="ja small">${esc(e.ex)}</div><div class="small muted">${esc(e.exEn || "")}</div>` : ""}`}
+        <div class="btns"><button class="btn sm" data-act="lexsay" data-id="${e.id}">${ic("sound")} Listen</button></div></div>` : ""}</div>`; };
+  const cnt = Lx.counts(lx.type, lx.level, m);
+  return `${head}
+  <div class="pills seg"><button class="pill" data-act="lextype" data-id="vocab" aria-pressed="${lx.type === "vocab"}">Vocabulary</button><button class="pill" data-act="lextype" data-id="kanji" aria-pressed="${lx.type === "kanji"}">Kanji</button></div>
+  <div class="lvchips">${[null, ...lv].map(chip).join("")}</div>
+  <div class="panel lexbar">
+    <div class="pills st">${LX_ST.map(([k, l]) => `<button class="pill" data-act="lexst" data-id="${k}" aria-pressed="${lx.st === k}">${l}${k !== "all" ? ` <span class="mono">${cnt[k]}</span>` : ""}</button>`).join("")}</div>
+    <input type="search" data-ch="lexq" placeholder="Search kanji, kana or English" value="${esc(lx.q)}">
+    ${lx.level && !lx.sel ? `<div class="btns"><button class="btn sm go" data-act="go" data-id="lex/sort/${lx.type}/${lx.level}">Sort ${lx.level} · ${cnt.new}</button><button class="btn sm" data-act="lexlevel" data-id="off">Turn off all ${lx.level}</button></div>` : ""}
+    ${lx.sel ? `<div class="btns"><span class="small grow">${lx.sel.size} selected</span><button class="btn sm" data-act="lexbulk" data-id="off">Turn off</button><button class="btn sm" data-act="lexbulk" data-id="on">Turn on</button><button class="btn sm" data-act="lexshown">Turn off all ${L.length} shown</button></div>` : ""}
+  </div>
+  <div class="lexlist">${shown.map(row).join("") || `<p class="empty">Nothing here.</p>`}</div>
+  ${L.length > shown.length ? `<div class="btns"><button class="btn block" data-act="lexmore">Show more · ${L.length - shown.length} left</button></div>` : ""}`;
+}
+// Sort mode: one card at a time, word only. "I know it" turns it off; "Learn it" keeps it. Undo up to 10.
+let srt = null; // {type, level, ids, i, show, hist:[{id, off}]}
+function vSort(type, level) {
+  const back = `<button class="back" data-act="sortexit">${ic("left")} Lexicon</button>`;
+  if (!Lx.ready()) return back + lexImportHtml();
+  if (!srt || srt.type !== type || srt.level !== level) { const m = Lx.recs(); srt = { type, level, ids: Lx.all(type).filter(e => e.level === level && Lx.status(m.get(e.id)) === "new").map(e => e.id), i: 0, show: false, hist: [] }; }
+  const e = Lx.entry(srt.ids[srt.i]);
+  const head = `${back}<header class="top"><div><div class="hdr">Sort ${esc(level)} · ${srt.i}/${srt.ids.length}</div><h1>Sort</h1></div>${srt.hist.length ? `<button class="btn sm" data-act="sortundo">Undo</button>` : ""}</header>`;
+  if (!e) return head + sysBox(`${level} sorted.`, `${srt.hist.filter(h => h.off).length} turned off as known. The rest come in as new cards, a few a day.`, `<div class="btns"><button class="btn sm primary" data-act="sortexit">Back to the Lexicon</button></div>`);
+  return `<div class="rv-page">${head}<div class="panel fc srt-card" data-act="sortshow">
+    <div class="k">${srt.show ? "" : "Tap to check the answer"}</div><div class="fc-front ja ${type === "kanji" ? "kanji" : ""}">${esc(Lx.face(e))}</div>
+    ${srt.show ? `<div class="fc-read ja">${esc(Lx.reading(e))}</div><div class="fc-back">${esc(e.meaning || "")}</div>` : ""}</div>
+    <p class="small muted" style="text-align:center">Swipe right if you know it, left to learn it.</p>
+    <div class="rv-dock srt-dock"><button class="btn block" data-act="sortpick" data-id="learn">${ic("left")} Learn it</button><button class="btn go block" data-act="sortpick" data-id="know">I know it ${ic("right")}</button></div></div>`;
+}
+function sortPick(know) {
+  if (!srt) return; const id = srt.ids[srt.i]; if (!id) return;
+  const r = live("cards").find(x => x.id === id);
+  srt.hist.push({ id, off: know, was: !!(r && r.off) }); if (srt.hist.length > 10) srt.hist.shift();
+  if (know) K.setOff(id, true);
+  srt.i++; srt.show = false; save(); render();
+}
+// v8: a Lexicon card. Front: the word or kanji. Back: reading, meaning, example (or on/kun and example words).
+function lexFace(c, showBack, noSay) {
+  const L = c.L, k = L.type === "kanji";
+  const back = !showBack ? "" : k
+    ? `<div class="fc-read ja">${L.on && L.on.length ? `音 ${esc(L.on.join("、"))}` : ""}${L.kun && L.kun.length ? `${L.on && L.on.length ? "<br>" : ""}訓 ${esc(L.kun.join("、"))}` : ""}</div><div class="fc-back">${esc(L.meaning)}</div>${L.examples ? `<div class="fc-ex ja">${esc(L.examples).replace(/\n/g, "<br>")}</div>` : ""}`
+    : `<div class="fc-read ja">${esc((L.readings || []).join("、"))}</div><div class="fc-back">${esc(L.meaning)}</div>${L.ex ? `<div class="fc-ex ja">${esc(L.ex)}</div>${L.exEn ? `<div class="small muted">${esc(L.exEn)}</div>` : ""}` : ""}`;
+  return `<div class="fc-front ja ${k ? "kanji" : ""}">${esc(Lx.face(L))}</div>${back}
+    ${noSay ? "" : `<div class="row" style="gap:8px;margin-top:10px"><button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button></div>`}`;
+}
 function vReview() {
   const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Dungeon" : "Flashcards"}</button>`;
   const g = St.focusGate();
   const q = K.queue(), done = K.reviewedToday(); // v6: open anytime, not only inside a block
-  let c = rv && live("cards").find(x => x.id === rv.id);
-  if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), opts: K.mode(c) === "mcq" ? K.options(c) : null, flip: false, pick: null } : null; }
+  let c = rv && K.get(rv.id);
+  if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), ask: K.mode(c) === "mcq" ? K.ask(c) : null, flip: false, pick: null } : null; }
   const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div><span class="small muted">${done.n} today</span></header>`;
   if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="learnmore">Learn 10 new</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
-  const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3` : c.s ? "Flip" : "Flip · new"}</div>`;
+  const tag = `<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3${c.lex ? ` · ${rv.ask.q === "reading" ? "Reading?" : "Meaning?"}` : ""}` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
-    const answered = rv.pick != null, right = c.back.trim();
-    return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div>
-      <div class="rv-dock"><div class="opts">${rv.opts.map((o, i) => `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
+    const answered = rv.pick != null, right = rv.ask.ans;
+    return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, answered && c.lex, !answered && rv.ask.q === "reading")}</div>
+      <div class="rv-dock"><div class="opts">${rv.ask.opts.map((o, i) => `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
       ${answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}</div></div>`;
   }
   if (!rv.flip) return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="rv-dock"><button class="btn primary block" data-act="rvflip">Show answer</button></div></div>`;
@@ -1402,13 +1472,14 @@ function vJlpt([sub, a]) {
   const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Japanese</div><h1>JLPT ladder</h1></div>${gear("dungeon")}</header>`;
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
-  if (wait) return head + ladder + wait;
-  const st = J.stats(lvl), g = St.focusGate(), nl = J.nextLock(lvl), tl = J.titles();
+  const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`;
+  if (wait) return head + lexRow + ladder + wait;
+  const st = J.stats(lvl), g = { open: true }, nl = J.nextLock(lvl), tl = J.titles(); // v8: Japanese runs any time
   const exams = live("jlptExams").sort((x, y) => y.date.localeCompare(x.date) || (y.u || 0) - (x.u || 0));
   const lastMock = exams.find(x => x.kind === "mock" && x.lvl === lvl), mockOpen = RANK_ORDER.indexOf(st.rank) >= RANK_ORDER.indexOf(J.MOCK_AT);
   const secBars = J.SECS.map(([k, l]) => { const s = st.by[k]; return s.n ? `<div class="row between small" style="margin-top:8px"><span>${l}</span><span class="muted">${s.right}/${s.n}</span></div>${bar(s.right / s.n, "var(--sys)")}` : ""; }).join("");
   const gateNote = g.open ? "" : `<p class="small muted">${ic("lock", "inl")} Practice opens in your next study block${g.next ? ": " + esc(dayLabel(g.next.date)) + " " + P.toHM(g.next.s) : ""}.</p>`;
-  return `${head}${ladder}
+  return `${head}${reviewBtn()}${lexRow}${ladder}
   ${tip("jlpt", "Original questions in the real JLPT formats. Right answers rank you up; wrong ones become flashcards in the JLPT mistakes deck. Reach Rank " + J.MOCK_AT + " to open the Boss Raid, a mock exam that unlocks the next level.")}
   <div class="panel"><div class="row between"><div><span class="k">${lvl} rank</span><div class="rankbig">${st.rank}</div></div><div style="text-align:right"><div class="dm big2">${st.right}/${st.open}</div><div class="small muted">mastered</div></div></div>
     ${bar(st.frac, "var(--sys)")}${secBars}
@@ -1425,7 +1496,6 @@ function vJlpt([sub, a]) {
 }
 function vJlptQ(sec) {
   const lvl = J.level(), back = `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} JLPT ladder</button>`;
-  const g = St.focusGate(); if (!g.open) return `${back}<h1>JLPT practice</h1>${gateClosedHtml(g, "JLPT practice")}`;
   const wait = jlptNeed([lvl]); if (wait) return back + wait;
   if (!jq || jq.lvl !== lvl || jq.sec !== (sec || null) || !J.bank(lvl).byId[jq.id]) {
     const it = J.pick(lvl, sec, jq && jq.lvl === lvl ? jq : null);
@@ -2065,7 +2135,7 @@ function vSettings([sec] = []) {
   ${sx("dungeon", "Dungeon", dungeonSettings())}
   ${Us.available() && Sy.has(1) ? sx("usage", "Phone limit", usageSettings(), Us.isGranted() ? Us.cfg().limitMin + " min" : "off") : ""}
   ${Al.available() && Sy.has(1) ? sx("alarms", "Alarms", alarmSettings(), Al.granted() ? "on" : "off") : ""}
-  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
+  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"], [1, "lex", "Japanese decks (Lexicon)"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
   ${sx("money", "Money and Store", moneySettings())}
   ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
@@ -2570,16 +2640,35 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "recstart": return recStart();
     case "recstop": keepCardForm(); recorder && recorder.stop(); return;
-    case "say": { const c = live("cards").find(x => x.id === id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
+    case "lextype": lx = { ...lx, type: id, level: null, n: 60, sel: lx.sel ? new Set() : null, open: null }; return render();
+    case "lexlvl": lx = { ...lx, level: id || null, n: 60, open: null }; return render();
+    case "lexst": lx = { ...lx, st: id, n: 60, open: null }; return render();
+    case "lexmore": lx.n += 100; return render();
+    case "lexopen": lx.open = lx.open === id ? null : id; return render();
+    case "lexsay": { const e = Lx.entry(id); if (e && !K.speak(Lx.face(e))) toast("No Japanese voice on this phone"); return; }
+    case "lexoff": { const r = live("cards").find(x => x.id === id); K.setOff(id, !(r && r.off)); save(); return render(); }
+    case "lexsel": lx.sel = lx.sel ? null : new Set(); return render();
+    case "lexpick": { if (!lx.sel) return; lx.sel.has(id) ? lx.sel.delete(id) : lx.sel.add(id); return render(); }
+    case "lexbulk": { if (!lx.sel || !lx.sel.size) return toast("Select some cards first"); for (const x of lx.sel) K.setOff(x, id === "off"); toast(`${lx.sel.size} turned ${id}`); lx.sel = new Set(); save(); return render(); }
+    case "lexshown": case "lexlevel": {
+      const L = Lx.rows(lx.type, lx.level, a === "lexlevel" ? "all" : lx.st, a === "lexlevel" ? "" : lx.q);
+      if (!confirm(`Turn off ${L.length} card${L.length === 1 ? "" : "s"}? They won't be asked. You can turn any back on.`)) return;
+      L.forEach(e => K.setOff(e.id, true)); save(); toast(`${L.length} turned off`); return render();
+    }
+    case "sortshow": if (srt) { srt.show = !srt.show; render(); } return;
+    case "sortpick": return sortPick(id === "know");
+    case "sortundo": { if (!srt || !srt.hist.length) return; const h = srt.hist.pop(); K.setOff(h.id, h.was); srt.i = Math.max(0, srt.i - 1); srt.show = false; save(); return render(); }
+    case "sortexit": srt = null; return go("lex");
+    case "say": { const c = K.get(id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
     case "rvpick": {
-      const c = rv && live("cards").find(x => x.id === rv.id); if (!c || rv.pick != null) return;
-      rv.pick = +id; announce(K.answerMcq(c, rv.opts[+id] === c.back.trim())); save(); return render();
+      const c = rv && K.get(rv.id); if (!c || rv.pick != null) return;
+      rv.pick = +id; announce(K.answerMcq(c, rv.ask.opts[+id] === rv.ask.ans)); save(); return render();
     }
     case "rvnext": rv = null; return render();
     case "learnmore": { const n = K.learnMore(10); if (!n) return toast("No new cards left. Add some first"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
     case "rvflip": if (rv) rv.flip = true; return render();
     case "rvgrade": {
-      const c = rv && live("cards").find(x => x.id === rv.id); if (!c) return;
+      const c = rv && K.get(rv.id); if (!c) return;
       announce(K.answerFlip(c, +id)); rv = null; save(); return render();
     }
 
@@ -2636,7 +2725,6 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "jqnext": { const sec = jq && jq.sec; if (jq) { const nx = J.pick(jq.lvl, sec, jq); if (nx) { jq = { ...jq, id: nx.id, pick: null, p: nx.p || null, done: nx.p && nx.p === jq.p ? jq.done : [] }; } } render(); return window.scrollTo(0, 0); }
     case "exam": {
-      if (!St.focusGate().open) return toast("Exams run inside a study block");
       const lvls = id === "place" ? ["N5", "N4", "N3"] : [J.level()], miss = lvls.filter(l => !J.bank(l));
       if (miss.length) { miss.forEach(l => J.load(l, () => toast("Questions loaded. Tap again"))); return toast("Loading questions…"); }
       const qs = id === "place" ? J.buildPlacement() : J.buildMock(J.level());
@@ -2670,11 +2758,28 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
 });
 
 
+// v8 Sort mode: swipe the card right (I know it) or left (learn it).
+let swipeX = null;
+document.addEventListener("pointerdown", ev => { swipeX = ev.target.closest(".srt-card") ? ev.clientX : null; });
+document.addEventListener("pointerup", ev => {
+  if (swipeX == null) return; const dx = ev.clientX - swipeX; swipeX = null;
+  if (Math.abs(dx) > 70) { ev.preventDefault(); suppressClick = true; setTimeout(() => { suppressClick = false; }, 400); sortPick(dx > 0); }
+});
+let suppressClick = false;
+document.addEventListener("click", ev => { if (suppressClick && ev.target.closest(".srt-card")) { suppressClick = false; ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+
 document.addEventListener("change", async ev => {
   const sel = ev.target.closest("[data-act-ch]");
   if (sel && trialForm) { Object.assign(trialForm, readForm("#trialForm")); trialForm[sel.dataset.actCh === "trialnote" ? "note" : "person"] = sel.value; trialForm.title = null; trialForm.keepTitle = false; return render(); }
   const el = ev.target.closest("[data-ch]"); if (!el) return;
   const k = el.dataset.ch;
+  if (k === "lexq") { lx = { ...lx, q: el.value, n: 60, open: null }; return render(); }
+  if (k === "leximport") {
+    const f = el.files && el.files[0]; if (!f) return;
+    try { const r = await Lx.importText(await f.text()); toast(`Imported ${r.vocab.toLocaleString("en-US")} words and ${r.kanji} kanji`, true); }
+    catch (e) { toast(e.message || "Import failed"); }
+    return render();
+  }
   const lg = curLog();
   if (lg && ["comment", "video", "painloc"].includes(k)) {
     const { w, e } = getEntry(lg.date, lg.exId, false); if (!e) return;
@@ -2758,6 +2863,7 @@ function renameStyle() {
   await load();
   await Cl.loadIndex();
   await Pa.load(); if (Pa.issue()) save();
+  await Lx.load();
   renameStyle();
   if (Soc.migrateTraits()) save();
   // First 60 seconds: one quest is already done, so the bar has moved before anything else happens.
