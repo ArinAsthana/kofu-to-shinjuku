@@ -11,9 +11,17 @@
 const TZ = "Asia/Tokyo";
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // Mirrors js/data.js. Keep in step if habits change.
-const HABITS = { anki: "Anki reviews", jp: "Japanese grammar or reading", fin: "Finance block", math: "Mental math", news: "News and markets", case: "Case or interview practice", gym: "Workout" };
+const HABITS = { anki: "Japanese: reviews + today's new cards", jp: "Japanese: today's N2 item", fin: "Finance block", math: "Mental math", news: "News and markets", case: "Case or interview practice", gym: "Workout" };
 const XP = { habit: 10, task: 10 };
 const MEALS = ["breakfast", "lunch", "dinner", "snack"];
+// Mirrors js/deadlines.js PREP and sessions(). Keep in step.
+const DL_KINDS = ["paper", "exam", "presentation", "other"];
+const PREP = {
+  paper: { lead: 10, s: [["Research", 60], ["Outline", 45], ["Draft 1", 90], ["Draft 2", 90], ["Edit", 45]] },
+  exam: { lead: 7, s: [["Review 1", 45], ["Review 2", 45], ["Review 3", 45], ["Final review", 45]] },
+  presentation: { lead: 7, s: [["Slides", 90], ["Rehearse 1", 30], ["Rehearse 2", 30]] },
+  other: { lead: 3, s: [["Prep", 60]] },
+};
 const KINDS = ["class", "work", "sleep", "nap", "quest", "club", "social", "other"];
 
 /* ---------- time ---------- */
@@ -37,6 +45,17 @@ function resolveDate(v) {
   if (isDate(v)) return v; if (v === "today") return t; if (v === "tomorrow") return addDays(t, 1); if (v === "yesterday") return addDays(t, -1);
   const i = DAY.findIndex(d => v.startsWith(d.toLowerCase())); if (i >= 0) { for (let k = 0; k < 7; k++) if (dow(addDays(t, k)) === i) return addDays(t, k); }
   throw new Error(`Couldn't read the date "${v}". Use YYYY-MM-DD, today, tomorrow or a weekday.`);
+}
+const diffDays = (a, b) => Math.round((parseD(b) - parseD(a)) / 864e5);
+// Spreads the prep sessions over start..(due − 1): `after` = earliest day, `due` = latest day. An exam's last review is the day before.
+function prepSessions(kind, due, start, t) {
+  const p = PREP[kind] || PREP.other, last = addDays(due, -1) < t ? t : addDays(due, -1);
+  let from = start || addDays(due, -p.lead); if (from < t) from = t; if (from > last) from = last;
+  const span = diffDays(from, last) + 1, n = p.s.length;
+  return p.s.map(([name, mins], i) => {
+    const a = Math.floor(i * span / n), b = Math.max(a, Math.floor((i + 1) * span / n) - 1), lastExam = kind === "exam" && i === n - 1;
+    return { name, mins, after: lastExam ? last : addDays(from, a), due: lastExam ? last : addDays(from, b) };
+  });
 }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -119,6 +138,13 @@ const TOOLS = [
     inputSchema: { type: "object", required: ["title"], properties: { title: { type: "string" }, minutes: { type: "integer", description: "15, 30, 45, 60, 90, 120 or 180" }, due: { type: "string" }, energy: { type: "string", enum: ["high", "low"], description: "high = needs focus" }, priority: { type: "integer", enum: [1, 2, 3] } } } },
   { name: "complete_task", description: "Mark an open to-do done (+10 XP). Matches by title.",
     inputSchema: { type: "object", required: ["title"], properties: { title: { type: "string" } } } },
+  { name: "add_deadline", description: "Add a deadline (paper, exam, presentation or other). It shows on the app's calendar on the due date, and prep sessions are created and auto-placed before it: paper = Research 60, Outline 45, Draft 2×90, Edit 45 from 10 days before; exam = 4×45 review from 7 days before, the last on the day before; presentation = Slides 90, Rehearse 2×30 from 7 days before; other = 1×60 from 3 days before. A start date replaces the default. Reply with the due date, the start date and the sessions.",
+    inputSchema: { type: "object", required: ["title", "due"], properties: { title: { type: "string", description: "e.g. 'Social psych paper'" }, course: { type: "string" }, due: { type: "string", description: "YYYY-MM-DD, tomorrow or a weekday" },
+      time: { type: "string", description: "HH:MM, optional" }, kind: { type: "string", enum: DL_KINDS }, size: { type: "string", description: "e.g. '2,000 words'" }, start: { type: "string", description: "Optional start/reminder date" } } } },
+  { name: "list_deadlines", description: "List upcoming deadlines with their prep sessions (done or not). Use for 'what's due?'.",
+    inputSchema: { type: "object", properties: {} } },
+  { name: "move_deadline", description: "Move a deadline to a new due date. Its open prep sessions shift by the same number of days. Matches by title.",
+    inputSchema: { type: "object", required: ["title", "due"], properties: { title: { type: "string" }, due: { type: "string" }, time: { type: "string", description: "HH:MM, optional" } } } },
   { name: "add_block", description: "Add a timetable block, either on one date or weekly on given weekdays.",
     inputSchema: { type: "object", required: ["title", "start", "end"], properties: { title: { type: "string" }, start: { type: "string", description: "HH:MM" }, end: { type: "string", description: "HH:MM; before start = runs past midnight" },
       date: { type: "string" }, weekdays: { type: "array", items: { type: "string" }, description: "e.g. ['Tue','Thu'] for weekly" }, kind: { type: "string", enum: KINDS } } } },
@@ -134,7 +160,8 @@ async function getDay(env, a) {
   const [blocks, tasks, care, careLog, habitLog, meals, bw] = await Promise.all(["blocks", "tasks", "care", "careLog", "habitLog", "meals", "bodyweight"].map(s => readStore(env, s).then(x => x.data)));
   const lines = [`${DAY[dow(date)]} ${date}${date === now.date ? ` (now ${toHM(now.min)} Japan time)` : ""}`, "", "Timetable:"];
   for (const g of segments(blocks, date)) lines.push(`- ${toHM(g.s)}–${toHM(g.e)} ${g.b.title}${g.tail ? " (from last night)" : ""}${g.b.locked ? " [locked]" : ""}`);
-  const open = live(tasks).filter(k => !k.done);
+  const open = live(tasks).filter(k => !k.done && k.kind !== "deadline"), dls = live(tasks).filter(k => k.kind === "deadline" && k.due >= date).sort((a, b) => a.due.localeCompare(b.due));
+  if (dls.length) lines.push("", "Deadlines:", ...dls.map(k => `- ${k.title}${k.course ? " (" + k.course + ")" : ""}: due ${k.due}${k.time ? " " + k.time : ""}`));
   lines.push("", "Open to-dos:", ...(open.length ? open.map(k => `- ${k.title} (${k.mins} min${k.due ? ", due " + k.due : ""})`) : ["- none"]));
   const due = live(care).filter(c => !(c.days || []).length || c.days.includes(dow(date)));
   const done = new Set(live(careLog).filter(l => l.date === date).map(l => l.item));
@@ -187,10 +214,46 @@ const handlers = {
   },
   async complete_task(env, a) {
     const q = norm(a.title);
-    const k = await changeStore(env, "tasks", arr => { const k = live(arr).filter(k => !k.done).find(k => norm(k.title).includes(q) || q.includes(norm(k.title))); if (k) putRec(arr, { ...k, done: true, doneAt: Date.now() }); return k; });
+    const k = await changeStore(env, "tasks", arr => { const k = live(arr).filter(k => !k.done && k.kind !== "deadline").find(k => norm(k.title).includes(q) || q.includes(norm(k.title))); if (k) putRec(arr, { ...k, done: true, doneAt: Date.now() }); return k; });
     if (!k) throw new Error(`No open to-do matching "${a.title}"`);
     await changeStore(env, "xpEvents", arr => { if (!live(arr).some(e => e.ref === "task:" + k.id)) putRec(arr, { ts: Date.now(), type: "task", xp: XP.task, ref: "task:" + k.id, label: k.title }); });
     return `Done: ${k.title}. +${XP.task} XP.`;
+  },
+  async add_deadline(env, a) {
+    if (!a.title || !a.due) throw new Error("title and due are required");
+    const t = nowTokyo().date, due = resolveDate(a.due), kind = DL_KINDS.includes(a.kind) ? a.kind : "other";
+    if (due < t) throw new Error(`${due} has passed`);
+    if (a.time && !isHM(a.time)) throw new Error("time must be HH:MM");
+    const start = a.start ? resolveDate(a.start) : null, ss = prepSessions(kind, due, start, t), now = Date.now(), title = String(a.title);
+    await changeStore(env, "tasks", arr => {
+      const d = putRec(arr, { kind: "deadline", title, course: String(a.course || ""), dlKind: kind, due, time: a.time ? toHM(toMin(a.time)) : "", size: String(a.size || ""), start: start && start <= due ? start : ss[0].after, mins: 0, prio: 3, done: false, created: now, pin: null });
+      for (const s of ss) putRec(arr, { title: `${title}: ${s.name}`, mins: s.mins, prio: 3, energy: "high", due: s.due, after: s.after, dl: d.id, done: false, created: now, pin: null });
+    });
+    return `Added ${title}, due ${due}${a.time ? " " + a.time : ""}. Start ${start || ss[0].after}. Prep sessions (placed in free time, focus): ${ss.map(s => `${s.name} ${s.mins} min between ${s.after} and ${s.due}`).join("; ")}. Reminders on the start day and the day before.`;
+  },
+  async list_deadlines(env) {
+    const t = nowTokyo().date, tasks = live((await readStore(env, "tasks")).data);
+    const dls = tasks.filter(k => k.kind === "deadline" && k.due >= t).sort((a, b) => a.due.localeCompare(b.due));
+    if (!dls.length) return "No upcoming deadlines.";
+    return dls.map(d => { const ps = tasks.filter(k => k.dl === d.id).sort((a, b) => (a.after || "").localeCompare(b.after || ""));
+      return `${d.title}${d.course ? " (" + d.course + ")" : ""}: due ${d.due}${d.time ? " " + d.time : ""}, ${diffDays(t, d.due)} days left, start ${d.start}.\n` + (ps.map(k => `  - ${k.title.replace(d.title + ": ", "")} ${k.mins} min: ${k.done ? "done" : "open, " + k.after + " to " + k.due}`).join("\n") || "  - no prep sessions");
+    }).join("\n");
+  },
+  async move_deadline(env, a) {
+    const t = nowTokyo().date, due = resolveDate(a.due), q = norm(a.title); if (due < t) throw new Error(`${due} has passed`);
+    if (a.time && !isHM(a.time)) throw new Error("time must be HH:MM");
+    return changeStore(env, "tasks", arr => {
+      const d = live(arr).filter(k => k.kind === "deadline").find(k => norm(k.title).includes(q) || q.includes(norm(k.title)));
+      if (!d) throw new Error(`No deadline matching "${a.title}"`);
+      const delta = diffDays(d.due, due), clamp = x => x < t ? t : x;
+      let n = 0;
+      for (const k of live(arr).filter(k => k.dl === d.id && !k.done)) {
+        const after = clamp(addDays(k.after || k.due, delta)), kd = clamp(addDays(k.due, delta));
+        putRec(arr, { ...k, after, due: kd < after ? after : kd, pin: null }); n++;
+      }
+      putRec(arr, { ...d, due, time: a.time ? toHM(toMin(a.time)) : d.time, start: addDays(d.start || d.due, delta) });
+      return `${d.title} moved to ${due}${delta ? ` (${delta > 0 ? "+" : ""}${delta} days)` : ""}. ${n} open prep session${n === 1 ? "" : "s"} moved with it.`;
+    });
   },
   async add_block(env, a) {
     if (!a.title || !isHM(a.start) || !isHM(a.end)) throw new Error("title, start and end (HH:MM) are required");
@@ -235,7 +298,7 @@ async function rpc(env, m) {
   const ok = result => ({ jsonrpc: "2.0", id: m.id, result }), err = (code, message) => ({ jsonrpc: "2.0", id: m.id, error: { code, message } });
   switch (m.method) {
     case "initialize": return ok({ protocolVersion: m.params?.protocolVersion || "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "kofu-to-shinjuku", version: "1.0.0" },
-      instructions: "Arin's Kofu to Shinjuku life app (timetable, to-dos, food, weight, habits, care, wishlist). Times are Japan time. Call get_day before changes. Confirm what changed in one line. The app shows changes next time it's opened while signed in." });
+      instructions: "Arin's Kofu to Shinjuku life app (timetable, to-dos, deadlines, food, weight, habits, care, wishlist). Times are Japan time. Call get_day before changes. Confirm what changed in one line. The app shows changes next time it's opened while signed in." });
     case "ping": return ok({});
     case "tools/list": return ok({ tools: TOOLS });
     case "tools/call": {
