@@ -131,3 +131,42 @@ export function archiveOld() {
   return decks.length > 0;
 }
 export function restoreDeck(name) { const c = S.settings.cards; c.archived = (c.archived || []).filter(d => d !== name); S.settings.u = Date.now(); }
+
+/* ---------- v9.3 §1: Going to bed ---------- */
+// The widget logs each tap natively {bed, alarm, cls}; the app takes them on open. The latest tap is the night's bedtime
+// (a second tap replaces the first). The first open after the alarm (from 30 min before) saves the wake time.
+// Hours slept show on Profile only. Kept in settings.sleep {open, log}: no new store.
+export const BED_XP = 10, SLEEP_LOG = 90;
+const sl = () => (S.settings.sleep = S.settings.sleep || { open: null, log: [] });
+// The planned bedtime for the evening of a tap (a tap after midnight belongs to the evening before).
+function plannedBed(ms) {
+  const d = E.ymd(new Date(ms - 12 * 3600000)), w = P.windDownOn(d);
+  return w ? { d, at: E.parse(w.bedDate).getTime() + w.bed * 60000 } : null;
+}
+export function bedIn(list) {
+  if (!list || !list.length) return 0;
+  const s = sl(); let xp = 0;
+  for (const x of list.slice().sort((a, b) => a.bed - b.bed)) {
+    if (s.open && x.bed - s.open.bed > 3 * 3600000) closeNight(s.open, s.open.alarm); // an older night nobody woke from in the app
+    s.open = { bed: x.bed, alarm: x.alarm };
+    const pb = plannedBed(x.bed), ref = pb && "bed:" + pb.d;
+    if (pb && Math.abs(x.bed - pb.at) <= 30 * 60000 && !live("xpEvents").some(e => e.ref === ref)) { put("xpEvents", { ts: Date.now(), type: "habit", xp: BED_XP, ref, label: "On time for bed" }); xp += BED_XP; }
+  }
+  S.settings.u = Date.now();
+  return xp;
+}
+function closeNight(o, wake) {
+  const s = sl(); s.log = [...s.log.filter(n => n.bed !== o.bed), { bed: o.bed, wake, alarm: o.alarm }].slice(-SLEEP_LOG); s.open = null;
+}
+// Call on every open. Returns the night just closed, or null.
+export function wakeCheck(now = Date.now()) {
+  const s = S.settings.sleep, o = s && s.open; if (!o || now < o.alarm - 30 * 60000) return null;
+  closeNight(o, now > o.alarm + 6 * 3600000 ? o.alarm : now); S.settings.u = Date.now();
+  return s.log[s.log.length - 1];
+}
+export const hours = n => (n.wake - n.bed) / 3600000;
+export function sleepStats() {
+  const L = ((S.settings.sleep || {}).log || []).filter(n => n.wake > n.bed).slice(-7);
+  if (!L.length) return null;
+  return { last: L[L.length - 1], avg: L.reduce((a, n) => a + hours(n), 0) / L.length, n: L.length };
+}

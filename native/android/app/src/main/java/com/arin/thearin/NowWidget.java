@@ -57,6 +57,7 @@ public class NowWidget extends AppWidgetProvider {
             int[] min = { 5, 15, 30 };
             for (int i = 0; i < btn.length; i++) v.setOnClickPendingIntent(btn[i], MainActivity.route(c, "jpgo/" + min[i], min[i]));
             v.setTextViewText(R.id.w_usage, s.optString("usage", ""));
+            v.setOnClickPendingIntent(R.id.w_bed, BedWidget.bed(c)); // v9.3
         }
         Intent open = c.getPackageManager().getLaunchIntentForPackage(c.getPackageName());
         if (open != null) {
@@ -70,5 +71,6 @@ public class NowWidget extends AppWidgetProvider {
         AppWidgetManager m = AppWidgetManager.getInstance(c);
         for (int id : m.getAppWidgetIds(new ComponentName(c, NowWidget.class))) m.updateAppWidget(id, views(c, false));
         for (int id : m.getAppWidgetIds(new ComponentName(c, NowSmallWidget.class))) m.updateAppWidget(id, views(c, true));
+        for (int id : m.getAppWidgetIds(new ComponentName(c, BedWidget.class))) m.updateAppWidget(id, BedWidget.views(c));
     }
 }

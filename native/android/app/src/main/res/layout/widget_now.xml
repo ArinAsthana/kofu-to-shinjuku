@@ -87,5 +87,7 @@
             android:fontFamily="monospace"
             android:textColor="#B3F2EFE8"
             android:textSize="11sp" />
+        <!-- v9.3: Going to bed sets tomorrow's alarm. -->
+        <TextView android:id="@+id/w_bed" style="@style/WidgetJpBtn" android:layout_width="wrap_content" android:layout_weight="0" android:paddingStart="10dp" android:paddingEnd="10dp" android:text="BED" />
     </LinearLayout>
 </LinearLayout>

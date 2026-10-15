@@ -108,6 +108,7 @@ function render() {
   // v9.1: workout mode. The page turns deep navy while a workout runs, and back to red when it ends.
   const navy = homeState(E.today()).k === "body"; document.documentElement.classList.toggle("navy", navy);
   const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = navy ? "#0B1633" : "#E0211F";
+  if (navy !== lastNavy) { lastNavy = navy; const C = window.Capacitor; if (C && C.isPluginAvailable && C.isPluginAvailable("Widget")) { const W = C.Plugins.Widget || C.registerPlugin("Widget"); if (W.bar) W.bar({ color: navy ? "#0B1633" : "#E0211F" }).catch(() => {}); } }
   const h1 = $("#app header.top h1") || $("#app > h1"); if (h1) h1.insertAdjacentHTML("afterbegin", px(HEAD_PX[tab] || "eye", "hpx"));
   const app = $("#app"), entering0 = entering;
   if (entering) { app.classList.remove("enter"); void app.offsetWidth; app.classList.add("enter"); entering = false; }
@@ -508,10 +509,14 @@ function quietSpans() {
   return out;
 }
 // v8.3: a widget button or nudge asked for a screen ("jpgo/15" starts a quick start). Native only.
+let lastNavy = null; // v9.3: the native status bar follows navy mode
 async function pendingRoute() {
   const C = window.Capacitor; if (!(C && C.isPluginAvailable && C.isPluginAvailable("Widget"))) return;
   try {
     const W = C.Plugins.Widget || C.registerPlugin("Widget"), r = ((await W.pending()) || {}).route;
+    // v9.3: bedtimes from the Going to bed widget, then the wake time on the first open after the alarm.
+    if (W.bed) { const L = ((await W.bed()) || {}).log || [], xp = Dy.bedIn(L); if (L.length) { save(); if (xp) toast(`+${xp} XP · On time for bed`); } }
+    if (Dy.wakeCheck()) save();
     if (!r || !W.pending) return;
     const m = /^jpgo\/(\d+)$/.exec(r);
     if (m && Sy.has(NEEDS.jlpt)) return jpStart(+m[1]);
@@ -532,7 +537,9 @@ function pushWidget() {
     const m = Us.available() && Us.isGranted() ? Us.today() : null;
     // v8.3: the widget's Japanese row and the native watched-app nudge (due count, the toggle, watched apps, quiet stretches).
     const jp = Sy.has(NEEDS.jlpt) ? { due: K.queue().filter(c => c.intro).length, nudge: !!Al.prefs().jp, apps: Us.cfg().apps, quiet: quietSpans() } : null;
-    const snapshot = { now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "", jp };
+    // v9.3: the Going to bed widget's class days (weekdays with a class block) and sleep length.
+    const classDays = [0, 1, 2, 3, 4, 5, 6].filter(d => live("blocks").some(b => b.kind === "class" && (b.days || []).includes(d)));
+    const snapshot = { bed: { classDays, classAt: 480, sleepMin: 450 }, now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "", jp };
     const sig = JSON.stringify(snapshot); if (sig === widgetSig) return;
     widgetSig = sig;
     const W = window.Capacitor.Plugins.Widget || window.Capacitor.registerPlugin("Widget");
@@ -851,6 +858,7 @@ function vProfile() {
   <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
   ${profilePath()}
+  ${sleepPanel()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
   <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
     ${ups.length ? `<div class="list" style="margin-top:8px">${ups.slice(-5).reverse().map(u => `<div class="row between small"><span>Level ${u.lv}</span><span class="muted mono">${esc(E.fmtDate(u.date))}</span></div>`).join("")}</div>` : ""}</div>
@@ -859,6 +867,13 @@ function vProfile() {
       ${eq === t.id ? `<button class="btn sm" data-act="unequip">Equipped</button>` : `<button class="btn sm ${t.owned ? "" : "go"}" data-act="equip" data-id="${t.id}">${t.owned ? "Equip" : `Equip · ${t.cost} XP`}</button>`}</div>`).join("")}</div>`
       : `<div class="panel"><p class="small muted">None yet. Boss exams and Raids give titles.</p></div>`}` : ""}
   ${nx ? `<h2>Next</h2><div class="panel silhouette"><span class="q-mark">?</span><div class="grow"><b>Something is sealed.</b><div class="small muted">${esc(Sy.STAGES[Sy.stage()].hint)}</div></div></div>` : ""}`;
+}
+// v9.3: hours slept, from the Going to bed widget. Profile only.
+function sleepPanel() {
+  const st = Dy.sleepStats(); if (!st) return "";
+  const h = x => { const m = Math.round(x * 60); return `${Math.floor(m / 60)} h ${E.pad(m % 60)}`; }, last = Dy.hours(st.last);
+  return `<h2>Sleep</h2><div class="panel"><div class="row between"><span class="small">Last night</span><b class="mono ${last < 6 ? "warn" : ""}">${h(last)}</b></div>
+    <div class="row between"><span class="small muted">${st.n}-night average</span><span class="mono small">${h(st.avg)}</span></div></div>`;
 }
 // Dates each level was reached, from the running XP total.
 function levelUps() {

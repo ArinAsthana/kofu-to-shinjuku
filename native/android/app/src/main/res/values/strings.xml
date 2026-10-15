@@ -6,4 +6,5 @@
     <string name="custom_url_scheme">com.arin.thearin</string>
     <string name="widget_now_desc">Now, today\'s quests and level</string>
     <string name="widget_small_desc">Now: the current or next block</string>
+    <string name="widget_bed_desc">Going to bed: one tap sets tomorrow's alarm</string>
 </resources>
