@@ -30,7 +30,7 @@ export async function load() {
   try {
     const rows = await (await fetch("data/path/plan.json")).json();
     for (const s of STREAMS) {
-      WEEK[s.id] = rows.filter(r => r.day !== "Sun" && r[s.id]).map(r => ({ t: clean(r[s.id]), phase: r.phase }));
+      WEEK[s.id] = rows.filter(r => r.day !== "Sun" && r[s.id]).map(r => ({ t: clean(r[s.id]), phase: r.phase, date: r.date }));
       SUN[s.id] = rows.filter(r => r.day === "Sun" && r.date > START).map(r => r[s.id] ? { t: clean(r[s.id]), phase: r.phase } : null);
     }
   } catch (e) { WEEK = {}; SUN = {}; }
@@ -43,16 +43,27 @@ export const daysToStart = (t = E.today()) => Math.max(0, E.daysBetween(t, START
 
 /* ---------- the schedule ---------- */
 const isSun = d => E.parse(d).getDay() === 0;
-// Non-Sundays in [START, d): the index of the item scheduled on d.
+// v6.1: settings.path {tokens, best, rest:[dates], vanguard, warned:{milestone: date}}
+export const cfg = () => { const s = S.settings; s.path = s.path || {}; const c = s.path; c.tokens = c.tokens || 0; c.best = c.best || 0; c.rest = c.rest || []; c.warned = c.warned || {}; return c; };
+const touch = () => { S.settings.u = Date.now(); };
+// A rest day (from a rest token) is off like a Sunday: nothing issued, nothing scheduled, no slip.
+export const isRest = d => cfg().rest.includes(d);
+const off = d => isSun(d) || isRest(d);
+const restBefore = d => cfg().rest.filter(r => r >= START && r < d && !isSun(r)).length;
+// Working days in [START, d): the index of the item scheduled on d.
 export function schedIdx(d) {
   if (d <= START) return 0;
   const n = E.daysBetween(START, d), w = Math.floor(n / 7), r = n % 7;
-  return w * 6 + Math.min(r, 6); // START is a Monday, so day 6 of each week is the Sunday
+  return w * 6 + Math.min(r, 6) - restBefore(d); // START is a Monday, so day 6 of each week is the Sunday
 }
-export function schedDate(idx) { const w = Math.floor(idx / 6), r = idx % 6; return E.addDays(START, w * 7 + r); }
+export function schedDate(idx) {
+  let d = START, i = 0;
+  for (let k = 0; k < 800; k++, d = E.addDays(d, 1)) { if (off(d)) continue; if (i === idx) return d; i++; }
+  return d;
+}
 
 /* ---------- progress ---------- */
-const logOf = s => live("path").filter(r => r.stream === s && !r.sun);
+const logOf = s => live("path").filter(r => r.stream === s && !r.sun && r.kind !== "gate");
 export const pos = s => logOf(s).reduce((a, r) => Math.max(a, r.idx + 1), 0);
 export const item = (s, idx) => (WEEK[s] || [])[idx] || null;
 export const length = s => (WEEK[s] || []).length;
@@ -65,7 +76,7 @@ export function running(now = new Date()) {
 export const openTask = s => pathTasks().find(k => !k.done && k.path.stream === s && !k.path.sun);
 // Scheduled through today (today's own item counts once the day is over).
 export function standing(s, t = E.today()) {
-  const p = pos(s), si = schedIdx(t), due = si + (started(t) && !isSun(t) ? 1 : 0);
+  const p = pos(s), si = schedIdx(t), due = si + (started(t) && !off(t) ? 1 : 0);
   return { pos: p, ahead: Math.max(0, p - due), behind: started(t) ? Math.max(0, si - p) : 0 };
 }
 // Home's single line: the worst stream if any is behind, else how far the whole Path is ahead.
@@ -98,6 +109,7 @@ function taskFor(s, idx, t, extra = {}) {
 export function issue(t = E.today()) {
   if (!ready() || !started(t)) return false;
   let changed = false;
+  if (isRest(t)) return false;
   // A Sunday item is for its Sunday only.
   for (const k of pathTasks()) if (k.path.sun && !k.done && k.due < t) { remove("tasks", k.id); changed = true; }
   if (isSun(t)) {
@@ -112,7 +124,7 @@ export function issue(t = E.today()) {
   }
   for (const s of STREAMS) {
     const p = pos(s.id);
-    if (p >= length(s.id) || openTask(s.id)) continue;
+    if (p >= length(s.id) || openTask(s.id) || gate(s.id)) continue;
     if (S.tasks.some(x => x.path && !x.path.sun && x.path.stream === s.id && x.path.issued === t)) continue; // one a day
     const k = taskFor(s.id, p, t), old = S.tasks.find(x => x.id === k.id);
     if (old && !old.del) continue;
@@ -122,7 +134,7 @@ export function issue(t = E.today()) {
 }
 // Go ahead: the stream's next item, pinned to start now.
 export function goAhead(s, now = new Date()) {
-  if (!ready() || openTask(s)) return null;
+  if (!ready() || openTask(s) || gate(s)) return null;
   const p = pos(s); if (p >= length(s)) return null;
   const t = E.ymd(now), m = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 5) * 5;
   const start = E.pad(Math.floor(m / 60) % 24) + ":" + E.pad(m % 60);
@@ -163,3 +175,90 @@ export function zetamac() {
   const sc = live("path").map(r => r.zetamac).filter(n => n != null);
   return sc.length ? { best: Math.max(...sc), avg: Math.round(sc.reduce((a, b) => a + b, 0) / sc.length), n: sc.length, last: sc[sc.length - 1] } : null;
 }
+
+/* ---------- Gate Tests (v6 §8): after every 3rd Arc ---------- */
+export const TESTED = ["case", "aptitude", "japanese", "accounting", "sapmurex"];
+export const GATE_EVERY = 3 * ARC, GATE_Q = 15, GATE_PASS = 0.7, RETAKE_MS = 24 * 3600e3, XP_GATE = 60, XP_GATE_TOP = 30;
+// Question banks written so far (data/path/gates/<stream>-<n>.json). A gate without a bank doesn't block.
+export const BANKS = { case: [1], aptitude: [1], japanese: [1], accounting: [1], sapmurex: [1] };
+const attempts = (s, g) => live("path").filter(r => r.kind === "gate" && r.stream === s && r.gate === g);
+export const gatePassed = (s, g) => attempts(s, g).some(r => r.passed);
+// The Gate holding this stream, if any. retakeAt: when a failed Gate opens again.
+export function gate(s) {
+  const p = pos(s); if (!TESTED.includes(s) || !p || p % GATE_EVERY || p >= length(s)) return null;
+  const g = p / GATE_EVERY; if (!(BANKS[s] || []).includes(g) || gatePassed(s, g)) return null;
+  const tries = attempts(s, g).sort((a, b) => b.at - a.at);
+  return { stream: s, gate: g, retakeAt: tries.length ? tries[0].at + RETAKE_MS : 0, tries: tries.length, last: tries[0] || null };
+}
+export const gates = () => STREAMS.map(s => gate(s.id)).filter(Boolean);
+export async function loadBank(s, g) { return (await fetch(`data/path/gates/${s}-${g}.json`)).json(); }
+// A fresh draw of 15 each attempt.
+export function draw(bank) {
+  const qs = bank.questions.map((q, i) => ({ ...q, _i: i }));
+  for (let i = qs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [qs[i], qs[j]] = [qs[j], qs[i]]; }
+  return qs.slice(0, GATE_Q);
+}
+// Records the attempt. Misses become flashcards in "<stream> mistakes". Returns {ok, n, passed, xp}.
+export function gradeGate(s, g, qs, ans, newCard) {
+  const ok = qs.filter((q, i) => ans[i] === q.a).length, n = qs.length, passed = ok / n >= GATE_PASS - 1e-9, at = Date.now();
+  put("path", { id: `gate-${s}-${g}-${at}`, kind: "gate", stream: s, gate: g, score: ok, n, passed, date: E.today(), at });
+  const deck = stream(s).label + " mistakes";
+  qs.forEach((q, i) => {
+    if (ans[i] === q.a) return;
+    const id = `pg-${s}-${g}-${q._i}`; if (live("cards").some(c => c.id === id)) return;
+    put("cards", newCard({ id, deck, front: q.q, back: q.opts[q.a] + (q.ex ? " · " + q.ex : "") }));
+  });
+  let xp = 0; const ref = `gate:${s}:${g}`;
+  if (passed && !live("xpEvents").some(e => e.ref === ref)) {
+    xp = XP_GATE + (ok / n >= 0.9 ? XP_GATE_TOP : 0);
+    put("xpEvents", { ts: at, type: "gate", xp, ref, label: `Gate cleared: ${stream(s).label}` });
+  }
+  return { ok, n, passed, xp };
+}
+
+/* ---------- rewards for being ahead (v6 §3) ---------- */
+export const MAX_TOKENS = 3, VANGUARD_AT = 7;
+// Each new full day the whole Path gains (every stream one more ahead) banks a rest token. Returns what was earned.
+export function checkAhead(t = E.today()) {
+  if (!ready() || !started(t)) return null;
+  const c = cfg(), a = summary(t).ahead || 0, out = {};
+  if (a > c.best) { const add = Math.min(MAX_TOKENS - c.tokens, a - c.best); c.best = a; if (add > 0) { c.tokens += add; out.tokens = add; } touch(); }
+  if (a >= VANGUARD_AT && !c.vanguard) { c.vanguard = t; touch(); out.vanguard = true; }
+  return out.tokens || out.vanguard ? out : null;
+}
+// Spends a token on a day (today or later): nothing issued, no slip. Today's open items wait for tomorrow.
+export function rest(d = E.today()) {
+  const c = cfg(); if (c.tokens < 1 || c.rest.includes(d) || isSun(d)) return false;
+  c.tokens--; c.rest.push(d); touch(); return true;
+}
+
+/* ---------- at-risk warnings: fixed dates that depend on a stream ---------- */
+export const FIXED = [
+  { id: "boki3", name: "Boki 3級 CBT", date: "2026-12-12", stream: "accounting" },
+  { id: "boki2", name: "Boki 2級 CBT", date: "2027-05-29", stream: "accounting" },
+  { id: "n3", name: "JLPT N3", date: "2027-07-04", stream: "japanese" },
+];
+// Items the plan has done before the date, against when this stream gets there at one item a working day.
+export function projection(m, t = E.today()) {
+  // The plan's own dates (the PDF started 3 days earlier than the Path), so a late start shows as risk.
+  const need = (WEEK[m.stream] || []).filter(x => x.date < m.date).length, left = need - pos(m.stream);
+  if (left <= 0) return { ok: true, late: 0 };
+  let d = started(t) ? t : START, n = 0;
+  const open = openTask(m.stream);
+  if (started(t) && (off(d) || (!open && S.tasks.some(x => x.path && !x.path.sun && x.path.stream === m.stream && x.path.issued === t)))) d = E.addDays(d, 1);
+  for (let k = 0; k < 800; k++, d = E.addDays(d, 1)) { if (off(d)) continue; n++; if (n >= left) break; }
+  const late = Math.max(0, E.daysBetween(m.date, d) + 1);
+  return { ok: !late, late, finish: d };
+}
+// The one warning to show now: a dated milestone within 45 days that this stream would miss, not shown in the last 7 days.
+export function risk(t = E.today()) {
+  if (!ready() || !started(t)) return null;
+  const c = cfg();
+  for (const m of FIXED) {
+    const days = E.daysBetween(t, m.date); if (days < 0 || days > 45) continue;
+    const w = c.warned[m.id]; if (w && E.daysBetween(w, t) < 7) continue;
+    const pr = projection(m, t); if (!pr.ok) return { m, ...pr };
+  }
+  return null;
+}
+export function seeRisk(id) { cfg().warned[id] = E.today(); touch(); }

@@ -598,3 +598,5 @@ body.has-dbar .toast{bottom:calc(140px + env(safe-area-inset-bottom,0px))}
 .arc-i.done{color:var(--dim);text-decoration:line-through}
 .arc-i.cur{color:var(--fg);font-weight:600}
 .arc-dot{flex:none;width:6px;height:6px;margin:6px 3px 0;border:1px solid var(--soft)}
+.gatebox{margin-top:4px;padding:10px;border:1px solid var(--rule)}
+.gatebox .px{width:12px;height:auto;margin-right:4px;vertical-align:-1px}

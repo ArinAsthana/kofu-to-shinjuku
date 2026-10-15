@@ -1,0 +1,367 @@
+{
+ "stream": "case",
+ "gate": 1,
+ "title": "Case basics and the core scenarios",
+ "questions": [
+  {
+   "q": "Which combination of skills are case interviewers mainly trying to observe?",
+   "opts": [
+    "Detailed prior knowledge of the client's industry",
+    "Speed at reaching a final answer, even without showing the logic",
+    "Structured thinking, comfort with numbers, and clear communication under ambiguity",
+    "Ability to recall as many named business frameworks as possible"
+   ],
+   "a": 2,
+   "ex": "Cases are designed to show how you break down an unfamiliar problem, handle the math, and explain your thinking; industry expertise is not expected.",
+   "item": 1
+  },
+  {
+   "q": "A candidate gets every calculation right but jumps between ideas without ever stating a structure. What is the interviewer most likely to mark down?",
+   "opts": [
+    "Organization and communication of the approach",
+    "Quantitative ability",
+    "Business intuition about the industry",
+    "Enthusiasm for consulting"
+   ],
+   "a": 0,
+   "ex": "The math was correct, so the gap is in laying out a clear structure and walking the interviewer through it.",
+   "item": 1
+  },
+  {
+   "q": "Which is the strongest way to answer \"Tell me about yourself\" in a consulting interview?",
+   "opts": [
+    "A chronological walk through every role on your resume",
+    "A short list of personal hobbies so the interviewer gets to know the real you",
+    "A detailed explanation of the case frameworks you have studied",
+    "A one-to-two minute story linking your background, a few chosen highlights, and why consulting is the logical next step"
+   ],
+   "a": 3,
+   "ex": "A concise, curated narrative that ends with why you want this job shows judgment and communication skill, which is what the question tests.",
+   "item": 2
+  },
+  {
+   "q": "Which answer to \"Why consulting?\" is most convincing?",
+   "opts": [
+    "The chance to travel and work with smart people",
+    "Specific reasons tied to your own experiences, such as a project where solving a structured business problem energized you",
+    "Consulting pays well and keeps your future options open",
+    "You have read a lot about the firm and admire its brand"
+   ],
+   "a": 1,
+   "ex": "Interviewers look for genuine, specific motivation backed by evidence from your past; generic perks sound rehearsed and apply to anyone.",
+   "item": 2
+  },
+  {
+   "q": "The interviewer has just read you the case prompt. What should you do first?",
+   "opts": [
+    "Present a full framework immediately to show confidence",
+    "Briefly restate the problem and confirm the client's objective",
+    "Ask for all available data on costs and revenue",
+    "Give your recommendation based on your first instinct"
+   ],
+   "a": 1,
+   "ex": "Summarizing the prompt and confirming the goal makes sure you are solving the right problem before you structure anything.",
+   "item": 3
+  },
+  {
+   "q": "Which sequence best reflects a disciplined approach to a case?",
+   "opts": [
+    "Structure, listen, hypothesize, clarify, then summarize",
+    "Listen, hypothesize, summarize, then clarify",
+    "Clarify, summarize, listen, then structure",
+    "Listen, clarify, structure, form a hypothesis, then summarize"
+   ],
+   "a": 3,
+   "ex": "You need the facts (listen, clarify) before building a structure, then test a hypothesis and close with a summary.",
+   "item": 3
+  },
+  {
+   "q": "Estimate annual toothbrush sales in a country of 50 million people, assuming 90% of people use a toothbrush and each user replaces it 3 times a year.",
+   "opts": [
+    "135 million toothbrushes",
+    "150 million toothbrushes",
+    "45 million toothbrushes",
+    "1.35 billion toothbrushes"
+   ],
+   "a": 0,
+   "ex": "50 million x 0.9 = 45 million users, and 45 million x 3 replacements = 135 million toothbrushes per year.",
+   "item": 4
+  },
+  {
+   "q": "A city has 1,000,000 households. 40% own a dog, and each dog-owning household spends $50 per month on dog food. What is the annual dog food market in the city?",
+   "opts": [
+    "$20 million",
+    "$200 million",
+    "$240 million",
+    "$480 million"
+   ],
+   "a": 2,
+   "ex": "1,000,000 x 40% = 400,000 households; 400,000 x $50 = $20 million per month; x 12 months = $240 million per year.",
+   "item": 4
+  },
+  {
+   "q": "A client's profits have fallen for two years while revenue has stayed flat. Where should you focus first?",
+   "opts": [
+    "Price, since raising prices is the fastest fix",
+    "Sales volume by customer segment",
+    "Competitor market share trends",
+    "Costs, split into fixed and variable, to find which ones have grown"
+   ],
+   "a": 3,
+   "ex": "Profit = revenue - costs; with revenue flat, the decline must come from rising costs, so break costs down to locate the increase.",
+   "item": 5
+  },
+  {
+   "q": "A product sells for $50, has a variable cost of $30 per unit, and the business has fixed costs of $600,000. How many units must it sell to break even?",
+   "opts": [
+    "30,000 units",
+    "12,000 units",
+    "20,000 units",
+    "7,500 units"
+   ],
+   "a": 0,
+   "ex": "Contribution per unit is $50 - $30 = $20, so breakeven = $600,000 / $20 = 30,000 units.",
+   "item": 5
+  },
+  {
+   "q": "A frozen-food maker asks whether it should start selling in a new country. Which structure fits best?",
+   "opts": [
+    "Revenue and cost breakdown of the client's current business only",
+    "Target valuation, synergies, and integration risks",
+    "Market attractiveness, competitive landscape, client capabilities, entry mode, and expected economics",
+    "Cost-based, competitor-based, and value-based pricing"
+   ],
+   "a": 2,
+   "ex": "A market-entry question needs to test whether the market is attractive, whether the client can win, how to enter, and whether it pays off.",
+   "item": 6
+  },
+  {
+   "q": "A client has a strong product but no distribution in a new country and needs to be selling there within 12 months. Which entry mode is usually best?",
+   "opts": [
+    "Build its own distribution network from scratch",
+    "Acquire or partner with a local company that already has distribution",
+    "Enter with prices well below local competitors to force retailers to stock it",
+    "Wait until local demand is proven by competitors"
+   ],
+   "a": 1,
+   "ex": "Buying or partnering gives immediate access to channels and local know-how, which matters most when speed is the constraint.",
+   "item": 6
+  },
+  {
+   "q": "A target company will earn a steady $10 million profit per year indefinitely. The client requires an 8% return, and the seller is asking $150 million. What does a simple perpetuity valuation suggest?",
+   "opts": [
+    "The target is worth about $125 million, so the asking price is about $25 million too high",
+    "The target is worth about $80 million, so the asking price is about $70 million too high",
+    "The target is worth about $150 million, so the price is fair",
+    "The target is worth about $187.5 million, so the price is a bargain"
+   ],
+   "a": 0,
+   "ex": "Perpetuity value = $10 million / 0.08 = $125 million, which is $25 million below the $150 million asking price.",
+   "item": 7
+  },
+  {
+   "q": "A client says it wants to acquire a competitor. What is the most useful first clarifying question?",
+   "opts": [
+    "How many employees does the target have?",
+    "Which investment bank is advising on the deal?",
+    "What is the target's logo and brand color?",
+    "What is the client trying to achieve with the deal, such as growth, new capabilities, or cost synergies?"
+   ],
+   "a": 3,
+   "ex": "The deal rationale determines which parts of the analysis matter most and what a good price looks like.",
+   "item": 7
+  },
+  {
+   "q": "A company has launched a new drug that greatly shortens hospital stays and has no direct competitor. Which pricing approach is most appropriate?",
+   "opts": [
+    "Cost-plus pricing, adding a standard markup to production cost",
+    "Value-based pricing, anchored on the savings and benefits to patients and payers",
+    "Competitor-based pricing, matching the nearest existing treatment",
+    "Penetration pricing set as low as possible to maximize volume"
+   ],
+   "a": 1,
+   "ex": "With a unique product and large measurable benefits, the price should capture part of the value created rather than reflect cost or a weak comparison.",
+   "item": 8
+  },
+  {
+   "q": "A competitor's moves push the client to consider cutting price from $100 to $90. Variable cost is $60 per unit and it sells 10,000 units today. Roughly how much must volume grow to keep total contribution the same?",
+   "opts": [
+    "About 10%",
+    "About 25%",
+    "About 33%",
+    "About 50%"
+   ],
+   "a": 2,
+   "ex": "Contribution today is $40 x 10,000 = $400,000; at $90 it is $30 per unit, so it needs about 13,333 units, a rise of about 33%.",
+   "item": 8
+  },
+  {
+   "q": "Which growth option generally carries the lowest risk?",
+   "opts": [
+    "Launching new products in new markets",
+    "Entering a new country with existing products",
+    "Selling more of existing products to existing markets",
+    "Acquiring a company in an unrelated industry"
+   ],
+   "a": 2,
+   "ex": "Market penetration builds on known customers and known products, so it has the fewest unknowns.",
+   "item": 9
+  },
+  {
+   "q": "A factory runs at 95% utilization and demand is forecast to grow 20%. Before recommending a new plant, what should you check first?",
+   "opts": [
+    "Which architect should design the new plant",
+    "Whether the demand growth is durable and whether cheaper options, such as extra shifts or outsourcing, could cover it",
+    "How fast competitors are building their own plants",
+    "Whether the new plant should be twice the size of the current one"
+   ],
+   "a": 1,
+   "ex": "A new plant is a large fixed commitment, so confirm the demand is lasting and rule out lower-cost ways to add capacity first.",
+   "item": 9
+  },
+  {
+   "q": "A new cafe has fixed costs of $24,000 per month. The average ticket is $8 and the variable cost per ticket is $2. If it opens 25 days a month, how many tickets per day does it need to break even?",
+   "opts": [
+    "120 tickets per day",
+    "200 tickets per day",
+    "4,000 tickets per day",
+    "160 tickets per day"
+   ],
+   "a": 3,
+   "ex": "Contribution per ticket is $8 - $2 = $6, so $24,000 / $6 = 4,000 tickets per month, or 4,000 / 25 = 160 per day.",
+   "item": 10
+  },
+  {
+   "q": "A client asks you to cut costs by 10%. What is the best first step?",
+   "opts": [
+    "Break the cost base into its components and compare them over time and against competitors to find the biggest gaps",
+    "Cut every department's budget by 10% equally",
+    "Start with layoffs, since labor is usually the largest cost",
+    "Raise prices to offset the costs instead"
+   ],
+   "a": 0,
+   "ex": "Understanding where costs sit and which are out of line lets you target the largest, most fixable items rather than cutting blindly.",
+   "item": 10
+  },
+  {
+   "q": "For a cable TV provider, the rise of streaming services that let viewers drop cable entirely is best classified as which of Porter's Five Forces?",
+   "opts": [
+    "Threat of substitutes",
+    "Threat of new entrants",
+    "Bargaining power of buyers",
+    "Rivalry among existing competitors"
+   ],
+   "a": 0,
+   "ex": "Streaming meets the same need in a different way, which makes it a substitute rather than a new cable competitor.",
+   "item": 11
+  },
+  {
+   "q": "A product holds 5% share in a market where the leader holds 30%, and the market is growing 18% per year. Where does it sit in the BCG matrix?",
+   "opts": [
+    "Star",
+    "Cash cow",
+    "Question mark",
+    "Dog"
+   ],
+   "a": 2,
+   "ex": "Low relative share (about 0.17x the leader) in a fast-growing market is the question mark quadrant.",
+   "item": 11
+  },
+  {
+   "q": "What is the best way to use a one-page framework cheat sheet during an interview?",
+   "opts": [
+    "Recite the closest framework word for word to show preparation",
+    "Use it as a starting point and tailor the structure to the specific facts of the case",
+    "Use the same framework for every case to stay consistent",
+    "Avoid any structure so the answer sounds original"
+   ],
+   "a": 1,
+   "ex": "Interviewers reward structures that fit the problem; a memorized framework is a base to adapt, not a script.",
+   "item": 12
+  },
+  {
+   "q": "Which prompt-to-framework pairing belongs on a good cheat sheet?",
+   "opts": [
+    "\"Why are profits down?\" - Porter's Five Forces only",
+    "\"Should we enter Brazil?\" - fixed vs variable cost breakdown only",
+    "\"How should we price our new product?\" - BCG matrix",
+    "\"Should we buy Company X?\" - the target's market, its financials, synergies, price, and risks"
+   ],
+   "a": 3,
+   "ex": "An acquisition question is answered by judging the target, the fit, and the price; the other pairings use a tool that misses the core question.",
+   "item": 12
+  },
+  {
+   "q": "Which closing summary is strongest?",
+   "opts": [
+    "\"First we looked at the market, then competitors, then costs, and after all that we think entering could make sense.\"",
+    "\"The client should enter the market. It is growing 12% a year, we can reach breakeven in two years, and a partner gives us distribution. The main risk is a price war, so next we should test price sensitivity.\"",
+    "\"There are many factors to consider, and more data is needed before we can say anything.\"",
+    "\"The market is growing 12% a year and competitors are fragmented, which is interesting.\""
+   ],
+   "a": 1,
+   "ex": "It leads with the answer, gives the key supporting reasons, and ends with the main risk and a next step.",
+   "item": 13
+  },
+  {
+   "q": "A candidate closes: \"We examined revenue, then costs, then the competition, and found several things, so overall the client might consider closing the plant.\" What is the main weakness?",
+   "opts": [
+    "It recaps the analysis in order instead of leading with a clear recommendation",
+    "It is too short to cover the analysis",
+    "It should not mention costs in a summary",
+    "It makes a recommendation, which candidates should avoid"
+   ],
+   "a": 0,
+   "ex": "A strong summary states the recommendation first, then the reasons; a chronological recap buries the answer and sounds unsure.",
+   "item": 13
+  },
+  {
+   "q": "An exhibit shows revenue by region. North went from $40M to $44M; South went from $60M to $54M. Which statement is correct?",
+   "opts": [
+    "Total revenue fell 10%, driven equally by both regions",
+    "Total revenue was flat because the regions' changes offset",
+    "Total revenue fell 2%, because the South's 10% decline outweighed the North's 10% growth",
+    "Total revenue grew 2% thanks to strong growth in the North"
+   ],
+   "a": 2,
+   "ex": "Total went from $100M to $98M, a 2% drop; both regions moved 10%, but the South is larger so its $6M loss beat the North's $4M gain.",
+   "item": 14
+  },
+  {
+   "q": "An exhibit shows Year 1 revenue of $200M with cost of goods sold of $120M, and Year 2 revenue of $250M with cost of goods sold of $160M. What happened?",
+   "opts": [
+    "Gross profit fell, and gross margin fell from 40% to 36%",
+    "Gross profit rose by $50M, and gross margin stayed at 40%",
+    "Gross profit rose by $10M, and gross margin rose from 36% to 40%",
+    "Gross profit rose by $10M, but gross margin fell from 40% to 36%"
+   ],
+   "a": 3,
+   "ex": "Gross profit went from $80M to $90M, but as a share of revenue it went from 80/200 = 40% to 90/250 = 36%.",
+   "item": 14
+  },
+  {
+   "q": "In a 25-minute practice case you have spent 15 minutes on one branch of your structure. What is the best move?",
+   "opts": [
+    "Summarize what you found, state what it implies, and move to the next most important branch",
+    "Keep digging until that branch is fully exhausted",
+    "Start over with a new framework",
+    "Skip straight to the final recommendation without mentioning the other branches"
+   ],
+   "a": 0,
+   "ex": "Managing time means banking your findings and prioritizing the remaining analysis so you can still reach a well-supported answer.",
+   "item": 15
+  },
+  {
+   "q": "A client has revenue of $500M and costs of $450M. Next year revenue stays flat and costs rise 4%. By what percentage does profit fall?",
+   "opts": [
+    "4%",
+    "36%",
+    "18%",
+    "40%"
+   ],
+   "a": 1,
+   "ex": "Costs rise to $468M, so profit drops from $50M to $32M, a fall of $18M / $50M = 36%.",
+   "item": 15
+  }
+ ]
+}
