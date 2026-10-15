@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         // The app's own native plugins register before the bridge starts.
         registerPlugin(UsagePlugin.class);
         registerPlugin(WidgetPlugin.class);
+        registerPlugin(UpdaterPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

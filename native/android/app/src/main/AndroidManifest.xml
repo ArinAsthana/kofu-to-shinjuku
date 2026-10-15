@@ -51,4 +51,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- v5.2 phone-usage quest. Only works after the user turns on Usage access in Settings. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
+    <!-- v6.3 self-update: lets the app hand a downloaded APK to Android's installer (one tap to confirm). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>
