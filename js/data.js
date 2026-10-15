@@ -7,8 +7,8 @@ export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "202
 
 // Habit IDs match the old planner so its backup imports cleanly in v2.
 export const HABIT_DEFS = [
-  { id: "anki", name: "Clear due flashcards", note: "Ticks itself when the due pile hits zero in a study block", target: 7, c: "var(--jp)" },
-  { id: "jp", name: "Japanese grammar or reading", note: "25–40 min", target: 6, c: "var(--jp)" },
+  { id: "anki", name: "Japanese: reviews + today's new cards", note: "Ticks itself when the due pile and today's new cards are done", target: 7, c: "var(--jp)" },
+  { id: "jp", name: "Japanese: today's N2 item", note: "Ticks itself when you finish an item on the N2 plan", target: 6, c: "var(--jp)" },
   { id: "fin", name: "Finance block", note: "90 min", target: 5, c: "var(--fin)" },
   { id: "math", name: "Mental math", note: "15 min", target: 6, c: "var(--fin)" },
   { id: "news", name: "News and markets", note: "15 min + one line in Obsidian", target: 5, c: "var(--fin)" },

@@ -19,6 +19,7 @@ import * as Pa from "./path.js";
 import * as Ap from "./apps.js";
 import * as Up from "./update.js";
 import * as Lx from "./lexicon.js";
+import * as N2 from "./n2.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -160,7 +161,10 @@ function todayQuests(t = E.today()) {
   const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
   const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
   const call = live("xpEvents").some(e => e.ref === "call" && E.ymd(new Date(e.ts)) === t);
-  return { trials, events, habits, call, path, done: doneT.length + path.done + trials.filter(x => x.done).length + habits.filter(x => x.on).length + (call ? 1 : 0), total: trials.length + events.length + path.total + habits.length + (call ? 1 : 0) };
+  // v8.1: the N2 plan's open grammar item, any time of day (no block). Done once any item is finished today.
+  // It is the "jp" daily quest (finishing an item ticks it); Home names the item itself.
+  const jc = N2.ready() ? N2.current() : null, jp = jc && !jc.gate ? jc.g : null;
+  return { trials, events, habits, call, path, jp, done: doneT.length + path.done + trials.filter(x => x.done).length + habits.filter(x => x.on).length + (call ? 1 : 0), total: trials.length + events.length + path.total + habits.length + (call ? 1 : 0) };
 }
 const habitRow = ({ h, on }) => `<div class="q ${on ? "done" : ""}">
   <button class="bx" data-act="habit" data-id="${h.id}" aria-pressed="${on}" aria-label="${esc(h.name)} done today">${on ? ic("check") : ""}</button>
@@ -390,7 +394,7 @@ function gateBox(g) {
 }
 let gq = null; // the Gate Test in progress: {s, g, qs, ans, ends, res}
 function vGate(s) {
-  const st = Pa.stream(s), back = `<button class="back" data-act="nav" data-id="path">${ic("left")} Path</button>`;
+  const st = Pa.stream(s), home = s === "n2" ? ["jlpt", "Japanese"] : ["path", "Path"], back = `<button class="back" data-act="nav" data-id="${home[0]}">${ic("left")} ${home[1]}</button>`;
   const g = Pa.gate(s);
   if (!st || (!g && !(gq && gq.s === s && gq.res))) return `${back}<h1>Gate</h1><p class="empty">No Gate open here.</p>`;
   if (g && g.retakeAt > Date.now() && !(gq && gq.s === s)) return `${back}<h1>Gate</h1><p class="empty">The retake opens in ${Math.ceil((g.retakeAt - Date.now()) / 3600e3)} h.</p>`;
@@ -408,7 +412,7 @@ function vGate(s) {
       <div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="gqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
       ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(q.opts[q.a])}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
   return head + (r ? sysBox(r.passed ? `Gate cleared: ${r.ok}/${r.n}. Arc ${Pa.arc(s).n} is open.` : `${r.ok}/${r.n}. The Gate holds.`, r.passed ? (r.xp ? `+${r.xp} XP` : "") : `Your misses are now flashcards in ${esc(st.label)} mistakes. The retake opens in 24 hours.`,
-      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to the Path</button></div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
+      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button></div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
     + gq.qs.map(qHtml).join("")
     + (r ? "" : `<div class="btns"><button class="btn go block" data-act="gqsubmit">Submit</button></div>`);
 }
@@ -442,7 +446,7 @@ function pushWidget() {
     const now = pens.length ? { label: "PENALTY QUEST", title: penWhat(pens[0]).replace(/&[^;]+;/g, ""), time: "" }
       : nn.now ? { label: "NOW", title: it(nn.now), time: `${P.toHM(nn.now.s)}–${P.toHM(nn.now.e)}` }
       : nn.next ? { label: "NEXT", title: it(nn.next), time: P.toHM(nn.next.s) } : { label: "SYSTEM", title: "Nothing left today", time: "" };
-    const quests = [...q.trials.map(e => ({ t: e.k.title, done: !!e.done })), ...q.path.list.map(k => ({ t: k.title, done: !!k.done })), ...q.events.map(e => ({ t: e.k.title, done: !!e.done })), ...q.habits.map(x => ({ t: x.h.name, done: x.on }))]
+    const quests = [...q.trials.map(e => ({ t: e.k.title, done: !!e.done })), ...q.path.list.map(k => ({ t: k.title, done: !!k.done })), ...q.events.map(e => ({ t: e.k.title, done: !!e.done })), ...q.habits.map(x => ({ t: habitName(x.h, q), done: x.on }))]
       .sort((a, b) => a.done - b.done).slice(0, 3);
     const m = Us.available() && Us.isGranted() ? Us.today() : null;
     const snapshot = { now, quests, level: `LV ${E.level()} · ${q.done}/${q.total} quests`, usage: m != null ? `Phone ${m}/${Us.cfg().limitMin} min` : "" };
@@ -455,7 +459,7 @@ function pushWidget() {
 function questsPanel(q) {
   const items = [...q.trials.filter(e => !e.done).map(e => [e.k.title, tag("trial", "Trial")]),
     ...q.events.filter(e => !e.done).map(e => [e.k.title, e.k.penalty ? tag("pen", "Penalty") : tag("today", "Today")]),
-    ...q.habits.filter(x => !x.on).map(x => [x.h.name, tag("daily", "Daily")])];
+    ...q.habits.filter(x => !x.on).map(x => [habitName(x.h, q), tag("daily", "Daily")])];
   if (Pa.started()) items.unshift(...Pa.gates().filter(g => g.retakeAt <= Date.now()).map(g => [`Gate Test · ${Pa.stream(g.stream).label}`, tag("trial", "Gate")]),
     ...allRaids().filter(r => r.days <= 7).slice(0, 2).map(r => [r.name, tag("raid", `Raid · ${r.days <= 0 ? "today" : r.days + "d"}`)]));
   const top = items.slice(0, 3);
@@ -466,6 +470,8 @@ function questsPanel(q) {
     <div class="btns"><button class="btn sm" data-act="questsall">${showAllQuests ? "Hide" : `Show all (${q.total})`}</button></div>
     ${showAllQuests ? questsAll(q) : ""}</div>`;
 }
+// v8.1: the Japanese daily quest names today's N2 item.
+const habitName = (h, q) => h.id === "jp" && q.jp ? "日本語 · " + q.jp : h.name;
 function questsAll(q) {
   return `<div class="qall">${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
     ${q.trials.length ? `<div class="qsec trial">${px("flag")} Trial <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}
@@ -1465,11 +1471,30 @@ function qHtml(lvl, it, pick, reveal, act) {
     <div class="opts">${it.opts.map((o, i) => `<button class="opt ja ${reveal ? (i === right ? "right" : i === pick ? "wrong" : "dim") : pick === i ? "sel" : ""}" data-act="${act}" data-id="${i}" ${reveal ? "disabled" : ""}><span class="on">${i + 1}</span> ${stem(o)}</button>`).join("")}</div>
     ${reveal && it.ex ? `<div class="sys ex"><b>${pick === right ? "Correct" : "Not quite"}</b> · ${esc(it.ex)}</div>` : ""}`;
 }
+// v8.1: the N2 plan, one item at a time: the Floor, the open grammar item and its Arc, then fluency once it's done.
+function n2Panel() {
+  if (!N2.ready()) return "";
+  const c = N2.current(), f = N2.floor(), dt = N2.doneToday(), fl = N2.fluency();
+  const exam = N2.examAsked() ? "" : `<div class="panel"><b class="small">Exam Raid: JLPT ${Pa.jpExam()} · Sun 4 Jul 2027</b><p class="small muted" style="margin:4px 0 0">Your N2 plan builds to the July sitting. Keep N2, or set the Raid to N3.</p>
+    <div class="btns"><button class="btn sm go" data-act="n2exam" data-id="N2">Keep N2</button><button class="btn sm" data-act="n2exam" data-id="N3">Switch to N3</button></div></div>`;
+  if (!c) return exam + sysBox("N2 plan complete.", "Every item is done. The exam Raid is what's left.");
+  const A = Pa.arc("n2"), ahead = !c.gate && E.today() < c.due;
+  const list = A.items.map(x => `<div class="arc-i ${x.done ? "done" : x.cur ? "cur" : ""}">${x.done ? ic("check", "inl") : x.cur ? px("sword") : `<i class="arc-dot"></i>`}<span>${esc(x.t)}</span></div>`).join("");
+  const flRow = x => `<div class="q ${x.done ? "done" : ""}"><button class="bx" data-act="n2fl" data-id="${x.ref}" aria-pressed="${x.done}" aria-label="${esc(x.t)} done">${x.done ? ic("check") : ""}</button>
+    <div class="grow"><div class="small">${esc(x.t)}</div></div><div class="xp">+${N2.XP_FLUENCY}</div></div>`;
+  return `${exam}<div class="panel pstream n2p"><div class="row between"><span class="hdr">${px("gate")} Floor ${f.n} · ${esc(f.name)}</span><span class="small muted">${P.dur(c.m)}</span></div>
+    <div class="t n2g">${c.gate ? `Gate Test before Arc ${A.n}.` : esc(c.g)}</div>
+    ${ahead ? `<div class="tiny good-t">Ahead of schedule: +50% XP if it's Done.</div>` : ""}
+    ${c.gate ? gateBox(c.gate) : fold("arc-n2", `<span class="grow tiny mono">Arc ${A.n} · ${A.done}/${A.size}</span>`, list, false, "arcf")
+      + `<div class="btns"><button class="btn go" data-act="n2fin" data-id="done">Done</button><button class="btn" data-act="n2fin" data-id="partly">Partly</button></div>`}
+    ${dt.length ? `<div class="row between tiny muted" style="margin-top:6px"><span>${dt.length} item${dt.length === 1 ? "" : "s"} done today</span><button class="link" data-act="n2undo">Undo last</button></div>` : ""}
+    ${fl.length ? `<div class="qsec">Fluency <span>side quests</span></div><div class="list">${fl.map(flRow).join("")}</div>` : ""}</div>`;
+}
 function vJlpt([sub, a]) {
   if (sub === "q") return vJlptQ(a);
   if (sub === "exam") return vExam(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Japanese</div><h1>JLPT ladder</h1></div>${gear("dungeon")}</header>`;
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + n2Panel();
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
   const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`;
@@ -2465,7 +2490,18 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "gqpick": { if (!gq || gq.res) return; const [i, j] = id.split(":").map(Number); gq.ans[i] = j; return render(); }
     case "gqsubmit": { if (!gq) return; const miss = gq.qs.filter((q, i) => gq.ans[i] == null).length; if (miss && !confirm(`${miss} unanswered. Submit anyway?`)) return; return gateSubmit(); }
-    case "gatedone": gq = null; return goR("path");
+    case "gatedone": { const was = gq && gq.s; gq = null; return goR(was === "n2" ? "jlpt" : "path"); }
+    case "n2fin": {
+      const g = N2.finish(id); if (!g) return; save();
+      const p = N2.pos(), A = Pa.arc("n2");
+      if (g.floor) toast(`+${g.xp} XP · Floor ${g.floor.n} open: ${g.floor.name}`, true);
+      else if (p % Pa.ARC === 0) toast(`+${g.xp} XP · 日本語: Arc ${A.n - 1} cleared.${N2.current()?.gate ? " A Gate Test stands before the next." : ""}`, true);
+      else announce([{ xp: g.xp, label: "日本語 · " + g.label }, g.habit]);
+      return render();
+    }
+    case "n2undo": { if (!confirm("Undo the last N2 item? Its XP goes too.")) return; N2.undo(); save(); return render(); }
+    case "n2fl": { const xp = N2.fluencyDone(id, !live("xpEvents").some(e => e.ref === id)); save(); if (xp) toast(`+${xp} XP · Fluency`); return render(); }
+    case "n2exam": N2.setExam(id); save(); toast(`Exam Raid: JLPT ${id}, Sun 4 Jul 2027`); return render();
     case "raidclear": { const xp = Pa.clearRaid(id); if (!xp) return; save(); toast(`Raid cleared · +${xp} XP`, true); return render(); }
     case "raidundo": { if (!confirm("Undo this Raid? Its XP goes too.")) return; Pa.unclearRaid(id); save(); return render(); }
     case "appsave": {
@@ -2863,6 +2899,7 @@ function renameStyle() {
   await load();
   await Cl.loadIndex();
   await Pa.load(); if (Pa.issue()) save();
+  await N2.load();
   await Lx.load();
   renameStyle();
   if (Soc.migrateTraits()) save();
