@@ -17,6 +17,7 @@ import * as Al from "./alarms.js";
 import * as Us from "./usage.js";
 import * as Pa from "./path.js";
 import * as Ap from "./apps.js";
+import * as Up from "./update.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -106,7 +107,7 @@ function render() {
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
   const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
-  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
+  $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.update ? updateWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
@@ -417,6 +418,9 @@ function gateSubmit() {
 const riskHtml = r => `<div class="milestone" role="dialog" aria-label="${esc(r.m.name)} at risk"><div class="ms-in">
   <div class="hdr">System · Warning</div>${px("skull", "ms-px")}<h2 class="ms-t">${esc(r.m.name)} at risk</h2><p class="muted">At this pace ${esc(Pa.stream(r.m.stream).label)} reaches the exam material ${r.late} day${r.late === 1 ? "" : "s"} after ${esc(E.fmtDate(r.m.date))}. Go ahead to close the gap.</p>
   <button class="btn primary block" data-act="riskgo" data-id="${r.m.id}">Go ahead now</button><button class="btn block" style="margin-top:8px" data-act="riskok" data-id="${r.m.id}">Later</button></div></div>`;
+const updateWinHtml = () => `<div class="milestone" role="dialog" aria-label="Update available"><div class="ms-in">
+  <div class="hdr">System · Update</div>${px("bolt", "ms-px")}<h2 class="ms-t">Update available</h2><p class="muted">Build ${Up.pending().build} of the app is out. Update downloads it and opens Android's installer: tap <b>Install</b> there. Android always asks for that one tap. Your data stays.</p>
+  <button class="btn primary block" data-act="updgo">Update</button><button class="btn block" style="margin-top:8px" data-act="updlater">Later</button></div></div>`;
 const floorHtml = f => `<div class="milestone" role="dialog" aria-label="Floor ${f.n}"><div class="ms-in">
   <div class="hdr">System · Floor ${f.n}</div>${px("gate", "ms-px")}<h2 class="ms-t">${esc(f.name)}</h2><p class="muted">${f.last ? "The last Floor. Everything so far was for this." : "A new Floor opens. The streams carry on where you are; what they ask of you steps up."}</p>
   <button class="btn primary block" data-act="floorok" data-id="${f.n}">Enter Floor ${f.n}</button></div></div>`;
@@ -559,6 +563,7 @@ function ceremony() {
   if (Pa.ready() && Pa.started() && !S.settings.pathAwoke) return { awake: true };
   const fl = Pa.newFloor(); if (fl) return { floor: fl };
   if (route()[0] !== "path") { const r = Pa.risk(); if (r) return { risk: r }; }
+  if (Up.needsAsk()) return { update: true };
   if (Al.needsAsk()) return { alarms: true };
   if (Us.needsAsk()) return { usage: true };
   if (Sy.has(2) && E.parse(E.today()).getDay() === 0 && E.moneyDue() && lsGet(MONEYWIN_KEY) !== E.today()) return { money: true };
@@ -2066,6 +2071,8 @@ function vSettings([sec] = []) {
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>`)}
   ${sx("report", "Weekly report", statusSettings())}
   ${sx("archives", "System Archives", archivesHtml(), "", "")}
+  ${Up.available() ? sx("update", "App updates", `<p class="small muted">${Up.pending() ? `Build ${Up.pending().build} is ready to install.` : "The app checks once a day."} Web changes arrive on their own.</p>
+    <div class="btns">${Up.pending() ? `<button class="btn sm go" data-act="updgo">Update</button>` : `<button class="btn sm" data-act="updcheck">Check now</button>`}</div>`, Up.pending() ? "update ready" : "") : ""}
   ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
     <h3 style="margin-top:14px">Export</h3>
     <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Flashcard images and recordings are in the file; check-in photos and the copied text leave media out.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
@@ -2074,7 +2081,7 @@ function vSettings([sec] = []) {
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
     <input type="file" accept="application/json,.json" data-ch="import">`)}
-  <p class="tiny muted" style="text-align:center;margin-top:16px">v6.2 · data schema ${S.schemaVersion}</p>`;
+  <p class="tiny muted" style="text-align:center;margin-top:16px">v${Up.APP_V} · data schema ${S.schemaVersion}</p>`;
 }
 
 function download(name, text, type = "application/json") {
@@ -2400,6 +2407,15 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "pathrest": { if (!confirm("Use a rest token on today? Nothing new is issued and nothing slips.")) return; if (!Pa.rest()) return toast("No token to use"); save(); toast("Rest day. The Path waits."); return render(); }
     case "riskok": Pa.seeRisk(id); ceremonyDone = true; save(); return render();
     case "riskgo": { const m = Pa.FIXED.find(x => x.id === id); Pa.seeRisk(id); ceremonyDone = true; save(); const k = Pa.goAhead(m.stream); if (k) { save(); toast(`Dungeon open: ${Pa.stream(m.stream).label}`); return goR("home"); } return goR("path"); }
+    case "updcheck": { const f = await Up.check(true); toast(f ? `Build ${f.build} is available` : "Up to date"); return render(); }
+    case "updlater": Up.later(); ceremonyDone = true; return render();
+    case "updgo": {
+      ceremonyDone = true; toast("Downloading the update…"); render();
+      const r = await Up.install();
+      if (r === "permission") return toast("Allow The Arin to install apps, then come back and tap Update in Settings.");
+      if (r !== "ok") toast("Update failed: " + r);
+      return render();
+    }
     case "floorok": Pa.seeFloor(+id); ceremonyDone = true; save(); return goR("path");
     case "awake": S.settings.pathAwoke = E.today(); Pa.seeFloor((Pa.floor() || { n: 1 }).n); touchSettings(); ceremonyDone = true; save(); return goR("path");
     case "unlock": Sy.seeUnlock(); ceremonyDone = true; save(); if (id) { entering = true; return go(id); } return render();
@@ -2745,6 +2761,8 @@ function renameStyle() {
   if (!live("xpEvents").some(e => e.ref === "call")) { put("xpEvents", { ts: Date.now(), type: "call", xp: CALL_XP, ref: "call", label: "Answer the call" }); save(); }
   briefOpen = briefDue();
   entering = true; render();
+  const upd = Up.webUpdated(); if (upd) setTimeout(() => toast(`System updated: v${upd}`, true), 1500);
+  Up.check().then(f => { if (f) render(); });
   fullOnTap();
   Sync.init({ render, toast });
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
