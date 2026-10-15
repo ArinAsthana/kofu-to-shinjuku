@@ -1,0 +1,293 @@
+{
+ "stream": "n2",
+ "gate": 1,
+ "title": "Genki II L13–20",
+ "questions": [
+  {
+   "q": "納豆が（　）人は手を挙げてください。(People who CAN eat natto…)",
+   "opts": [
+    "食べる",
+    "食べられる",
+    "食べさせる",
+    "食べれられる"
+   ],
+   "a": 1,
+   "ex": "With が marking the food, the ru-verb potential 食べられる (can eat) is needed; 食べる would make natto the eater."
+  },
+  {
+   "q": "この店は値段が安い（　）、店員も親切なので、よく来ます。",
+   "opts": [
+    "から",
+    "し",
+    "のに",
+    "ながら"
+   ],
+   "a": 1,
+   "ex": "〜し lists reasons, and the も in 店員も signals that another reason is being added."
+  },
+  {
+   "q": "空が暗いですね。雨が（　）ですね。(It looks like it's about to rain.)",
+   "opts": [
+    "降るそう",
+    "降ったそう",
+    "降りそうな",
+    "降りそう"
+   ],
+   "a": 3,
+   "ex": "Looks-like そう attaches to the verb stem (降り), while 降るそう would be hearsay and そうな cannot come before です."
+  },
+  {
+   "q": "A「日本料理が好きです。」B「日本料理（　）、駅の前の店がおいしいですよ。」",
+   "opts": [
+    "ので",
+    "のに",
+    "なら",
+    "ばかり"
+   ],
+   "a": 2,
+   "ex": "なら picks up the topic the other person just raised and gives a recommendation about it."
+  },
+  {
+   "q": "弟はいつも私のゲームで（　）。",
+   "opts": [
+    "遊びたがります",
+    "遊びたいがります",
+    "遊ぶたがります",
+    "遊びたがりです"
+   ],
+   "a": 0,
+   "ex": "To describe a third person's desire, attach 〜たがる to the verb stem: 遊び + たがる."
+  },
+  {
+   "q": "誕生日に、友だちが私に花を（　）。",
+   "opts": [
+    "くれました",
+    "あげました",
+    "さしあげました",
+    "やりました"
+   ],
+   "a": 0,
+   "ex": "When someone gives something to me, the verb is くれる; あげる/さしあげる/やる are for giving away from my side."
+  },
+  {
+   "q": "疲れているなら、少し（　）どうですか。",
+   "opts": [
+    "休んで",
+    "休みたら",
+    "休むなら",
+    "休んだら"
+   ],
+   "a": 3,
+   "ex": "Advice 〜たらどうですか uses the past-tense form + ら: 休んだら."
+  },
+  {
+   "q": "財布に百円（　）ありません。",
+   "opts": [
+    "ばかり",
+    "まで",
+    "を",
+    "しか"
+   ],
+   "a": 3,
+   "ex": "しか + negative means 'only': I have only 100 yen."
+  },
+  {
+   "q": "夏休みに富士山に（　）と思っています。",
+   "opts": [
+    "登ろう",
+    "登りよう",
+    "登るよう",
+    "登れよう"
+   ],
+   "a": 0,
+   "ex": "The volitional of the u-verb 登る is 登ろう, and volitional + と思っている expresses a plan."
+  },
+  {
+   "q": "友だちが来る前に、部屋を掃除して（　）。(I'll clean it in advance.)",
+   "opts": [
+    "おきます",
+    "あります",
+    "みます",
+    "くれます"
+   ],
+   "a": 0,
+   "ex": "〜ておく means doing something in preparation; てある would need が, not を."
+  },
+  {
+   "q": "あそこで本を（　）人は、私の姉です。",
+   "opts": [
+    "読んでいるの",
+    "読んでいます",
+    "読んでいる",
+    "読んで"
+   ],
+   "a": 2,
+   "ex": "A relative clause uses the plain form directly before the noun: 読んでいる人."
+  },
+  {
+   "q": "私は友だちに宿題を（　）。(I had my friend help me with my homework.)",
+   "opts": [
+    "手伝ってくれました",
+    "手伝ってあげました",
+    "手伝ってもらいました",
+    "手伝いもらいました"
+   ],
+   "a": 2,
+   "ex": "With 私は and 友だちに, receiving a favor is 〜てもらう; くれる would need the friend as subject."
+  },
+  {
+   "q": "すみません、この漢字の読み方を（　）。",
+   "opts": [
+    "教えていただけませんか",
+    "教えていただきませんか",
+    "教えてあげませんか",
+    "教えてさしあげませんか"
+   ],
+   "a": 0,
+   "ex": "〜ていただけませんか (potential negative of いただく) is the polite way to ask a favor."
+  },
+  {
+   "q": "昨日、うちに（　）時、「ただいま」と言いました。",
+   "opts": [
+    "帰る",
+    "帰って",
+    "帰り",
+    "帰った"
+   ],
+   "a": 3,
+   "ex": "You say ただいま after arriving, so the completed form 帰った時 is required; 帰る時 would mean before leaving for home."
+  },
+  {
+   "q": "天気予報によると、明日は雨が（　）そうです。",
+   "opts": [
+    "降って",
+    "降る",
+    "降った",
+    "降ら"
+   ],
+   "a": 1,
+   "ex": "Hearsay そうです follows the plain form, and for tomorrow that is the non-past 降る."
+  },
+  {
+   "q": "大学を（　）、日本で働きたいです。",
+   "opts": [
+    "卒業したら",
+    "卒業すると",
+    "卒業したり",
+    "卒業するたら"
+   ],
+   "a": 0,
+   "ex": "〜たら sets up a future condition before a wish; と cannot be followed by an expression of desire like 〜たい."
+  },
+  {
+   "q": "宿題を（　）テレビを見ます。(After I do my homework, I'll watch TV.)",
+   "opts": [
+    "したから",
+    "する前に",
+    "しながら",
+    "してから"
+   ],
+   "a": 3,
+   "ex": "〜てから means 'after doing'; したから means 'because' and the others mean 'before' and 'while'."
+  },
+  {
+   "q": "風で窓が（　）。",
+   "opts": [
+    "開けました",
+    "開きました",
+    "開かせました",
+    "開けさせました"
+   ],
+   "a": 1,
+   "ex": "With が and no agent, the intransitive 開く is needed: the window opened."
+  },
+  {
+   "q": "大切な写真をなくして（　）。(Unfortunately, I lost an important photo.)",
+   "opts": [
+    "おきました",
+    "しまいました",
+    "ありました",
+    "みました"
+   ],
+   "a": 1,
+   "ex": "〜てしまう expresses regret about something that happened."
+  },
+  {
+   "q": "このボタンを（　）、お茶が出ます。",
+   "opts": [
+    "押したと",
+    "押しと",
+    "押すと",
+    "押すのと"
+   ],
+   "a": 2,
+   "ex": "〜と after the plain non-past form expresses an automatic result: whenever you press it, tea comes out."
+  },
+  {
+   "q": "先生は今、研究室に（　）。",
+   "opts": [
+    "まいります",
+    "おります",
+    "いらっしゃいます",
+    "いらっしゃります"
+   ],
+   "a": 2,
+   "ex": "いらっしゃる is the honorific of いる for a teacher, and its masu form is いらっしゃいます."
+  },
+  {
+   "q": "社長はもう（　）。",
+   "opts": [
+    "お帰りになりました",
+    "お帰りしました",
+    "お帰りにしました",
+    "お帰りなりました"
+   ],
+   "a": 0,
+   "ex": "Honorific お + stem + になる raises the president's action; お〜する is humble and only for your own actions."
+  },
+  {
+   "q": "田中さんは今日休むと言っていたから、学校に来ない（　）。",
+   "opts": [
+    "はずだです",
+    "なはずです",
+    "のはずです",
+    "はずです"
+   ],
+   "a": 3,
+   "ex": "はずです follows a plain verb directly to express a confident expectation."
+  },
+  {
+   "q": "はじめまして。私はスミスと（　）。",
+   "opts": [
+    "おっしゃいます",
+    "申します",
+    "申し上げます",
+    "お言いします"
+   ],
+   "a": 1,
+   "ex": "申す is the extra-modest verb for introducing your own name; おっしゃる is honorific for others."
+  },
+  {
+   "q": "重そうですね。その荷物、私が（　）。",
+   "opts": [
+    "お持ちになります",
+    "お持ちします",
+    "お持ちいただきます",
+    "お持ちくださいます"
+   ],
+   "a": 1,
+   "ex": "Humble お + stem + する describes something I do for the listener."
+  },
+  {
+   "q": "明日のパーティーに行ける（　）、まだわかりません。",
+   "opts": [
+    "どうか",
+    "とどうか",
+    "かどうか",
+    "かどうして"
+   ],
+   "a": 2,
+   "ex": "An embedded yes/no question takes 〜かどうか before verbs like わからない."
+  }
+ ]
+}

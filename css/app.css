@@ -686,3 +686,5 @@ input:not([type=checkbox]):not([type=radio]),select{min-height:44px}
 .fc-front.kanji{font-size:64px;line-height:1.1}
 .srt-card{touch-action:pan-y;user-select:none;min-height:220px;cursor:pointer}
 .srt-dock{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.n2p .n2g{margin:6px 0 8px;font-size:15px;line-height:1.4;overflow-wrap:anywhere}
+.n2p .qsec{margin-top:10px}

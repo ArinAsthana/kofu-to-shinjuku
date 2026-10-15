@@ -11,6 +11,7 @@ import { S, live, put, remove, photos } from "./store.js";
 import { HABITS } from "./data.js";
 import * as E from "./engine.js";
 import * as Lx from "./lexicon.js";
+import * as N2 from "./n2.js";
 
 /* ---------- FSRS-4.5 ---------- */
 const W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
@@ -69,7 +70,11 @@ export function setOff(id, off) {
 }
 const lexSeen = () => live("cards").filter(c => c.lex && c.intro && !c.off).map(hyd).filter(Boolean);
 // Today's new Lexicon cards: vocabulary N5 → N2 and kanji N3 → N2, skipping off and started cards.
-export const jp = () => ({ newWords: 25, newKanji: 5, ...(S.settings.jp || {}) });
+// v8.1: the pace is the N2 plan row's (a ceiling, not a duty); settings.jp overrides it.
+export const jp = () => ({ ...N2.pace(), ...(S.settings.jp || {}) });
+// A heavy day: the due pile alone would take over 90 minutes, so no new cards today.
+export const REVIEW_SEC = 10, HEAVY_MIN = 90;
+export const heavy = dueN => dueN * REVIEW_SEC > HEAVY_MIN * 60;
 function lexFresh(t, extra) {
   if (!Lx.ready()) return [];
   const m = Lx.recs(), out = [], cfg = jp();
@@ -133,8 +138,8 @@ export function learnMore(n) {
 export function queue(now = Date.now()) {
   const all = cards(), t = E.today();
   const seen = [...all.filter(c => c.intro), ...lexSeen()], introToday = all.filter(c => c.intro === t).length;
-  const fresh = [...all.filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).slice(0, Math.max(0, (settings().newPerDay ?? 15) + extraToday() - introToday)), ...lexFresh(t, extraToday())];
   let due = seen.filter(c => (c.due || 0) <= now);
+  const fresh = heavy(due.length) ? [] : [...all.filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).slice(0, Math.max(0, (settings().newPerDay ?? 15) + extraToday() - introToday)), ...lexFresh(t, extraToday())];
   if (!due.length && !fresh.length) due = seen.filter(c => (c.due || 0) <= now + AHEAD);
   return [...due.sort((a, b) => (a.due || 0) - (b.due || 0)), ...fresh];
 }

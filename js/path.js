@@ -20,10 +20,14 @@ export const STREAMS = [
   { id: "sapmurex", label: "SAP/Murex", mins: 45 },
   { id: "apps", label: "Applications", mins: 45 },
 ];
-export const stream = id => STREAMS.find(s => s.id === id);
+// v8.1: the N2 plan (js/n2.js) runs on the same Arcs and Gate Tests, but off the Path: it issues no tasks and never counts in Path standing.
+export const N2 = { id: "n2", label: "Japanese N2", mins: 60 };
+export const stream = id => STREAMS.find(s => s.id === id) || (id === N2.id ? N2 : undefined);
 const SUN_MINS = 20;
 
-let WEEK = {}, SUN = {}, RES = [], FLOORS = [], RAIDS = [];
+let WEEK = {}, SUN = {}, RES = [], FLOORS = [], RAIDS = [], EXTRA = [];
+// v8.1: a queue that lives outside the Path (the N2 plan) and its own dated Raids (the full mocks).
+export function setQueue(id, items, raids = []) { WEEK[id] = items; EXTRA = raids; }
 // "45m Genki II…" repeats the stream's own length; a split item ("30m … | 15m …") keeps its parts.
 const clean = t => t.includes(" | ") ? t : t.replace(/^\d+m /, "");
 export async function load() {
@@ -69,7 +73,7 @@ const logOf = s => live("path").filter(r => r.stream === s && !r.sun && r.kind !
 export const pos = s => logOf(s).reduce((a, r) => Math.max(a, r.idx + 1), 0);
 export const item = (s, idx) => (WEEK[s] || [])[idx] || null;
 export const length = s => (WEEK[s] || []).length;
-export const pathTasks = () => live("tasks").filter(k => k.path && stream(k.path.stream));
+export const pathTasks = () => live("tasks").filter(k => k.path && STREAMS.some(s => s.id === k.path.stream));
 // An item started with Go ahead, while its time runs (plus 30 min to report).
 export function running(now = new Date()) {
   const t = E.ymd(now), m = now.getHours() * 60 + now.getMinutes();
@@ -112,7 +116,7 @@ export function issue(t = E.today()) {
   if (!ready()) return false;
   let changed = false;
   // v8: an unfinished item from a stream that left the Path (Japanese) is withdrawn; finished ones stay.
-  for (const k of live("tasks")) if (k.path && !stream(k.path.stream) && !k.done) { remove("tasks", k.id); changed = true; }
+  for (const k of live("tasks")) if (k.path && !STREAMS.some(s => s.id === k.path.stream) && !k.done) { remove("tasks", k.id); changed = true; }
   if (!started(t)) return changed;
   if (isRest(t)) return false;
   // A Sunday item is for its Sunday only.
@@ -182,10 +186,10 @@ export function zetamac() {
 }
 
 /* ---------- Gate Tests (v6 §8): after every 3rd Arc ---------- */
-export const TESTED = ["case", "aptitude", "accounting", "sapmurex"];
+export const TESTED = ["case", "aptitude", "accounting", "sapmurex", "n2"];
 export const GATE_EVERY = 3 * ARC, GATE_Q = 15, GATE_PASS = 0.7, RETAKE_MS = 24 * 3600e3, XP_GATE = 60, XP_GATE_TOP = 30;
 // Question banks written so far (data/path/gates/<stream>-<n>.json). A gate without a bank doesn't block.
-export const BANKS = { case: [1], aptitude: [1], accounting: [1], sapmurex: [1] };
+export const BANKS = { case: [1], aptitude: [1], accounting: [1], sapmurex: [1], n2: [1, 2] };
 const attempts = (s, g) => live("path").filter(r => r.kind === "gate" && r.stream === s && r.gate === g);
 export const gatePassed = (s, g) => attempts(s, g).some(r => r.passed);
 // The Gate holding this stream, if any. retakeAt: when a failed Gate opens again.
@@ -195,7 +199,7 @@ export function gate(s) {
   const tries = attempts(s, g).sort((a, b) => b.at - a.at);
   return { stream: s, gate: g, retakeAt: tries.length ? tries[0].at + RETAKE_MS : 0, tries: tries.length, last: tries[0] || null };
 }
-export const gates = () => STREAMS.map(s => gate(s.id)).filter(Boolean);
+export const gates = () => [...STREAMS, N2].map(s => gate(s.id)).filter(Boolean);
 export async function loadBank(s, g) { return (await fetch(`data/path/gates/${s}-${g}.json`)).json(); }
 // A fresh draw of 15 each attempt.
 export function draw(bank) {
@@ -284,13 +288,22 @@ export function seeFloor(n) { cfg().floor = n; touch(); }
 export const RAID_AHEAD = 14, RAID_AFTER = 3, XP_RAID = 40, XP_RAID_BIG = 100;
 const raidLog = id => live("path").find(r => r.kind === "raid" && r.id === id);
 export const raidCleared = id => !!raidLog(id);
+// v8.1: the exam Raid is JLPT N2 (Arin confirms once; N3 stays possible). The old plan's Japanese checkpoints leave with the stream.
+export const jpExam = () => (S.settings.jpExam && S.settings.jpExam.lvl) || "N2";
+const JP_OLD = /^Genki II \(L13|^Tobira done/;
+function named(r) {
+  if (/^JLPT N3/.test(r.name)) return { ...r, name: `JLPT ${jpExam()} (first Sunday of July, verify on jlpt.jp)` };
+  if (/^GRADUATION/.test(r.name) && jpExam() === "N2") return { ...r, name: "GRADUATION (approx.)" };
+  return r;
+}
+const allRaids = () => [...RAIDS.filter(r => !JP_OLD.test(r.name)).map(named), ...EXTRA];
 export function raids(t = E.today()) {
-  return RAIDS.filter(r => E.daysBetween(t, r.date) <= RAID_AHEAD).map(r => ({ ...r, days: E.daysBetween(t, r.date), cleared: raidCleared(r.id) }));
+  return allRaids().filter(r => E.daysBetween(t, r.date) <= RAID_AHEAD).map(r => ({ ...r, days: E.daysBetween(t, r.date), cleared: raidCleared(r.id) }));
 }
 // Open Raids for Home and the Path page, soonest first.
 export const openRaids = (t = E.today()) => started(t) ? raids(t).filter(r => !r.cleared && r.days >= -RAID_AFTER).sort((a, b) => a.days - b.days) : [];
 export function clearRaid(id, t = E.today()) {
-  const r = RAIDS.find(x => x.id === id); if (!r || raidCleared(id)) return 0;
+  const r = allRaids().find(x => x.id === id); if (!r || raidCleared(id)) return 0;
   const xp = r.big ? XP_RAID_BIG : XP_RAID, at = Date.now();
   put("path", { id, kind: "raid", date: t, at, xp, name: r.name });
   put("xpEvents", { ts: at, type: "raid", xp, ref: "path:" + id, label: "Raid cleared: " + r.name });

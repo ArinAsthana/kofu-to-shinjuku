@@ -1,0 +1,293 @@
+{
+ "stream": "n2",
+ "gate": 2,
+ "title": "Genki II L21–23 and N3 grammar, part 1",
+ "questions": [
+  {
+   "q": "電車の中で、知らない人に足を（　）。",
+   "opts": [
+    "踏みました",
+    "踏まれました",
+    "踏まられました",
+    "踏めました"
+   ],
+   "a": 1,
+   "ex": "The passive 踏まれる shows I suffered the action, with the doer marked by に."
+  },
+  {
+   "q": "窓が（　）から、部屋が涼しいです。",
+   "opts": [
+    "開けてある",
+    "開いてある",
+    "開けている",
+    "開けておく"
+   ],
+   "a": 0,
+   "ex": "Transitive verb + てある with が describes a state someone deliberately left, here an opened window."
+  },
+  {
+   "q": "私が寝ている（　）、だれかが部屋に入ったようです。",
+   "opts": [
+    "間に",
+    "間で",
+    "ながら",
+    "中で"
+   ],
+   "a": 0,
+   "ex": "〜間に marks a point within a period when a one-time event happened."
+  },
+  {
+   "q": "ルームメイトに部屋をきれいに使って（　）。",
+   "opts": [
+    "ほしがります",
+    "ほしくです",
+    "ほしいです",
+    "ほしいがります"
+   ],
+   "a": 2,
+   "ex": "〜てほしい with に expresses wanting someone else to do something."
+  },
+  {
+   "q": "子どものころ、母は私にピアノを（　）。",
+   "opts": [
+    "習わされました",
+    "習わせました",
+    "習いさせました",
+    "習わさせました"
+   ],
+   "a": 1,
+   "ex": "The causative of 習う is 習わせる, with the mother as subject and me marked by に."
+  },
+  {
+   "q": "この薬を（　）、すぐよくなりますよ。",
+   "opts": [
+    "飲むば",
+    "飲みば",
+    "飲めば",
+    "飲めれば"
+   ],
+   "a": 2,
+   "ex": "The ば-conditional of an u-verb changes the final u to e + ば: 飲む→飲めば."
+  },
+  {
+   "q": "たくさん勉強した（　）、試験に落ちてしまった。",
+   "opts": [
+    "ので",
+    "のに",
+    "から",
+    "し"
+   ],
+   "a": 1,
+   "ex": "のに expresses an outcome contrary to expectation: I studied a lot, yet I failed."
+  },
+  {
+   "q": "田中さんは、モデル（　）人ですね。",
+   "opts": [
+    "のように",
+    "ような",
+    "のような",
+    "みたいの"
+   ],
+   "a": 2,
+   "ex": "Noun + のような modifies a following noun (人); のように would modify a verb or adjective."
+  },
+  {
+   "q": "子どものころ、毎日野菜を（　）。(I was made to eat vegetables.)",
+   "opts": [
+    "食べさせました",
+    "食べさせられました",
+    "食べられさせました",
+    "食べさせられされました"
+   ],
+   "a": 1,
+   "ex": "The causative-passive of a ru-verb is stem + させられる, meaning someone made me do it."
+  },
+  {
+   "q": "雨が（　）、試合は行います。",
+   "opts": [
+    "降るても",
+    "降ったも",
+    "降っても",
+    "降っては"
+   ],
+   "a": 2,
+   "ex": "〜ても (te-form + も) means 'even if', so the game goes ahead regardless of rain."
+  },
+  {
+   "q": "健康のために、毎朝歩く（　）。",
+   "opts": [
+    "ことをしています",
+    "ことにしましている",
+    "ことにしてあります",
+    "ことにしています"
+   ],
+   "a": 3,
+   "ex": "〜ことにしている describes a habit you decided on and keep up."
+  },
+  {
+   "q": "弟は野菜を食べないで、肉（　）食べている。",
+   "opts": [
+    "しか",
+    "ばかり",
+    "ほど",
+    "ころ"
+   ],
+   "a": 1,
+   "ex": "ばかり means 'nothing but'; しか would need a negative verb."
+  },
+  {
+   "q": "今、家に（　）ところなので、まだ荷物を片付けていません。(I just got home.)",
+   "opts": [
+    "帰る",
+    "帰った",
+    "帰っている",
+    "帰り"
+   ],
+   "a": 1,
+   "ex": "〜たところ means something has just happened; 帰るところ would mean about to go home."
+  },
+  {
+   "q": "健康のために、毎日野菜を食べる（　）しています。",
+   "opts": [
+    "ように",
+    "ために",
+    "ような",
+    "そうに"
+   ],
+   "a": 0,
+   "ex": "〜ようにしている means making a conscious effort to do something regularly."
+  },
+  {
+   "q": "日本に来て一年で、日本語が話せる（　）なりました。",
+   "opts": [
+    "ようで",
+    "ような",
+    "ようを",
+    "ように"
+   ],
+   "a": 3,
+   "ex": "Potential form + ようになる describes a change in ability: I became able to speak."
+  },
+  {
+   "q": "会社の決定で、来月から大阪で働く（　）。",
+   "opts": [
+    "ことになりました",
+    "ことにしました",
+    "ことがなりました",
+    "ことでなりました"
+   ],
+   "a": 0,
+   "ex": "〜ことになる is used for a decision made by others or by circumstances, here the company."
+  },
+  {
+   "q": "肉がきらいな（　）が、今日はあまり食べたくない。",
+   "opts": [
+    "わけではない",
+    "ことではない",
+    "わけにはいかない",
+    "ところではない"
+   ],
+   "a": 0,
+   "ex": "〜わけではない denies a possible conclusion: it's not that I dislike meat."
+  },
+  {
+   "q": "家を（　）ために、お金をためています。",
+   "opts": [
+    "買える",
+    "買った",
+    "買う",
+    "買って"
+   ],
+   "a": 2,
+   "ex": "Purpose ために follows the dictionary form of a volitional verb; potential forms take ように instead."
+  },
+  {
+   "q": "後ろの人にも聞こえる（　）、大きな声で話してください。",
+   "opts": [
+    "ために",
+    "ような",
+    "ことに",
+    "ように"
+   ],
+   "a": 3,
+   "ex": "With a non-volitional verb like 聞こえる, purpose is expressed with ように, not ために."
+  },
+  {
+   "q": "もう子どもじゃないんだから、大人（　）行動しなさい。",
+   "opts": [
+    "らしい",
+    "らしくて",
+    "らしいに",
+    "らしく"
+   ],
+   "a": 3,
+   "ex": "Noun + らしい means 'typical of', and it takes the adverbial form らしく to modify a verb."
+  },
+  {
+   "q": "この服は少し子ども（　）から、あまり着たくない。",
+   "opts": [
+    "っぽく",
+    "っぽい",
+    "っぽいだ",
+    "っぽ"
+   ],
+   "a": 1,
+   "ex": "Noun + っぽい means '-ish' and conjugates like an i-adjective, so it is followed directly by から."
+  },
+  {
+   "q": "このバスは十五分（　）来ます。",
+   "opts": [
+    "おきで",
+    "おきを",
+    "おきに",
+    "おきの"
+   ],
+   "a": 2,
+   "ex": "Time + おきに means 'at intervals of': every fifteen minutes."
+  },
+  {
+   "q": "スープが熱い（　）、早く食べてください。",
+   "opts": [
+    "前に",
+    "までに",
+    "あとで",
+    "うちに"
+   ],
+   "a": 3,
+   "ex": "〜うちに means 'while a state lasts', here before the soup gets cold."
+  },
+  {
+   "q": "会議の（　）、携帯電話が鳴ってしまった。",
+   "opts": [
+    "最中に",
+    "最中を",
+    "うちで",
+    "ながら"
+   ],
+   "a": 0,
+   "ex": "Noun + の最中に means 'right in the middle of' an ongoing activity."
+  },
+  {
+   "q": "弟は毎日ゲームをし（　）いて、全然勉強しない。",
+   "opts": [
+    "たばかり",
+    "ばかり",
+    "てしか",
+    "てばかり"
+   ],
+   "a": 3,
+   "ex": "Te-form + ばかりいる criticizes someone for doing nothing but one thing."
+  },
+  {
+   "q": "この絵は、有名な画家（　）かかれました。",
+   "opts": [
+    "によって",
+    "にとって",
+    "について",
+    "によると"
+   ],
+   "a": 0,
+   "ex": "In a passive sentence about creating a work, the creator is marked by によって."
+  }
+ ]
+}
