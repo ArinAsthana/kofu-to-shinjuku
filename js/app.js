@@ -89,7 +89,7 @@ const openTabs = () => TABS.filter(t => Sy.has(t[3]));
 const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
 // The stage each area needs. Locked areas are invisible, so a link to one lands on Home.
 // v6: flashcards open at any stage and outside blocks.
-const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 3, people: 4 };
+const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 0, people: 4 }; // v9.4: Japanese is open from day one
 // The pixel icon in front of each screen's title.
 const HEAD_PX = { lex: "scroll", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
 const TAB_OF = { lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
