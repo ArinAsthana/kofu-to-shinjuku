@@ -35,6 +35,19 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_small_info" />
         </receiver>
 
+        <!-- v9.3 "Going to bed": the 1×1 widget, and the no-UI activity that sets the Clock alarm. -->
+        <receiver android:name=".BedWidget" android:label="Going to bed" android:exported="false">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_bed_info" />
+        </receiver>
+        <activity
+            android:name=".BedActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- v8.3 watched-app nudge: a 15-min inexact check, re-armed after a reboot. -->
         <receiver android:name=".NudgeReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
@@ -60,4 +73,6 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- v8.3: re-arm the watched-app nudge after a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- v9.3: the Going to bed widget sets an alarm in the Clock app. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 </manifest>
