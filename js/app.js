@@ -226,12 +226,12 @@ function jpQuick() {
 }
 // v9 §3: two tiles under Now. PLAN shows the next block; 日本語 starts a 5-minute session in one tap.
 function homeTiles() {
-  const nn = P.nowNext(), nx = nn.next, nxt = nx ? (nx.type === "task" ? nx.k.title : nx.b ? nx.b.title : "") : "";
+  // v9.5: the Plan tile is gone (Now already shows what's next); only 日本語 stays, full width.
   const jp = Sy.has(NEEDS.jlpt), due = jp ? K.queue().filter(c => c.intro).length : 0;
-  return `<div class="tiles">
-    <button class="tile" data-act="nav" data-id="plan"><span class="hdr">${px("cal")} Plan</span><b class="tile-t">${nx ? esc(nxt) : "Nothing next"}</b><span class="small muted">${nx ? P.toHM(nx.s) : "Free"}</span></button>
-    ${jp ? `<div class="tile jp"><button class="tile-main" data-act="go" data-id="jlpt"><span class="hdr">日本語</span><b class="tile-t">${jpsOn() ? `<span id="jpsT">${mmss(jpsLeft())}</span>` : due || !K.queue().length ? `${due} due` : `${K.queue().length} new`}</b><span class="small muted">${jpsOn() ? "in session" : "5 min"}</span></button>
-      <button class="tile-go" data-act="${jpsOn() ? "go" : "jpgo"}" data-id="${jpsOn() ? "cards/review" : "5"}" aria-label="${jpsOn() ? "Resume" : "Start 5 minutes of Japanese"}">${ic("play")}</button></div>` : ""}
+  if (!jp) return "";
+  return `<div class="tiles one">
+    ${`<div class="tile jp"><button class="tile-main" data-act="go" data-id="jlpt"><span class="hdr">日本語</span><b class="tile-t">${jpsOn() ? `<span id="jpsT">${mmss(jpsLeft())}</span>` : due || !K.queue().length ? `${due} due` : `${K.queue().length} new`}</b><span class="small muted">${jpsOn() ? "in session" : "5 min"}</span></button>
+      <button class="tile-go" data-act="${jpsOn() ? "go" : "jpgo"}" data-id="${jpsOn() ? "cards/review" : "5"}" aria-label="${jpsOn() ? "Resume" : "Start 5 minutes of Japanese"}">${ic("play")}</button></div>`}
   </div>`;
 }
 // v9 §4 and §7: a class gap shows its one finance item; the Outreach slot shows its goals.
@@ -261,15 +261,14 @@ function vHome() {
   const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
   const dungeon = hs.k === "study" || hs.k === "body";
   return `
-  <header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}</div>
+  <header class="top"><div class="hihead" data-act="nav" data-id="profile" role="link" aria-label="Profile, level ${E.level()}"><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}
+    ${dungeon ? "" : `<div class="hilv"><b>LV ${E.level()}</b><span class="hilv-bar"><i style="width:${E.levelProgress() * 100}%"></i></span><span>${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to ${E.level() + 1}</span></div>`}</div>
     <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
     ${gear("home")}</div></header>
   ${dungeon ? "" : actLine(a1)}
   ${homeHero(hs, t)}
   ${dungeon ? "" : dayCard() + homeTiles() + dlHome()}
   ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
-  ${dungeon ? "" : `<button class="lvbadge" data-act="nav" data-id="profile"><span class="lvrow"><b class="dm">LV ${E.level()}</b><span>${E.xpWallet().toLocaleString("en-US")} XP</span><span class="row" style="gap:4px">${ic("flame", "fire")}${sk.n}</span><span class="grow"></span><span>Profile</span><span class="chev">${ic("right")}</span></span>
-    <span class="lvbar" role="progressbar" aria-label="Level ${E.level()} progress" aria-valuenow="${Math.round(E.levelProgress() * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${E.levelProgress() * 100}%"></i></span><span class="lvnext">${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to LV ${E.level() + 1}</span></button>`}
   ${dungeon ? dungeonBar(hs) : ""}`;
 }
 // v7: the due pile as one big button within thumb reach (Home and Study).

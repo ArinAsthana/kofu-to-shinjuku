@@ -719,3 +719,10 @@ html.navy body::before{filter:hue-rotate(225deg) saturate(.7) brightness(.55)}
 .dlmark{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;border-left:4px solid var(--bad);margin-bottom:10px}
 .dlline{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-size:14px;margin-top:10px}
 .wg-dl{display:block;width:100%;margin-top:3px;padding:1px 2px;border:0;border-radius:2px;background:var(--bad);color:#fff;font-size:10px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+/* v9.5: one tile row (日本語 only), and the level line under "Hi, Arin" (taps to Profile) */
+.tiles.one{grid-template-columns:1fr}
+.hihead{cursor:pointer}
+.hilv{display:flex;align-items:center;gap:8px;margin-top:6px;font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--fg)}
+.hilv b{font:800 13px var(--dot)}
+.hilv-bar{display:block;width:72px;height:4px;background:rgba(0,0,0,.35)}
+.hilv-bar i{display:block;height:100%;background:var(--fg)}
