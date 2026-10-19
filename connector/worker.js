@@ -22,6 +22,10 @@ const PREP = {
   presentation: { lead: 7, s: [["Slides", 90], ["Rehearse 1", 30], ["Rehearse 2", 30]] },
   other: { lead: 3, s: [["Prep", 60]] },
 };
+// Mirrors js/store.js RECORD_STORES, plus settings. Keep in step.
+const STORES = ["habitLog", "xpEvents", "rewardHistory", "exercises", "areaState", "workouts", "runs", "bodyweight", "physique", "meals", "savedMeals",
+  "money", "bills", "blocks", "tasks", "care", "careLog", "people", "hangouts", "wishlist", "blockLog", "penalties", "fieldNotes", "appraisals",
+  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "cards", "reviewDays", "settings"];
 const KINDS = ["class", "work", "sleep", "nap", "quest", "club", "social", "other"];
 
 /* ---------- time ---------- */
@@ -151,6 +155,8 @@ const TOOLS = [
   { name: "move_block", description: "Move a timetable block. By default only that date moves; set every_week to change the weekly block. Today's block is locked from 15 min before it starts until it ends.",
     inputSchema: { type: "object", required: ["block", "start"], properties: { block: { type: "string", description: "Block name, e.g. 'gym', 'Lift', 'finance block'" }, date: { type: "string" },
       start: { type: "string", description: "New start HH:MM" }, end: { type: "string", description: "New end HH:MM (default keeps the length)" }, every_week: { type: "boolean" } } } },
+  { name: "get_store", description: "Read-only: raw records from one of the app's synced stores, newest first, deleted ones left out. Use for questions get_day doesn't cover (study progress, workouts, money, people). Stores: " + STORES.join(", ") + ". Japanese: cards (Lexicon progress by card id: lex v|k, off, stage mcq|flip, due, reps, lapses), reviewDays (reviews a day), path (stream \"n2\" = finished N2 plan items), jlptItems, jlptExams. settings is one object.",
+    inputSchema: { type: "object", required: ["store"], properties: { store: { type: "string", enum: STORES }, limit: { type: "number", description: "Max records, default 300, max 2000" }, since: { type: "string", description: "Only records updated on or after this date (YYYY-MM-DD)" } } } },
   { name: "add_wishlist_item", description: "Add a reward to the wishlist with its price in yen. The XP cost is set from the price.",
     inputSchema: { type: "object", required: ["name", "price"], properties: { name: { type: "string" }, price: { type: "number" }, kind: { type: "string", enum: ["item", "trip", "exp"] }, link: { type: "string" } } } },
 ];
@@ -176,6 +182,14 @@ async function getDay(env, a) {
 
 const handlers = {
   get_day: getDay,
+  async get_store(env, a) {
+    const store = String(a.store || ""); if (!STORES.includes(store)) throw new Error("Unknown store " + store + ". Stores: " + STORES.join(", "));
+    const { data } = await readStore(env, store);
+    if (!Array.isArray(data)) return JSON.stringify(data);
+    const since = a.since ? parseD(resolveDate(a.since)).getTime() - 9 * 3600e3 : 0, limit = Math.min(2000, Math.max(1, Math.round(+a.limit || 300)));
+    const recs = live(data).filter(r => !since || (r.u || 0) >= since).sort((x, y) => (y.u || 0) - (x.u || 0));
+    return `${store}: ${recs.length} records${recs.length > limit ? `, newest ${limit} shown` : ""}\n` + JSON.stringify(recs.slice(0, limit));
+  },
   async log_food(env, a) {
     const date = resolveDate(a.date), meal = String(a.meal || "").toLowerCase();
     if (!MEALS.includes(meal)) throw new Error("meal must be breakfast, lunch, dinner or snack");
@@ -298,7 +312,7 @@ async function rpc(env, m) {
   const ok = result => ({ jsonrpc: "2.0", id: m.id, result }), err = (code, message) => ({ jsonrpc: "2.0", id: m.id, error: { code, message } });
   switch (m.method) {
     case "initialize": return ok({ protocolVersion: m.params?.protocolVersion || "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "kofu-to-shinjuku", version: "1.0.0" },
-      instructions: "Arin's Kofu to Shinjuku life app (timetable, to-dos, deadlines, food, weight, habits, care, wishlist). Times are Japan time. Call get_day before changes. Confirm what changed in one line. The app shows changes next time it's opened while signed in." });
+      instructions: "Arin's Kofu to Shinjuku life app (timetable, to-dos, deadlines, food, weight, habits, care, wishlist). Times are Japan time. Call get_day before changes; get_store reads any store as raw records. Confirm what changed in one line. The app shows changes next time it's opened while signed in." });
     case "ping": return ok({});
     case "tools/list": return ok({ tools: TOOLS });
     case "tools/call": {
