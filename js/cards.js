@@ -12,6 +12,7 @@ import { HABITS } from "./data.js";
 import * as E from "./engine.js";
 import * as Lx from "./lexicon.js";
 import * as N2 from "./n2.js";
+import * as Mi from "./mined.js";
 
 /* ---------- FSRS-4.5 ---------- */
 const W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
@@ -47,11 +48,15 @@ export const cards = () => { const ar = (S.settings.cards && S.settings.cards.ar
    A Lexicon card's record holds progress only. Its content comes from the imported decks on this phone. */
 const CONTENT = ["L", "deck", "front", "back", "ja"];
 const LEX_DECK = { v: "Vocabulary", k: "Kanji" };
+// v12: a Lexicon or mined entry by card id ("m-…" cards are mined words with no Lexicon match, and sentences).
+const lexEntry = id => String(id).startsWith("m-") ? Mi.entry(id) : Lx.entry(id);
 export function hyd(rec) {
-  const L = Lx.entry(rec.id); if (!L) return null;
-  return { ...rec, L, deck: L.level + " " + LEX_DECK[rec.lex], front: Lx.face(L), back: L.meaning || "", ja: true };
+  const L = lexEntry(rec.id); if (!L) return null;
+  const mined = !!L.mined || live("mined").some(m => m.link === rec.id);
+  return { ...rec, L, mined, deck: L.mined ? (L.sent ? "Mined sentence" : "Mined") : L.level + " " + LEX_DECK[rec.lex] + (mined ? " · Mined" : ""), front: Lx.face(L), back: L.meaning || "", ja: true };
 }
-const fresh = L => hyd({ id: L.id, lex: L.type === "kanji" ? "k" : "v", stage: "mcq", mcqOk: [], intro: null, due: 0, s: null, d: null, last: null, reps: 0, lapses: 0, lapseRun: 0, created: 0 });
+const lexKind = L => L.mined ? "m" : L.type === "kanji" ? "k" : "v";
+const fresh = L => hyd({ id: L.id, lex: lexKind(L), stage: L.sent ? "flip" : "mcq", mcqOk: [], intro: null, due: 0, s: null, d: null, last: null, reps: 0, lapses: 0, lapseRun: 0, created: 0 });
 // Saves a card; a Lexicon card loses its content first so only progress is stored and synced.
 function store(c) {
   if (!c.lex) return put("cards", c);
@@ -61,13 +66,13 @@ function store(c) {
 export function get(id) {
   const c = live("cards").find(x => x.id === id);
   if (c) return c.lex ? hyd(c) : c;
-  const L = Lx.entry(id); return L ? fresh(L) : null;
+  const L = lexEntry(id); return L ? fresh(L) : null;
 }
 // Turns a Lexicon card off ("I know it": never asked) or back on. Learning cards keep their history.
 export function setOff(id, off) {
-  const c = live("cards").find(x => x.id === id), L = Lx.entry(id); if (!L) return;
+  const c = live("cards").find(x => x.id === id), L = lexEntry(id); if (!L) return;
   if (c) { if (!!c.off !== off) put("cards", { ...c, off }); }
-  else if (off) put("cards", { id, lex: L.type === "kanji" ? "k" : "v", off: true });
+  else if (off) put("cards", { id, lex: lexKind(L), off: true });
 }
 const lexSeen = () => live("cards").filter(c => c.lex && c.intro && !c.off).map(hyd).filter(Boolean);
 // Today's new Lexicon cards: vocabulary N5 → N2 and kanji N3 → N2, skipping off and started cards.
@@ -76,22 +81,35 @@ export const jp = () => ({ ...N2.pace(), ...(S.settings.jp || {}) });
 // A heavy day: the due pile alone would take over 90 minutes, so no new cards today.
 export const REVIEW_SEC = 10, HEAVY_MIN = 90;
 export const heavy = dueN => dueN * REVIEW_SEC > HEAVY_MIN * 60;
-function lexFresh(t, extra) {
-  if (!Lx.ready()) return [];
-  const m = Lx.recs(), out = [], cfg = jp();
-  const intro = k => [...m.values()].filter(r => r.lex === k && r.intro === t).length;
-  for (const [type, k, lim] of [["vocab", "v", cfg.newWords + extra], ["kanji", "k", cfg.newKanji]]) {
-    let n = Math.max(0, lim - intro(k));
-    for (const L of Lx.order(type)) { if (n <= 0) break; const r = m.get(L.id); if (r && (r.off || r.intro)) continue; out.push(r ? hyd(r) : fresh(L)); n--; }
+// v12: new cards come in batches of 10. Continue · +10 cards opens the next batch, with no daily cap.
+// Order in every batch: mined cards first (they come from Arin's own life), then the Lexicon (vocabulary and kanji
+// in the N2 plan's word:kanji ratio), then any other deck's cards.
+export const BATCH = 10;
+const batch = () => S.settings.cards?.batch || BATCH;
+function freshPool(t) {
+  const m = Lx.recs(), out = [], seen = new Set();
+  const add = c => { if (c && !seen.has(c.id)) { seen.add(c.id); out.push(c); } };
+  for (const id of Mi.freshIds(m)) { const r = m.get(id); add(r ? hyd(r) : get(id)); }
+  if (Lx.ready()) {
+    const cfg = jp(), kr = (cfg.newKanji || 0) / Math.max(1, (cfg.newWords || 0) + (cfg.newKanji || 0));
+    const it = type => Lx.order(type).filter(L => { const r = m.get(L.id); return !(r && (r.off || r.intro)) && !seen.has(L.id); });
+    const V = it("vocab"), Kj = it("kanji"); let vi = 0, ki = 0;
+    while (vi < V.length || ki < Kj.length) {
+      const takeK = ki < Kj.length && (vi >= V.length || (ki + 1) / (vi + ki + 1) <= kr);
+      const L = takeK ? Kj[ki++] : V[vi++], r = m.get(L.id); add(r ? hyd(r) : fresh(L));
+      if (out.length > 400) break; // plenty for any number of batches today
+    }
   }
+  cards().filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).forEach(add);
   return out;
 }
+const introToday = t => live("cards").filter(c => c.intro === t && !c.off).length;
 export const deckNames = () => [...new Set(cards().map(c => c.deck))].sort((a, b) => a.localeCompare(b, "ja"));
 export const inDeck = deck => cards().filter(c => c.deck === deck);
 const backs = deck => [...new Set(inDeck(deck).map(c => c.back.trim()))];
 export const flipOnly = deck => backs(deck).length < 4;
 // How the card is asked right now.
-const canChoose = c => c.lex ? !!(c.L && !c.L.ref && ((c.L.dM || []).length || (c.L.dR || []).length)) : !flipOnly(c.deck);
+const canChoose = c => c.lex ? !!(c.L && !c.L.ref && !c.L.sent && ((c.L.dM || []).length || (c.L.dR || []).length)) : !flipOnly(c.deck);
 export const mode = c => c.stage === "flip" || !canChoose(c) ? "flip" : "mcq";
 // 4 options: the answer plus 3 other answers from the deck, shuffled once per card per day so a re-render keeps the order.
 export function options(c) {
@@ -130,17 +148,19 @@ const settings = () => S.settings.cards || { newPerDay: 15 };
 const AHEAD = 20 * 60000; // when nothing is due, cards coming back within 20 min are shown early
 // v6: "Learn 10 new" raises today's new-card limit, for studying ahead. Returns how many new cards that opened.
 const extraToday = () => { const x = settings().extra; return x && x.date === E.today() ? x.n : 0; };
-export function learnMore(n) {
-  const left = Lx.ready() ? n : cards().filter(c => !c.intro).length - queue().filter(c => !c.intro).length;
+export function learnMore(n = batch()) {
+  const t = E.today(), open = Math.max(0, batch() + extraToday() - introToday(t)), left = freshPool(t).length - open;
   const add = Math.min(n, Math.max(0, left)); if (!add) return 0;
   S.settings.cards = { ...settings(), extra: { date: E.today(), n: extraToday() + add } }; S.settings.u = Date.now();
   return add;
 }
 export function queue(now = Date.now()) {
   const all = cards(), t = E.today();
-  const seen = [...all.filter(c => c.intro), ...lexSeen()], introToday = all.filter(c => c.intro === t).length;
+  const seen = [...all.filter(c => c.intro), ...lexSeen()];
   let due = seen.filter(c => (c.due || 0) <= now);
-  const fresh = heavy(due.length) ? [] : [...all.filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).slice(0, Math.max(0, (settings().newPerDay ?? 15) + extraToday() - introToday)), ...lexFresh(t, extraToday())];
+  // A heavy due pile holds back the day's first batch; a batch opened with Continue still comes.
+  const lim = (heavy(due.length) ? 0 : batch()) + extraToday() - introToday(t);
+  const fresh = lim > 0 ? freshPool(t).slice(0, lim) : [];
   if (!due.length && !fresh.length) due = seen.filter(c => (c.due || 0) <= now + AHEAD);
   return [...due.sort((a, b) => (a.due || 0) - (b.due || 0)), ...fresh];
 }
@@ -217,11 +237,11 @@ export async function deleteCard(c) {
 }
 
 /* ---------- speech ---------- */
-export function speak(text) {
+export function speak(text, rate = 0.9) {
   try {
     const ss = window.speechSynthesis; if (!ss) return false;
     ss.cancel();
-    const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = 0.9;
+    const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = rate;
     const v = ss.getVoices().find(v => /^ja/i.test(v.lang)); if (v) u.voice = v;
     ss.speak(u); return true;
   } catch (e) { return false; }
