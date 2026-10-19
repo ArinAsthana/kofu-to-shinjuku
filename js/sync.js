@@ -9,7 +9,7 @@ import { SCHEMA_VERSION } from "./data.js";
 
 const V = "10.12.2";
 const CDN = `https://www.gstatic.com/firebasejs/${V}/`;
-let fb = null, user = null, busy = false, lastSync = null, error = "", ctx = null, timer = null;
+let fb = null, user = null, authKnown = false, busy = false, lastSync = null, error = "", ctx = null, timer = null;
 
 export async function init(c) {
   ctx = c;
@@ -21,7 +21,7 @@ export async function init(c) {
     fb = { auth, fs, authI: auth.getAuth(a), db: fs.getFirestore(a) };
     await auth.setPersistence(fb.authI, auth.browserLocalPersistence).catch(() => {});
     auth.getRedirectResult(fb.authI).catch(e => { error = msg(e); });
-    auth.onAuthStateChanged(fb.authI, u => { user = u; refresh(); if (u) syncNow(); });
+    auth.onAuthStateChanged(fb.authI, u => { user = u; authKnown = true; refresh(); if (u) syncNow(); });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && user) syncNow(); });
     window.addEventListener("online", () => user && syncNow());
   } catch (e) { error = "Sync unavailable offline. Your data is safe on this phone."; refresh(); }
@@ -35,6 +35,8 @@ function refresh() {
   if (ctx && (tab === "more" || tab === "home") && !typing) ctx.render();
 }
 
+// v11.1: true once Firebase has answered and nobody is signed in on this device.
+export const signedOut = () => !!firebaseConfig && !!fb && authKnown && !user;
 export function statusText() {
   if (!firebaseConfig) return "Saved on this phone";
   if (!user) return "Saved on this phone · sync signed out";

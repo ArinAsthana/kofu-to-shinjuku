@@ -268,7 +268,70 @@ function vHome() {
 }
 /* ---------- v11: search ---------- */
 const searchBar = () => `<div class="srch" id="srchWrap"><label class="srch-box">${ic("search")}<span class="srch-in"><span class="srch-ghost" id="srchGhost" aria-hidden="true"></span><input id="srch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="Search or jump to…" aria-label="Search features" role="combobox" aria-controls="srchList"></span></label><div class="srch-list" id="srchList" role="listbox"></div></div>`;
-let srHits = [], srSel = 0;
+let srHits = [], srSel = 0, srCmd = null, srDone = null; // srDone: the command just applied, with its undo
+// v11.1: things in the app, built per search: to-dos, deadlines, daily quests, the Path, people, decks, wishlist items.
+const thing = (name, hint, route, icon) => ({ name, hint, route, icon, keys: [Sr.norm(name)] });
+function srThings() {
+  const out = [], t = E.today();
+  for (const k of live("tasks")) if (!k.done && !k.path && !k.trial && !Dl.isDeadline(k)) out.push(thing(k.title, k.dl ? "prep session" : "to-do", k.dl ? "a:sheet:deadline:" + k.dl : "a:sheet:task:" + k.id, "check"));
+  for (const k of Dl.list(t)) out.push(thing(k.title, `deadline · ${dlLeft(k)}`, "a:sheet:deadline:" + k.id, "flag"));
+  for (const h of HABITS) { const g = HABIT_GO[h.id], to = typeof g === "function" ? g() : g; if (to) out.push(thing(h.name, "daily quest", to, "sword")); }
+  if (Pa.started()) for (const k of Pa.today(t).list || []) out.push(thing(`${Pa.stream(k.path.stream).label}: ${pathText(k)}`, "Path today", k.path.stream === "mental" ? "drill" : "path", "flag"));
+  if (Sy.has(4)) for (const pp of live("people")) out.push(thing(pp.name, "person", "people/p/" + pp.id, "people"));
+  for (const d of K.deckNames()) out.push(thing(d, "deck", "cards/deck/" + encodeURIComponent(d), "scroll"));
+  if (Sy.has(2)) for (const w of live("wishlist").filter(x => !x.bought)) out.push(thing(w.name, `wishlist · ${yen(w.price)}`, "money", "coin"));
+  return out;
+}
+// Lexicon words: kanji, kana, romaji (taberu → たべる) or English. Opens the word in the Lexicon.
+function srWords(v) {
+  if (!Lx.ready()) return [];
+  const q = v.trim(), ql = q.toLowerCase(), h = Sr.kana(q), kk = h ? Sr.kata(h) : "", out = [];
+  const en = /^[a-z][a-z ]{2,}$/.test(ql) ? new RegExp("(^|[^a-z])" + ql.replace(/[^a-z ]/g, "")) : null;
+  for (const type of ["vocab", "kanji"]) for (const L of Lx.all(type)) {
+    const f = Lx.face(L), r = Lx.reading(L);
+    const hit = f.startsWith(q) || (/[^\x00-\x7f]/.test(q) && r.split("、").some(x => x.startsWith(q))) || (h && r.split("、").some(x => x.startsWith(h) || x.startsWith(kk))) || (en && en.test((L.meaning || "").toLowerCase()));
+    if (hit) { out.push({ name: f, hint: `${r} · ${(L.meaning || "").slice(0, 40)}`, route: "a:lexfind:" + L.id, icon: "scroll", jp: true }); if (out.length >= 3) return out; }
+  }
+  return out;
+}
+// The confirm card for a typed command, or the "done, undo?" card after one.
+function srCmdHtml() {
+  if (srDone) return `<div class="srch-cmd"><div class="small">${esc(srDone.text)}</div><div class="btns"><button class="btn sm" data-act="cmdundo">Undo</button></div></div>`;
+  const c = srCmd; if (!c) return "";
+  const what = c.kind === "deadline" ? `Add deadline: <b>${esc(c.title)}</b> · ${esc(Dl.KINDS[c.dlKind])} · due ${esc(E.fmtDate(c.due))}`
+    : c.kind === "task" ? `Add to-do: <b>${esc(c.title)}</b> · ${P.dur(c.mins)}` : c.kind === "move" ? `Move <b>${esc(c.block)}</b> to ${c.start} today`
+    : `Exam result: <b>${esc(c.name)}</b> · ${c.score}/${c.of} · ${Math.round(c.score / c.of * 100)}%`;
+  return `<div class="srch-cmd"><div class="small">${what}</div><div class="btns"><button class="btn sm go" data-act="cmdapply">Apply</button><button class="btn sm" data-act="cmdedit">Edit</button></div></div>`;
+}
+// Today's occurrence of a block whose title matches.
+function blockToday(name) {
+  const q = Sr.norm(name), seg = P.segments(E.today()).filter(x => x.b && !x.tail);
+  return (seg.find(x => Sr.norm(x.b.title) === q) || seg.find(x => Sr.norm(x.b.title).includes(q) || q.includes(Sr.norm(x.b.title)))
+    || (/gym|workout|lift|train/.test(q) && seg.find(x => P.isWorkout(x.b))) || {}).b || null;
+}
+function cmdApply() {
+  const c = srCmd; if (!c) return; let text = "", undo = null;
+  if (c.kind === "deadline") { const r = Dl.add({ title: c.title, kind: c.dlKind, due: c.due }); text = `Added ${c.title}, due ${E.fmtDate(c.due)}, with ${r.sessions.length} prep session${r.sessions.length === 1 ? "" : "s"}.`; undo = () => { for (const k of live("tasks").filter(k => k.dl === r.d.id)) remove("tasks", k.id); remove("tasks", r.d.id); }; }
+  else if (c.kind === "task") { const mins = P.TASK_LEN.reduce((m, x) => Math.abs(x - c.mins) < Math.abs(m - c.mins) ? x : m), k = put("tasks", { title: c.title, mins, prio: 2, energy: "med", done: false, created: Date.now(), pin: null }); text = `Added ${c.title}. The System finds it a slot.`; undo = () => remove("tasks", k.id); }
+  else if (c.kind === "exam") { const r = Rc.addExam({ name: c.name, subject: "Other", date: E.today(), score: c.score, of: c.of }); text = `Saved ${c.name}: ${Math.round(c.score / c.of * 100)}% on the Report Card.`; undo = () => Rc.dropExam(r.id); }
+  else if (c.kind === "move") {
+    const b = blockToday(c.block); if (!b) return toast(`No block like "${c.block}" today`);
+    const lk = P.editLock(b); if (lk) return toast(`Locked: starts or runs ${P.toHM(lk.s)}–${P.toHM(lk.e)}. Edit after ${P.toHM(lk.until)}.`);
+    const toM = x => { const [h, m] = x.split(":").map(Number); return h * 60 + m; }, len = ((toM(b.end) - toM(b.start)) % 1440 + 1440) % 1440 || 60, e = P.toHM((toM(c.start) + len) % 1440), t = E.today(), old = { ...b };
+    if ((b.days || []).length) { put("blocks", { ...b, skip: [...new Set([...(b.skip || []), t])] }); const nb = put("blocks", { title: b.title, kind: b.kind, days: [], date: t, start: c.start, end: e, locked: !!b.locked, from: b.id }); undo = () => { remove("blocks", nb.id); put("blocks", old); }; }
+    else { put("blocks", { ...b, start: c.start, end: e }); undo = () => put("blocks", old); }
+    text = `${b.title} moved to ${c.start}–${e} today.`;
+  }
+  save(); srDone = { text, undo }; srCmd = null; const inp = $("#srch"); if (inp) inp.value = ""; render(); setTimeout(() => $("#srch")?.focus(), 0);
+}
+function cmdEdit() {
+  const c = srCmd; if (!c) return; const inp = $("#srch"); if (inp) { inp.value = ""; inp.blur(); } srCmd = null;
+  const fill = (sel, vals) => setTimeout(() => { for (const [f, v] of Object.entries(vals)) { const el = document.querySelector(`${sel} [data-f="${f}"]`); if (el) el.value = v; } }, 0);
+  if (c.kind === "deadline") { dlMove = null; sheet = "deadline"; render(); fill("#dlForm", { title: c.title, kind: c.dlKind, due: c.due }); }
+  else if (c.kind === "task") { taskForm = "new"; sheet = "task"; render(); fill("#taskForm", { title: c.title, mins: P.TASK_LEN.reduce((m, x) => Math.abs(x - c.mins) < Math.abs(m - c.mins) ? x : m) }); }
+  else if (c.kind === "exam") { rcForm = true; rcPre = { name: c.name, date: E.today(), score: c.score, of: c.of }; goR("report"); }
+  else { const b = blockToday(c.block); if (!b) return toast(`No block like "${c.block}" today`); blockForm = b.id; blockNew = null; sheet = "block"; render(); }
+}
 const ACT_NEEDS = { moment: 4 };
 function srNeed(it) { if (!it.route.startsWith("a:")) return NEEDS[it.route.split("/")[0]] || 0; return ACT_NEEDS[it.route.split(":")[1]] || 0; }
 // Before typing: what fits now (a class gap, the Mental Math item, the next deadline step), then recent searches.
@@ -283,11 +346,12 @@ function srSuggest() {
 }
 function srUpdate() {
   const inp = $("#srch"), list = $("#srchList"), gh = $("#srchGhost"); if (!inp || !list) return;
-  const v = inp.value; srHits = v.trim() ? Sr.find(v, 6) : srSuggest(); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
+  const v = inp.value; srCmd = v.trim() ? Sr.command(v, E.today()) : null;
+  srHits = v.trim() ? [...Sr.find(v, 6, srThings()), ...srWords(v)].slice(0, 8) : srSuggest(); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
   const rest = v ? Sr.complete(v, srHits[0]) : "";
   gh.innerHTML = rest ? `<span class="gh-t">${esc(v)}</span>${esc(rest)}` : "";
-  list.innerHTML = (v.trim() ? "" : `<div class="srch-h">${srHits.length ? "Suggested" : ""}</div>`) + (srHits.map((it, i) => { const nd = srNeed(it), lk = nd && !Sy.has(nd);
-    return `<button class="srch-it ${i === srSel ? "sel" : ""} ${lk ? "lk" : ""}" data-act="srgo" data-id="${i}" role="option" aria-selected="${i === srSel}">${px(it.icon || "eye")}<span class="grow"><b>${esc(it.name)}</b><span class="muted"> · ${lk ? `Locked · unlocks at stage ${nd}` : esc(it.hint)}</span></span></button>`; }).join("") || (v.trim() ? `<div class="srch-h">No match. Try a feature name.</div>` : ""));
+  list.innerHTML = srCmdHtml() + (v.trim() ? "" : `<div class="srch-h">${srHits.length ? "Suggested" : ""}</div>`) + (srHits.map((it, i) => { const nd = srNeed(it), lk = nd && !Sy.has(nd);
+    return `<button class="srch-it ${i === srSel ? "sel" : ""} ${lk ? "lk" : ""}" data-act="srgo" data-id="${i}" role="option" aria-selected="${i === srSel}">${px(it.icon || "eye")}<span class="grow"><b>${esc(it.name)}</b><span class="muted"> · ${lk ? `Locked · unlocks at stage ${nd}` : esc(it.hint)}</span></span></button>`; }).join("") || (v.trim() && !srCmd ? `<div class="srch-h">No match. Try a feature name.</div>` : ""));
 }
 function srRun(it) {
   if (!it) return;
@@ -299,7 +363,7 @@ function srRun(it) {
   b.dataset.act = a; if (idp.join(":")) b.dataset.id = idp.join(":"); b.hidden = true; document.body.append(b); b.click(); b.remove();
 }
 function srFocus() { if (route()[0] !== "home") { afterNav = () => setTimeout(() => $("#srch")?.focus(), 0); go("home"); } else $("#srch")?.focus(); }
-document.addEventListener("input", e => { if (e.target.id === "srch") { srSel = 0; srUpdate(); } });
+document.addEventListener("input", e => { if (e.target.id === "srch") { srSel = 0; srDone = null; srUpdate(); } });
 document.addEventListener("focusin", e => { if (e.target.id === "srch") srUpdate(); });
 document.addEventListener("keydown", e => {
   const inp = e.target.id === "srch" ? e.target : null;
@@ -311,7 +375,7 @@ document.addEventListener("keydown", e => {
   const rest = inp.value ? Sr.complete(inp.value, srHits[0]) : "";
   if ((e.key === "Tab" || (e.key === "ArrowRight" && inp.selectionStart === inp.value.length)) && rest) { e.preventDefault(); inp.value = srHits[0].name; srUpdate(); }
   else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); srSel = (srSel + (e.key === "ArrowDown" ? 1 : -1) + srHits.length) % Math.max(1, srHits.length); srUpdate(); }
-  else if (e.key === "Enter") { e.preventDefault(); srRun(srHits[srSel] || srHits[0]); }
+  else if (e.key === "Enter") { e.preventDefault(); if (srCmd) cmdApply(); else srRun(srHits[srSel] || srHits[0]); }
   else if (e.key === "Escape") { inp.value = ""; inp.blur(); }
 });
 /* ---------- v11: today's quests, each one a way into its page ---------- */
@@ -539,8 +603,8 @@ function rcExamForm() {
     <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Algebra midterm" value="${esc(rcPre?.name || "")}"></label>
     <label class="f">Subject<input data-f="subject" list="rcSubs" placeholder="e.g. Math" value="${esc(rcPre?.subject || "")}"></label><datalist id="rcSubs">${Rc.subjectNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist>
     <label class="f">Date<input type="date" data-f="date" value="${rcPre?.date || E.today()}"></label>
-    <label class="f">Score<input type="number" inputmode="decimal" data-f="score"></label>
-    <label class="f">Out of<input type="number" inputmode="decimal" data-f="of" value="100"></label>
+    <label class="f">Score<input type="number" inputmode="decimal" data-f="score" value="${rcPre?.score ?? ""}"></label>
+    <label class="f">Out of<input type="number" inputmode="decimal" data-f="of" value="${rcPre?.of ?? 100}"></label>
     <label class="f">Pass mark % (optional)<input type="number" inputmode="decimal" data-f="pass"></label>
     <label class="f" style="flex-basis:100%">Notes<input data-f="notes"></label></div>
     <div class="btns"><button class="btn go" data-act="rcsave">Save</button><button class="btn" data-act="rcform">Cancel</button></div></div>`;
@@ -1037,7 +1101,7 @@ function alertList() {
     E.moneyDue() && ["money:" + E.weekStart(t), sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now"))],
     flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
     unplaced && ["unplaced:" + unplaced, sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan"))],
-    hasData && (expDays === null || expDays >= 7) && ["export:" + (lastExp || "never"), sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("settings/sync", "Export now"))],
+    Sync.signedOut() && ["nosync:" + t, sysBox("Not synced · sign in with Google.", "Your data is only on this device until you sign in. Then it's saved to your Google account and kept in step on every device.", btn("settings/sync", "Sign in"))],
   ].filter(a => a && !gone[a[0]]).map(([k, h]) => `<div class="al" data-akey="${esc(k)}">${h.replace('<span class="tl"><i></i>', `<span class="tl"><button class="xdot" data-act="dismiss" data-id="${esc(k)}" aria-label="Dismiss"></button>`)}</div>`);
 }
 // Dismissed alerts (per phone). Old keys are pruned when the list grows.
@@ -2530,17 +2594,19 @@ function vSettings([sec] = []) {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>`)}
   ${sx("report", "Weekly report", statusSettings())}
-  ${sx("archives", "System Archives", archivesHtml(), "", "")}
-  ${Up.available() ? sx("update", "App updates", `<p class="small muted">${Up.pending() ? `Build ${Up.pending().build} is ready to install.` : "The app checks once a day."} Web changes arrive on their own.</p>
-    <div class="btns">${Up.pending() ? `<button class="btn sm go" data-act="updgo">Update</button>` : `<button class="btn sm" data-act="updcheck">Check now</button>`}</div>`, Up.pending() ? "update ready" : "") : ""}
-  ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
+  ${sx("archives", "System Archives", `${archivesHtml()}
+    <p class="small muted" style="margin-top:14px">Your data saves to your Google account through Sync. Export is only a spare backup.</p>
     <h3 style="margin-top:14px">Export</h3>
     <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Flashcard images and recordings are in the file; check-in photos and the copied text leave media out.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
     <div class="btns"><button class="btn primary" data-act="export">Export file</button><button class="btn" data-act="exportcopy">Copy JSON</button></div>
     <div id="exportBox"></div>
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
-    <input type="file" accept="application/json,.json" data-ch="import">`)}
+    <input type="file" accept="application/json,.json" data-ch="import">`, "", "")}
+  ${Up.available() ? sx("update", "App updates", `<p class="small muted">${Up.pending() ? `Build ${Up.pending().build} is ready to install.` : "The app checks once a day."} Web changes arrive on their own.</p>
+    <div class="btns">${Up.pending() ? `<button class="btn sm go" data-act="updgo">Update</button>` : `<button class="btn sm" data-act="updcheck">Check now</button>`}</div>`, Up.pending() ? "update ready" : "") : ""}
+  ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
+`)}
   <p class="tiny muted" style="text-align:center;margin-top:16px">v${Up.APP_V} · data schema ${S.schemaVersion}</p>`;
 }
 
@@ -2958,6 +3024,10 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "drskip": Dr.skip(); drillPaint(true); return;
     case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
     case "srgo": return srRun(srHits[+id]);
+    case "cmdapply": return cmdApply();
+    case "cmdedit": return cmdEdit();
+    case "cmdundo": if (srDone && srDone.undo) { srDone.undo(); save(); toast("Undone"); } srDone = null; return render();
+    case "lexfind": { const L = Lx.entry(id); if (!L) return; lx = { ...lx, type: L.type === "kanji" ? "kanji" : "vocab", level: null, st: "all", q: Lx.face(L), n: 60, sel: null, open: id }; return goR("lex"); }
     case "rcadd": rcForm = true; rcPre = null; return goR("report");
     case "rcper": rcPeriod = id; return render();
     case "rcsub": rcSub = rcSub === id ? null : id; return render();
