@@ -431,7 +431,16 @@ function dayCleared() {
   toast(`Day cleared · all ${q.total} quests`, true);
 }
 // v7: the due pile as one big button within thumb reach (Home and Study).
-function reviewBtn() { const n = K.queue().length; return n ? `<button class="btn go block big rvbig" data-act="go" data-id="cards/review">${px("scroll")} Review ${n} due</button>` : ""; }
+function reviewBtn(more) { const n = K.queue().length; return n ? `<button class="btn go block big rvbig" data-act="go" data-id="cards/review">${px("scroll")} Review ${n} due</button>` : more ? `<button class="btn block rvbig" data-act="learnmore">${px("scroll")} Continue · +10 new cards</button>` : ""; }
+// v13.3: today's reviews against every other day: the count, its rank, the best day and the last 14 days as bars.
+function dayTrack(end) {
+  const d = K.dayStats(); if (!d.n && !d.days) return "";
+  const t = E.today(), top = d.record || !d.best ? { n: d.n, date: t } : d.best, max = Math.max(1, ...d.last14.map(x => x.n));
+  const bars = `<div class="dtbars" aria-hidden="true">${d.last14.map(x => `<i class="${x.date === t ? "on" : ""} ${x.n ? "" : "z"}" style="height:${x.n ? Math.max(8, x.n / max * 100) : 0}%"></i>`).join("")}</div>`;
+  const rank = !d.n ? "Nothing reviewed yet today." : d.days < 2 ? "Your first day on the board." : `<b>#${d.rank}</b> of ${d.days} days · best ${top.n} (${esc(E.fmtDate(top.date))})`;
+  return `<div class="panel dtrack"><div class="row between"><div class="small">Today: <b>${d.n}</b> review${d.n === 1 ? "" : "s"} · ${d.nw} new</div></div>
+    <div class="tiny muted" style="margin-top:2px">${rank}</div>${end && d.record ? `<div class="small good-t" style="margin-top:4px">New record: ${d.n}</div>` : ""}${bars}</div>`;
+}
 // Act I as one line, with its own money check-in so it works before the Store opens.
 function actLine(a1) {
   const due = E.moneyDue(), last = E.moneyReports().slice(-1)[0];
@@ -1878,7 +1887,7 @@ function fcFace(c, showBack, noSay) {
 /* ================= LEXICON (v8) ================= */
 // Every imported word and kanji, by level, each with an on/off switch. Off = "I know it": never asked.
 let lx = { type: "vocab", level: null, st: "all", q: "", n: 60, sel: null, open: null };
-const LX_ST = [["all", "All"], ["new", "New"], ["learning", "Learning"], ["known", "Known"], ["off", "Off"]];
+const LX_ST = [["all", "All"], ["pri", "Priority"], ["new", "New"], ["learning", "Learning"], ["known", "Known"], ["off", "Off"]];
 function lexImportHtml() {
   return `<div class="panel"><h3>Import your decks</h3><p class="small muted">Open <b>the-arin-japanese-decks.json</b> from the project files. It stays on this phone; only your progress syncs. Import it once on each phone you use.</p>
     <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" data-ch="leximport" hidden></label></div></div>`;
@@ -1900,7 +1909,7 @@ function vLex() {
   const row = e => { const r = m.get(e.id), st = Lx.status(r), off = st === "off", sel = lx.sel && lx.sel.has(e.id), open = lx.open === e.id;
     return `<div class="lexrow ${off ? "is-off" : ""} ${sel ? "sel" : ""}">
       <button class="lexmain" data-act="${lx.sel ? "lexpick" : "lexopen"}" data-id="${e.id}"><span class="lw ja">${esc(Lx.face(e))}</span><span class="lr ja">${esc(Lx.reading(e))}</span><span class="lm">${esc(e.meaning || "")}</span></button>
-      ${lx.sel ? `<span class="lexck">${sel ? ic("check") : ""}</span>` : `<button class="sw ${off ? "" : "on"}" role="switch" aria-checked="${!off}" aria-label="Study ${esc(Lx.face(e))}" data-act="lexoff" data-id="${e.id}"><i></i></button>`}
+      ${lx.sel ? `<span class="lexck">${sel ? ic("check") : ""}</span>` : `<span class="lexctl"><button class="star ${r && r.pri ? "on" : ""}" data-act="lexstar" data-id="${e.id}" aria-pressed="${!!(r && r.pri)}" aria-label="Priority ${esc(Lx.face(e))}">${ic("star")}</button><button class="sw ${off ? "" : "on"}" role="switch" aria-checked="${!off}" aria-label="Study ${esc(Lx.face(e))}" data-act="lexoff" data-id="${e.id}"><i></i></button></span>`}
       ${open ? `<div class="lexdet">${st !== "new" ? `<span class="tag">${st}</span> ` : ""}${e.type === "kanji" && Mi.seenIn(e.kanji).length ? `<div class="small">Seen in: <span class="ja">${esc(Mi.seenIn(e.kanji).join("、"))}</span></div>` : ""}${e.type === "kanji" ? `${e.examples ? `<div class="ja small">${esc(e.examples).replace(/\n/g, "<br>")}</div>` : ""}` : `${e.ex ? `<div class="ja small">${esc(e.ex)}</div><div class="small muted">${esc(e.exEn || "")}</div>` : ""}`}
         <div class="btns"><button class="btn sm" data-act="lexsay" data-id="${e.id}">${ic("sound")} Listen</button></div></div>` : ""}</div>`; };
   const cnt = Lx.counts(lx.type, lx.level, m);
@@ -2001,19 +2010,24 @@ function vReview() {
   if (!q.length) rvS = { n: 0 };
   const head = `${back}<header class="top"><div><div class="hdr">Today's cards</div><h1>Flashcards</h1></div>${jpsOn() ? `<span class="row" style="gap:8px">${jpsTimer()}${jps.silent ? `<button class="btn sm" data-act="jpend">Back to class</button>` : ""}</span>` : ""}</header>${q.length ? pbar(rvS.n / (rvS.n + q.length)) : ""}`;
   if (!c && jpsOn()) return `${head}${sysBox("Cards cleared.", "Next in this session: today's grammar item, then fluency.", `<div class="btns"><button class="btn sm go" data-act="nav" data-id="jlpt">Next</button><button class="btn sm" data-act="jpend">End session</button></div>`)}`;
-  if (!c) return `${head}${sysBox("Batch cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
-    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm go" data-act="learnmore">Continue · +10 cards</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
+  if (!c) return `${head}${sysBox("Batch cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}.`,
+    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm go" data-act="learnmore">Continue · +10 cards</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}${dayTrack(true)}`;
   const know = c.lex ? `<button class="link rvknow" data-act="rvknow" data-id="${c.id}">I know this · turn off</button>` : "";
+  const shown = rv.mode === "mcq" ? rv.pick != null : rv.flip, sug = !c.pri && c.sugg && !c.suggNo;
+  const star = shown ? `<div class="rvstar row" style="gap:8px"><button class="star ${c.pri ? "on" : ""} ${sug ? "pulse" : ""}" data-act="rvstar" data-id="${c.id}" aria-pressed="${!!c.pri}" aria-label="Priority card">${ic("star")}</button>
+    ${sug ? `<span class="small grow">Make priority?</span><button class="link small" data-act="rvsugno" data-id="${c.id}">Not now</button>` : `<span class="tiny muted grow">${c.pri ? "Priority: first in the queue, back more often" : ""}</span>`}</div>` : "";
   const tag = `${know}<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3${c.lex ? ` · ${rv.ask.q === "reading" ? "Reading?" : "Meaning?"}` : ""}` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
     const answered = rv.pick != null, right = rv.ask.ans;
-    return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, answered && c.lex, !answered && rv.ask.q === "reading")}</div>
+    const rate = answered && rv.pick === rv.ask.opts.indexOf(right) && !rv.done;
+    return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, answered && c.lex, !answered && rv.ask.q === "reading")}${star}</div>
       <div class="rv-dock ${answered ? "done" : ""}"><div class="opts">${rv.ask.opts.map((o, i) => { const n = answered && K.optNote(rv.ask, i);
         return `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}${n ? `<small class="optn">${esc(n)}</small>` : ""}</button>`; }).join("")}</div>
-      ${answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}</div></div>`;
+      ${rate ? `<div class="grades conf">${[["guess", "Guessed"], ["unsure", "Unsure"], ["knew", "Knew it"]].map(([k, l]) => `<button class="grade ${k === "knew" ? "g3" : k === "guess" ? "g1" : ""}" data-act="rvconf" data-id="${k}"><b>${l}</b></button>`).join("")}</div>`
+        : answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}</div></div>`;
   }
   if (!rv.flip) return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="rv-dock"><button class="btn primary block" data-act="rvflip">Show answer</button></div></div>`;
-  return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, true)}</div>
+  return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, true)}${star}</div>
     <div class="rv-dock grades">${(c.L && c.L.sent ? [[1, "Again"], [3, "Good"]] : [[1, "Again"], [2, "Hard"], [3, "Good"], [4, "Easy"]]).map(([gr, l]) => `<button class="grade g${gr}" data-act="rvgrade" data-id="${gr}"><b>${l}</b><span>${K.preview(c, gr)}</span></button>`).join("")}</div></div>`;
 }
 async function recStart() {
@@ -2093,7 +2107,7 @@ function vJlpt([sub, a]) {
   if (sub === "read") return vRead(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
   const res = jps && jps.res ? sysBox(`Session over: ${jps.res.n} card${jps.res.n === 1 ? "" : "s"} · +${jps.res.xp} XP`, jps.res.loot ? `Loot drop: +${jps.res.loot} XP.` : "Short sessions add up. Come back at the next gap.", `<div class="btns"><button class="btn sm" data-act="jpclose">Close</button></div>`) : "";
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res + `<div class="panel jpq">${jpQuick()}</div>` + n2Panel();
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res + `<div class="panel jpq">${jpQuick()}</div>` + dayTrack() + n2Panel();
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
   const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`
@@ -2104,7 +2118,7 @@ function vJlpt([sub, a]) {
   const lastMock = exams.find(x => x.kind === "mock" && x.lvl === lvl), mockOpen = RANK_ORDER.indexOf(st.rank) >= RANK_ORDER.indexOf(J.MOCK_AT);
   const secBars = J.SECS.map(([k, l]) => { const s = st.by[k]; return s.n ? `<div class="row between small" style="margin-top:8px"><span>${l}</span><span class="muted">${s.right}/${s.n}</span></div>${bar(s.right / s.n, "var(--sys)")}` : ""; }).join("");
   const gateNote = g.open ? "" : `<p class="small muted">${ic("lock", "inl")} Practice opens in your next study block${g.next ? ": " + esc(dayLabel(g.next.date)) + " " + P.toHM(g.next.s) : ""}.</p>`;
-  return `${head}${reviewBtn()}${passRow()}${lexRow}${ladder}
+  return `${head}${reviewBtn(Lx.ready())}${passRow()}${lexRow}${ladder}
   ${tip("jlpt", "Original questions in the real JLPT formats. Right answers rank you up; wrong ones become flashcards in the JLPT mistakes deck. Reach Rank " + J.MOCK_AT + " to open the Boss Raid, a mock exam that unlocks the next level.")}
   <div class="panel"><div class="row between"><div><span class="k">${lvl} rank</span><div class="rankbig">${st.rank}</div></div><div style="text-align:right"><div class="dm big2">${st.right}/${st.open}</div><div class="small muted">mastered</div></div></div>
     ${bar(st.frac, "var(--sys)")}${secBars}
@@ -3451,6 +3465,11 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "deckrestore": Dy.restoreDeck(id); save(); toast(id + " restored"); return render();
     case "rvknow": { K.setOff(id, true); rv = null; save(); toast("Turned off. It won't come back."); return render(); }
     case "lexoff": { const r = live("cards").find(x => x.id === id); K.setOff(id, !(r && r.off)); save(); return render(); }
+    case "lexstar": {
+      const c = K.get(id); if (!c) return; const on = !c.pri; K.setPri(id, on);
+      const p = on && K.pairOf(c); if (p && confirm(`Star its look-alike ${Lx.face(p)} too?`)) K.setPri(p.id, true);
+      save(); return render();
+    }
     case "lexsel": lx.sel = lx.sel ? null : new Set(); return render();
     case "lexpick": { if (!lx.sel) return; lx.sel.has(id) ? lx.sel.delete(id) : lx.sel.add(id); return render(); }
     case "lexbulk": { if (!lx.sel || !lx.sel.size) return toast("Select some cards first"); for (const x of lx.sel) K.setOff(x, id === "off"); toast(`${lx.sel.size} turned ${id}`); lx.sel = new Set(); save(); return render(); }
@@ -3467,8 +3486,16 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     { const c = K.get(id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
     case "rvpick": {
       const c = rv && K.get(rv.id); if (!c || rv.pick != null) return;
-      rv.pick = +id; rvS.n++; announce(K.answerMcq(c, rv.ask.opts[+id] === rv.ask.ans)); save(); return render();
+      // v13.3: a right answer waits for its rating (Guessed / Unsure / Knew it); a wrong one is saved now.
+      rv.pick = +id; rvS.n++; if (rv.ask.opts[+id] !== rv.ask.ans) { rv.done = true; announce(K.answerMcq(c, false)); save(); } return render();
     }
+    case "rvconf": { const c = rv && K.get(rv.id); if (!c || rv.pick == null || rv.done) return; announce(K.answerMcq(c, true, Date.now(), id)); rv = null; save(); return render(); }
+    case "rvstar": {
+      const c = K.get(id); if (!c) return; const on = !c.pri; K.setPri(id, on);
+      const p = on && K.pairOf(c); if (p && confirm(`Star its look-alike ${Lx.face(p)} too?`)) K.setPri(p.id, true);
+      save(); toast(on ? "Priority: first in the queue, back more often" : "Priority removed"); return render();
+    }
+    case "rvsugno": K.unsugg(id); save(); return render();
     case "rvnext": rv = null; return render();
     case "pword": { pr.open = pr.open === +id ? -1 : +id; const p = Ps.byId(pr.id); if (p && pr.open >= 0) { Ps.tap(p, +id); save(); } return render(); }
     case "prd": pr.rd = !pr.rd; return render();
@@ -3477,7 +3504,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "ppick": { const p = Ps.byId(pr.id); if (!p) return; const [i, j] = id.split(":").map(Number); const r = Ps.answer(p, i, j); if (r) { announce(r.xp ? [{ xp: r.xp, label: "Daily passage" }] : []); if (r.credited) toast(`${r.credited} word${r.credited === 1 ? "" : "s"} counted as reviewed`); } save(); return render(); }
     case "exr": { const r = el.closest(".fc-exb")?.querySelector(".exr"); if (r) r.hidden = !r.hidden; return; }
     case "sayex": { const e = Lx.entry(id) || Mi.entry(id); if (e && e.ex && !K.speak(e.ex)) toast("No Japanese voice on this phone"); return; }
-    case "learnmore": { rvS = { n: 0 }; const n = K.learnMore(); if (!n) return toast("No new cards left. Mine some words or add a deck"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
+    case "learnmore": { rvS = { n: 0 }; const n = K.learnMore(); if (!n) return toast("No new cards left. Mine some words or add a deck"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return goR("cards/review"); }
     case "rvflip": if (rv) rv.flip = true; return render();
     case "rvgrade": {
       const c = rv && K.get(rv.id); if (!c) return;

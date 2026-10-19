@@ -85,7 +85,7 @@ export function upcoming() {
     if (on.wind) { const w = P.windDownOn(d); if (w && w.date === d) add(at(w.date, w.at), "[SYSTEM] Wind-down", `Bed at ${P.toHM(w.bed)}. Close the day: screens off, shower, set out tomorrow.`, "home"); }
     if (on.brief) { const first = segs.filter(g => g.s >= 4 * 60).sort((a, b) => a.s - b.s)[0]; add(at(d, Math.min(first ? first.s : 480, 480)), "[SYSTEM] Daily quests have arrived", "Open the System to accept today's quests.", "home"); }
   }
-  if (on.jp) { const n = K.queue().length; for (let i = 0; i < 3; i++) { const d = E.addDays(t, i); for (const g of gaps(d)) add(at(d, g.s), `[SYSTEM] ${Math.min(30, g.e - g.s)} min free`, n && i === 0 ? `Clear ${n} Japanese review${n === 1 ? "" : "s"}? Quick start is one tap.` : "A Japanese quick start fits here.", "jlpt"); } }
+  if (on.jp) { const n = K.queue().length; for (let i = 0; i < 3; i++) { const d = E.addDays(t, i); for (const g of gaps(d)) add(at(d, g.s), `[SYSTEM] ${Math.min(30, g.e - g.s)} min free`, n && i === 0 ? `Clear ${n} Japanese review${n === 1 ? "" : "s"}? Quick start is one tap.` : "A Japanese quick start fits here.", n && i === 0 ? "cards/review" : "jlpt"); } }
   // v9.2: deadlines, at 08:00 or when the morning's sleep ends.
   if (on.dl) for (let i = 0; i < 3; i++) {
     const d = E.addDays(t, i), wake = P.segments(d).filter(g => g.b.kind === "sleep" && g.s <= 480 && g.e > 480).reduce((m, g) => Math.max(m, g.e), 480);
