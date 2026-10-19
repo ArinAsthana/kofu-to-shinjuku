@@ -182,7 +182,7 @@ function todayQuests(t = E.today()) {
   const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
   const call = live("xpEvents").some(e => e.ref === "call" && E.ymd(new Date(e.ts)) === t);
   // v8.1: the N2 plan's open grammar item, any time of day (no block). Done once any item is finished today.
-  // It is the "jp" daily quest (finishing an item ticks it); Home names the item itself.
+  // It used to be the "jp" daily quest (retired in v13.1; finishing an item still ticks it for the stat radar).
   const jc = N2.ready() ? N2.current() : null, jp = jc && !jc.gate ? jc.g : null;
   return { trials, events, habits, call, path, jp, done: doneT.length + path.done + trials.filter(x => x.done).length + habits.filter(x => x.on).length + (call ? 1 : 0), total: trials.length + events.length + path.total + habits.length + (call ? 1 : 0) };
 }
@@ -407,7 +407,7 @@ function questRows(q) {
     for (const r of allRaids().filter(r => r.days <= 7).slice(0, 2)) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("skull")}</span>`, title: `${tag("raid", `Raid · ${r.days <= 0 ? "today" : r.days + "d"}`)} ${esc(r.name)}`, sub: "", right: "", act: "go", id: "path" }) });
   }
   for (const x of q.trials) rows.push({ done: !!x.done, html: trialRow(x.k, x.done) });
-  for (const k of q.path.list) rows.push({ done: !!k.done, html: qRow({ done: k.done, box: tickBox(k.done ? "taskundo" : "taskdone", k.id, k.done, k.title), title: esc(Pa.stream(k.path.stream).label) + (k.path.sun ? " · Sunday" : ""), sub: esc(pathText(k)), right: P.dur(k.mins), act: "go", id: k.path.stream === "n2" ? "jlpt" : "path/s/" + k.path.stream }) });
+  for (const k of q.path.list) rows.push({ done: !!k.done, html: qRow({ done: k.done, box: tickBox(k.done ? "taskundo" : "taskdone", k.id, k.done, k.title), title: esc(Pa.stream(k.path.stream).label) + (k.path.sun ? " · Sunday" : ""), sub: esc(pathText(k)), right: k.path.stream === "mental" ? "2 Drills" : P.dur(k.mins), act: "go", id: k.path.stream === "n2" ? "jlpt" : "path/s/" + k.path.stream }) });
   for (const e of q.events) { const k = e.k;
     rows.push({ done: !!e.done, html: qRow({ done: e.done, cls: k.penalty ? "pen-q" : "", box: tickBox(e.done ? "taskundo" : "taskdone", k.id, e.done, k.title), title: (k.penalty ? tag("pen", "Penalty") + " " : "") + esc(k.title), sub: e.done ? "done" : `${span(e.at.s, e.at.e)} · ${P.dur(k.mins)}`, right: k.penalty ? "" : "+" + XP.task, act: "sheet", id: k.dl ? "deadline:" + k.dl : "task:" + k.id }) }); }
   for (const { h, on } of q.habits) { const g = HABIT_GO[h.id], to = typeof g === "function" ? g() : g, st = habitStreak(h.id);
@@ -523,6 +523,13 @@ function pathDoneHtml(id) {
 }
 /* ---------- v10.0: Drill ---------- */
 let drillT = null, drillResult = null; // timer, and the last run's result for the end screen
+// The 2nd Classic run of the day ticks the open Mental Math item (also after a sync brings runs from another phone).
+function mentalAuto(say = true) {
+  const k = Dr.todayRuns("classic").length >= 2 ? mentalTask() : null; if (!k) return null;
+  const g = Pa.finish(k, "done", Dr.todayBest("classic")); save(); if (say && g) announce([g]); return g;
+}
+// "10 problems: 2-digit × 2-digit multiplication" → the Drill mode that trains it.
+const mentalMode = txt => { const m = String(txt || "").split(/10 problems:?/i)[1] || ""; return /cagr|growth|compound|doubl/i.test(m) ? "growth" : /%|percent/i.test(m) ? "percent" : /fraction/i.test(m) ? "fractions" : /estimat|¥|\$/i.test(m) ? "estimate" : /multipl|×|squar/i.test(m) ? "multiply" : m ? "mixed" : null; };
 const mentalTask = () => Pa.ready() && Pa.started() ? live("tasks").find(k => k.path && k.path.stream === "mental" && !k.path.sun && !k.done && k.due <= E.today()) : null;
 function drillTick() {
   clearInterval(drillT);
@@ -531,8 +538,7 @@ function drillTick() {
     clearInterval(drillT); if (!Dr.current()) return;
     drillResult = Dr.finish();
     // Path: the 2nd Classic run of the day logs the best score to the open Mental Math item by itself.
-    const k = drillResult && drillResult.rec.mode === "classic" && Dr.todayRuns("classic").length >= 2 ? mentalTask() : null;
-    if (k) { const g = Pa.finish(k, "done", Dr.todayBest("classic")); drillResult.logged = g; }
+    if (drillResult && drillResult.rec.mode === "classic") { const g = mentalAuto(false); if (g) drillResult.logged = g; }
     save();
     if (drillResult && drillResult.pb) setTimeout(() => toast(`New best · ${Dr.mode(drillResult.rec.mode).name} ${drillResult.rec.score}`, true), 400);
     if (route()[0] === "drill") render();
@@ -651,7 +657,7 @@ function vStream(id) {
   const now = `<div class="panel"><div class="row between"><b class="small">Today</b>${badge}</div>
     <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : gt ? "Gate Test before Arc " + A.n + "." : "Stream complete."}</div>
     ${gt ? gateBox(gt) : ""}<div class="btns">${gt ? "" : k ? `<button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button>` : it ? `<button class="btn sm" data-act="pathahead" data-id="${id}">Go ahead</button>` : ""}
-    ${id === "mental" ? `<button class="btn sm" data-act="go" data-id="drill">Drill</button>` : ""}${id === "apps" ? `<button class="btn sm" data-act="go" data-id="path/apps">Applications</button>` : ""}</div></div>`;
+    ${id === "mental" ? `<button class="btn sm" data-act="drillgo" data-id="classic">Classic Drill</button>${mentalMode(it && it.t) ? `<button class="btn sm" data-act="drillgo" data-id="${mentalMode(it.t)}">10 problems · ${esc(Dr.mode(mentalMode(it.t)).name)}</button>` : ""}` : ""}${id === "apps" ? `<button class="btn sm" data-act="go" data-id="path/apps">Applications</button>` : ""}</div></div>`;
   const prog = `<h2>Progress</h2><div class="panel"><div class="row between small"><span>Overall</span><span class="mono">${p}/${len}</span></div>${bar(len ? p / len : 0)}
     <div class="row between small" style="margin-top:10px"><span>Arc ${A.n}</span><span class="mono">${A.done}/${A.size}</span></div>${bar(A.size ? A.done / A.size : 0, "var(--lime)")}
     <div style="margin-top:8px">${list}</div>
@@ -1178,7 +1184,8 @@ function focusBody(g) {
   const p = St.pomo(key), fin = St.logsFor(o).find(r => r.final), sst = S.settings.study, pen = sst.penaltyXp ?? 30;
   const left = St.pomoLeft(p), phase = p.phase === "focus" ? "Focus" : p.phase === "long" ? "Long break" : "Break";
   const topicHtml = !subj ? "" : !top ? sysBox("Every topic in this list is done.", "Add the next ones in Plan → Study.") :
-    `<div class="panel"><div class="row between"><span class="hdr">${esc(SUBJECTS[subj].name)} · topic ${St.topics(subj).indexOf(top) + 1} of ${St.topics(subj).length}</span><span class="small">${pr}% done</span></div>${bar(pr / 100, "var(--sys)")}
+    `<div class="panel"><div class="row between"><span class="hdr">${top.review ? `${esc(SUBJECTS[subj].name)} · review` : `${esc(top.module || SUBJECTS[subj].name)} · topic ${St.topics(subj).indexOf(top) + 1} of ${St.topics(subj).length}`}</span><span class="small">${pr}% done</span></div>${bar(pr / 100, "var(--sys)")}
+      ${top.by && !top.review ? `<div class="small" style="margin-top:6px">by ${esc(E.fmtDate(top.by))}${top.h ? ` · about ${top.h} h` : ""} ${St.behind(top) ? tag("pen", "Behind") : ""}</div>` : ""}
       <h3>Do this</h3><p class="small">${esc(top.do)}</p>
       ${top.out ? `<h3>End with</h3><p class="small">${esc(top.out)}</p>` : ""}
       ${(top.src || []).length ? `<h3>Sources</h3><div class="small srcs">${top.src.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join("")}</div>` : ""}
@@ -1227,6 +1234,7 @@ function runAssess() {
   if (Sy.ensureLoanBill()) save();
   const back = Mi.match(); if (back.length) { save(); toast(`${back.join(", ")} ${back.length === 1 ? "was" : "were"} off. ${back.length === 1 ? "It's" : "They're"} back on because you mined ${back.length === 1 ? "it" : "them"}.`, true); }
   if (Pa.issue()) save();
+  mentalAuto();
   const fresh = [...(Sy.has(1) ? St.assess() : []), ...(Sy.has(4) ? Soc.assess() : [])];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
@@ -1690,10 +1698,9 @@ function vClasses([sub, id, ch]) {
       <div class="btns"><button class="btn go" data-act="go" data-id="classes/d/${hid}">${hc && Cl.readDone(hid, hc.id) ? "Take the quiz" : "Start"}</button>
 </div></div>${reviewBtn()}`;
   // Japanese is a discipline here: Genki lessons are its chapters, the JLPT ladder its progress, N-level mocks its boss.
-  const jpL = St.topics("jp"), jpCur = St.current("jp"), jpOpen = (jpL[0] && St.progress("jp", jpL[0].id) >= 100) || live("jlptItems").length > 0 || live("jlptExams").length > 0;
-  const jpRow = !jpOpen ? "" : `<button class="panel discp" data-act="go" data-id="jlpt"><div class="row between"><b>Japanese</b><span class="small muted">${jpL.filter(x => St.progress("jp", x.id) >= 100).length}/${jpL.length}</span></div>
-      ${bar(jpL.filter(x => St.progress("jp", x.id) >= 100).length / (jpL.length || 1), "var(--acc)")}
-      <div class="small muted">${jpCur ? `Now: ${esc(jpCur.t)} · ${St.progress("jp", jpCur.id)}%` : "Every lesson done"} · JLPT ladder and mock exams</div></button>`;
+  // v13.1: Genki is retired; Japanese is cards, the N2 plan and the JLPT ladder.
+  const jpRow = `<button class="panel discp" data-act="go" data-id="jlpt"><div class="row between"><b>Japanese</b><span class="small muted">${esc(J.level())}</span></div>
+      <div class="small muted">Cards, the N2 plan, JLPT ladder and mock exams</div></button>`;
   const canAdd = act.some(id => Cl.clearedCount(id) > 0);
   return `${head}
   ${hero}
@@ -1779,9 +1786,9 @@ function vStudy() {
       <textarea data-f="topics" rows="14" style="font-size:13px">${esc(St.topicsText(k))}</textarea>
       <div class="btns"><button class="btn go" data-act="savetopics" data-id="${k}">Save</button><button class="btn" data-act="topicedit">Cancel</button>${sst.topics && sst.topics[k] ? `<button class="btn danger" data-act="resettopics" data-id="${k}">Back to the built-in list</button>` : ""}</div></div>`;
     return `<div class="panel"><div class="row between"><h3>${esc(SUBJECTS[k].name)}</h3><span class="small muted">${done}/${L.length} done</span></div>${bar(done / (L.length || 1), "var(--sys)")}
-      <div class="small" style="margin-top:8px">${cur ? `Now: <b>${esc(cur.t)}</b> · ${St.progress(k, cur.id)}%` : "All done."}</div>
+      <div class="small" style="margin-top:8px">${cur ? `Now: <b>${esc(cur.t)}</b> · ${St.progress(k, cur.id)}%${St.behind(cur) ? " " + tag("pen", "Behind") : ""}` : "All done."}</div>
       <details style="margin-top:8px"><summary class="small">All topics</summary>${L.map((t, i) => { const pr = St.progress(k, t.id);
-        return `<div class="item row between small ${t === cur ? "cur" : ""}"><span class="grow">${i + 1}. ${esc(t.t)}</span><span class="${pr >= 100 ? "" : "muted"}">${pr >= 100 ? ic("check", "inl") : pr + "%"}</span></div>`; }).join("")}</details>
+        return `${t.module && t.module !== (L[i - 1] || {}).module ? `<div class="tiny muted" style="margin-top:8px">${esc(t.module)}</div>` : ""}<div class="item row between small ${cur && t.id === cur.id ? "cur" : ""}"><span class="grow">${i + 1}. ${esc(t.t)}${t.by ? ` <span class="tiny muted">· by ${esc(E.fmtDate(t.by))}</span>` : ""}</span><span class="${pr >= 100 ? "" : St.behind(t) ? "bad-t" : "muted"}">${pr >= 100 ? ic("check", "inl") : pr + "%"}</span></div>`; }).join("")}</details>
       ${k === "fin" && Cl.active().length ? `<p class="tiny muted">Finance blocks follow your active disciplines. The System picks the chapter.</p><div class="btns"><button class="btn sm" data-act="go" data-id="classes">Study</button></div>` : `<div class="btns"><button class="btn sm" data-act="topicedit" data-id="${k}">Edit list</button></div>
       <p class="tiny muted">Blocks named like "${esc(SUBJECTS[k].match.split("|")[0])}…" use this list.</p>`}</div>`;
   }).join("");
@@ -3622,6 +3629,7 @@ function renameStyle() {
   if (Dy.archiveOld()) save();
   await Lx.load();
   cvTick();
+  if (St.clearDropped()) save();
   renameStyle();
   if (Soc.migrateTraits()) save();
   // First 60 seconds: one quest is already done, so the bar has moved before anything else happens.

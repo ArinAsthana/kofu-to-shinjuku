@@ -2,13 +2,14 @@
 // that isn't finished. Reports add % to that topic. A quest block that ends without being done earns a penalty.
 
 import { S, live, put, remove } from "./store.js";
-import { SUBJECTS, STUDY, HABITS } from "./data.js";
+import { SUBJECTS, STUDY, HABIT_DEFS } from "./data.js";
 import * as E from "./engine.js";
 import * as P from "./planner.js";
 import * as Cl from "./classes.js";
 import { START_MS, isRest } from "./path.js";
 
 const st = () => S.settings.study || STUDY;
+const JP_RE = /japan|日本語|jlpt|nihongo|genki|kanji/i;
 const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const absMs = (date, m) => E.parse(date).getTime() + m * 60000;
 
@@ -21,7 +22,31 @@ export function subjectOf(b) {
   return Object.keys(SUBJECTS).find(k => new RegExp(SUBJECTS[k].match, "i").test(b.title || "")) || null;
 }
 export const progress = (subj, id) => Math.min(100, live("blockLog").filter(r => r.subj === subj && r.topic === id).reduce((a, r) => a + (r.gain || 0), 0));
-export const current = subj => topics(subj).find(t => progress(subj, t.id) < 100) || null;
+// v13.1: once every Finance topic is done, blocks rotate reviews (see review()).
+export const current = subj => topics(subj).find(t => progress(subj, t.id) < 100) || (subj === "fin" && !Cl.active().length ? review(subj) : null);
+// The block card's line under the title: module, target date, and Behind when today is past it.
+export const behind = (top, t = E.today()) => !!(top && top.by && !top.review && t > top.by);
+
+/* ---------- review rotation (v13.1) ---------- */
+// A review is its own topic id, "rv:<topic>:<n>", so its % and XP work like any topic and the original's 100% stays.
+// Order: the technicals (c1, c2) and macro (b9) first, then whichever topic was last touched longest ago.
+// Macro (b9) comes back every month.
+const REVIEW_FIRST = ["c1", "c2", "b9"];
+const REVIEW_DO = "Close the notes. Answer the topic's questions aloud from memory, then check against your mind map and fix the gaps.";
+const REVIEW_OUT = "The 2-minute explanation re-recorded, better than the last one.";
+function review(subj) {
+  const L = topics(subj); if (!L.length) return null;
+  const logs = live("blockLog").filter(r => r.subj === subj && r.topic), rv = id => logs.filter(r => String(r.topic).startsWith("rv:" + id + ":"));
+  const mk = (t, id) => ({ ...t, id, base: t.id, review: true, t: "Review: " + t.t, do: REVIEW_DO, out: REVIEW_OUT });
+  const open = [...new Set(logs.map(r => String(r.topic)).filter(x => x.startsWith("rv:")))].find(id => progress(subj, id) < 100);
+  if (open) { const t = L.find(x => x.id === open.split(":")[1]); if (t) return mk(t, open); }
+  const last = id => Math.max(0, ...logs.filter(r => r.topic === id || String(r.topic).startsWith("rv:" + id + ":")).map(r => r.at || 0));
+  const b9 = L.find(t => t.id === "b9");
+  const pick = (b9 && rv("b9").length && Date.now() - last("b9") > 30 * 864e5 ? b9 : null)
+    || REVIEW_FIRST.map(id => L.find(t => t.id === id)).find(t => t && !rv(t.id).length)
+    || [...L].sort((a, b) => last(a.id) - last(b.id))[0];
+  return mk(pick, `rv:${pick.id}:${new Set(rv(pick.id).map(r => r.topic)).size}`);
+}
 export function upNext(subj) { const L = topics(subj), c = current(subj); return c ? L[L.indexOf(c) + 1] || null : null; }
 
 // Topic list as editable text: one topic per line, "Title | what to do | what you end with".
@@ -34,7 +59,7 @@ export function parseTopics(subj, text) {
     const was = old.find(o => o.t.toLowerCase() === t.toLowerCase() && !used.has(o.id));
     const id = was ? was.id : subj + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     used.add(id);
-    return { id, t, do: d || (was && was.do) || "", out: out || (was && was.out) || "", src: (was && was.src) || [] };
+    return { ...(was || {}), id, t, do: d || (was && was.do) || "", out: out || (was && was.out) || "", src: (was && was.src) || [] }; // keeps module, h, by
   });
 }
 
@@ -73,14 +98,14 @@ export function report(o, { subj, topic, gain = 0, poms = 0, final = true, done 
   const gains = [];
   const rec = put("blockLog", { date: o.date, block: o.b.id, title: o.b.title, subj: subj || null, topic: topic || null, gain, poms, done, final, at: Date.now() });
   if (subj && topic && progress(subj, topic) >= 100) {
-    const t = topics(subj).find(x => x.id === topic);
-    gains.push(E.gainXP("topic", "topic:" + subj + ":" + topic, "Topic cleared: " + (t ? t.t : topic)));
+    const t = topics(subj).find(x => x.id === topic) || (String(topic).startsWith("rv:") && topics(subj).find(x => x.id === topic.split(":")[1]));
+    gains.push(E.gainXP("topic", "topic:" + subj + ":" + topic, (String(topic).startsWith("rv:") ? "Review done: " : "Topic cleared: ") + (t ? t.t : topic)));
   }
   // A real study block ticks its daily quest, like logging a workout ticks the gym one.
   const habit = subj && SUBJECTS[subj].habit;
   if (habit && (gain > 0 || poms > 0) && !E.habitDone(habit, o.date)) {
     const h = put("habitLog", { date: o.date, habit });
-    gains.push(E.gainXP("habit", h.id, HABITS.find(x => x.id === habit)?.name || habit));
+    gains.push(E.gainXP("habit", h.id, HABIT_DEFS.find(x => x.id === habit)?.name || habit));
   }
   return { rec, gains };
 }
@@ -106,7 +131,7 @@ export function assess() {
     const d = E.addDays(t, -i);
     if (isRest(d)) continue; // a rest token covers the whole day
     for (const o of questOcc(d)) {
-      if (subjectOf(o.b) === "jp") continue; // v8: Japanese has no block and no penalty; it fits into any gap
+      if (JP_RE.test(o.b.title || "")) continue; // v8: Japanese has no block and no penalty; it fits into any gap
       const end = absMs(d, o.e);
       if (end <= from || now < end + grace) continue;
       const id = "pen-" + d + "-" + o.b.id, ex = S.penalties.find(r => r.id === id), done = completed(o);
@@ -129,6 +154,18 @@ export function assess() {
     }
   }
   return fresh;
+}
+
+// v13.1: the Finance syllabus dropped some topics to the Path. An open make-up quest for one of them is cleared with
+// no penalty (its XP comes back) and no reward. Same result on every phone, so syncs agree.
+const DROPPED = ["How the 3 statements link"];
+export function clearDropped() {
+  let n = 0;
+  for (const p of openPenalties()) {
+    const k = penTask(p); if (!k || !DROPPED.some(t => (p.topic || "") === t || (k.title || "").includes(t))) continue;
+    remove("tasks", k.id); put("penalties", { ...p, xp: 0, waived: true, cleared: "syllabus" }); n++;
+  }
+  return n > 0;
 }
 
 /* ---------- pomodoro ---------- */

@@ -136,7 +136,8 @@ const order = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (b.p
 // Returns Map(taskId -> {date, s, e, late}) and the list of tasks that found no slot.
 export function plan() {
   const t = E.today(), n = snap(nowMin() + 5), taken = {}, out = new Map(), unplaced = [];
-  const open = live("tasks").filter(x => !x.done && x.kind !== "deadline"); // v9.2: a deadline is a marker, not work
+  // v9.2: a deadline is a marker, not work. v13.1: the Path's Mental Math item has no slot either: two Classic Drill runs tick it.
+  const open = live("tasks").filter(x => !x.done && x.kind !== "deadline" && !(x.path && x.path.stream === "mental"));
   for (const k of open.filter(x => x.pin && x.pin.date >= t)) {
     const s = toMin(k.pin.start); (taken[k.pin.date] = taken[k.pin.date] || []).push([s, s + k.mins]);
     out.set(k.id, { date: k.pin.date, s, e: s + k.mins, pinned: true, late: k.due && k.pin.date > k.due });
