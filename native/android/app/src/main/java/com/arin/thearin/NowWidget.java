@@ -52,7 +52,7 @@ public class NowWidget extends AppWidgetProvider {
             }
             v.setTextViewText(R.id.w_level, s.optString("level", ""));
             JSONObject jp = s.optJSONObject("jp");
-            v.setTextViewText(R.id.w_jp, jp != null && jp.optInt("due") > 0 ? "日本語 " + jp.optInt("due") : "日本語");
+            v.setTextViewText(R.id.w_jp, jp != null && jp.optInt("due") > 0 ? "Japanese " + jp.optInt("due") : "Japanese");
             int[] btn = { R.id.w_jp5, R.id.w_jp15, R.id.w_jp30 };
             int[] min = { 5, 15, 30 };
             for (int i = 0; i < btn.length; i++) v.setOnClickPendingIntent(btn[i], MainActivity.route(c, "jpgo/" + min[i], min[i]));
