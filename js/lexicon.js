@@ -7,9 +7,11 @@ import { lexKv, live } from "./store.js";
 
 export const FORMAT = "the-arin-japanese-decks";
 export const LEVELS = { vocab: ["N5", "N4", "N3", "N2"], kanji: ["N3", "N2"] };
-let V = [], KJ = [], BY = new Map(), ORDER = { vocab: [], kanji: [] };
+let V = [], KJ = [], BY = new Map(), ORDER = { vocab: [], kanji: [] }, VER = 0;
+export const LATEST = 2; // v13.2: real-word options, part of speech and example sentences
 
 function set(d) {
+  VER = d.version || 1;
   V = (d.vocab || []).filter(x => x && x.id); KJ = (d.kanji || []).filter(x => x && x.id);
   BY = new Map([...V, ...KJ].map(x => [x.id, x]));
   // New cards come level by level (N5 → N2), in deck order within a level.
@@ -24,6 +26,7 @@ export async function importText(text) {
   return { vocab: V.length, kanji: KJ.length };
 }
 export const ready = () => BY.size > 0;
+export const version = () => VER;
 export const entry = id => BY.get(id) || null;
 export const all = type => type === "kanji" ? KJ : V;
 export const order = type => ORDER[type];
