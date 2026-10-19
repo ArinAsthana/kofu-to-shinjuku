@@ -781,8 +781,15 @@ nav button span{position:relative}
 .srch-cmd{margin:4px 8px 6px;padding:10px 12px;border:1px solid #FF3B2F;background:rgba(255,59,47,.12)}
 .srch-cmd .btns{margin-top:8px}
 /* v11.2: Home is the title and the search bar; the bell sits by the name. Path streams get their own page. */
-.home-min .srch{margin-top:18vh}
-.hiname{display:flex;align-items:center;gap:12px}
+/* v11.3: the greeting sits right above the search bar, whose top is 3/5 down the screen. */
+.home-min{display:flex;flex-direction:column;justify-content:flex-end;min-height:calc(60vh + 42px - env(safe-area-inset-top,0px));min-height:calc(60dvh + 42px - env(safe-area-inset-top,0px))}
+.home-min header.top{margin-bottom:10px;padding-bottom:16px}
+.home-min .hihead{flex:1;min-width:0}
+.home-min .hihead .hdr{margin-bottom:10px}
+.home-min .hilv{margin-top:10px}
+.home-min .srch{margin:0}
+.home-min .srch-list{max-height:calc(40vh - 150px);max-height:calc(40dvh - 150px);overflow:auto}
+.hiname{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .hiname .bell{width:36px;height:36px}
 .nbadge.qn{top:-9px;right:-18px}
 .s-link{display:inline-flex;align-items:center;gap:4px;padding:0;background:none;border:0;color:inherit;font:inherit;text-align:left}
