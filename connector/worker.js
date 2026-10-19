@@ -29,7 +29,7 @@ const CV_SECTIONS = ["education", "courses", "skills", "certs", "projects", "exp
 // Mirrors js/store.js RECORD_STORES, plus settings. Keep in step.
 const STORES = ["habitLog", "xpEvents", "rewardHistory", "exercises", "areaState", "workouts", "runs", "bodyweight", "physique", "meals", "savedMeals",
   "money", "bills", "blocks", "tasks", "care", "careLog", "people", "hangouts", "wishlist", "blockLog", "penalties", "fieldNotes", "appraisals",
-  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "mined", "resumes", "cards", "reviewDays", "settings"];
+  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "mined", "resumes", "passages", "cards", "reviewDays", "settings"];
 const KINDS = ["class", "work", "sleep", "nap", "quest", "club", "social", "other"];
 
 /* ---------- time ---------- */
@@ -169,7 +169,14 @@ const TOOLS = [
     inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["word", "sentence"], description: "default word" }, word: { type: "string", description: "Dictionary form as written, e.g. 打ち合わせ (required for a word)" }, reading: { type: "string", description: "Kana reading" }, meaning: { type: "string", description: "Short English meaning" },
       sentence: { type: "string", description: "The sentence it was found in (required for a sentence card)" }, sentence_reading: { type: "string", description: "The sentence in kana" }, sentence_en: { type: "string", description: "English translation" }, note: { type: "string", description: "One-line grammar or usage note" },
       level: { type: "string", enum: ["N5", "N4", "N3", "N2", "N1"] }, source: { type: "string", enum: ["shift", "class", "anime", "NHK", "conversation", "other"] }, tags: { type: "array", items: { type: "string" }, description: "e.g. ['keigo']" },
+      pos: { type: "string", description: "Part of speech as JMdict codes, comma-separated: n, vs, v5, v1, vt, vi, adj-i, adj-na, adj-no, adv, exp, int, ctr, suf, pref. e.g. 'n,vs' or 'v5,vt'" },
       wrong_readings: { type: "array", items: { type: "string" }, description: "3 close wrong readings" }, wrong_meanings: { type: "array", items: { type: "string" }, description: "3 close wrong meanings" } } } },
+  { name: "add_passage", description: "Save the daily reading passage into the app (Japanese screen, 'Today's passage', shown once the day's reviews are done). Build it from the day's cards: get_store cards, take records whose intro or last is today (Japan time); new cards (intro today) first, then lapses (lapses/lapseRun > 0 or Again today), topped up with other reviews, up to about 25 targets. Card ids map to words through the project's deck file (/mnt/project-files/decks/the-arin-japanese-decks.json, vocab and kanji by id); 'm-<id>' cards are mined words (get_store mined). Write 300-500 characters of natural Japanese at N4-N3 grammar (N3-N2 as Arin's level rises) about Arin's life (Kofu, ICLA classes, the FamilyMart night shift, the gym, finance), using every target word in the exact form given in targets[].word so the app can highlight it (conjugate around it, or list the conjugated form as the target word). Give 3 JLPT-style comprehension questions, 4 options each. One passage per date: saving again for the same date replaces it (answers kept only if the questions didn't change). Reply in one line.",
+    inputSchema: { type: "object", required: ["text", "targets", "questions"], properties: {
+      date: { type: "string", description: "YYYY-MM-DD Japan time, default today" }, title: { type: "string", description: "Short Japanese title" },
+      text: { type: "string", description: "The passage. Line breaks between paragraphs." }, reading: { type: "string", description: "The whole passage in kana" }, en: { type: "string", description: "English translation" },
+      targets: { type: "array", items: { type: "object", required: ["word"], properties: { id: { type: "string", description: "Card id" }, word: { type: "string", description: "Exactly as it appears in text" }, reading: { type: "string" }, meaning: { type: "string" } } } },
+      questions: { type: "array", items: { type: "object", required: ["q", "options", "answer"], properties: { q: { type: "string", description: "In Japanese" }, options: { type: "array", items: { type: "string" } }, answer: { type: "number", description: "0-based index of the right option" }, why: { type: "string", description: "One line, in English, pointing at the sentence that answers it" } } } } } } },
   { name: "get_resume_data", description: "Read-only: everything needed to write Arin's CV for a company and role. Returns the transcript (courses with grades, GPA), the CV header, every app-linked line with its state (earned / prog = in progress with pct / locked with its unlock condition / off = not worth showing), the Japanese level estimate and its inputs, the Zetamac best, the job applications and the saved CVs. Line srcs: disc:<id> (a discipline, earned when its boss is passed), cert:boki3|boki2|sapfi (earned only by a passed real exam), cap:markets|sapfico|strategist (class capstone projects), stat:zetamac, jp (Japanese level line), gpa (degree line), course:<title prefix> (from the transcript, always earned). States come from Arin's phone (cacheAt says when). Use before save_resume.",
     inputSchema: { type: "object", properties: {} } },
   { name: "save_resume", description: "Save a CV for a company and role into the app's Resumes. Arin says e.g. 'CV for Murex, junior consultant'. First call get_resume_data and research the company (business, what the role needs, values, what they screen for). Then write: motives = 3-5 things the company wants, each with the srcs that prove them; sections = lines of {text, src?, head?}. Put every skill, certificate, project and the Japanese line on its src so the app greys it out until earned (never claim a non-earned item as done in the text: the app shows its state and leaves grey lines out of the PDF). Lines without src are plain facts (education, FamilyMart night shift, Music Club, English and Hindi native). Pick 4-6 relevant courses as course:<title> lines and 3-5 skills, most relevant first. Saving the same company and role again replaces it and keeps the old one as a version (5 kept). The CV is linked to the company's application; one is created (status To apply) if missing. Reply with the match score idea in one line and say it's in the app under Resumes.",
@@ -371,7 +378,7 @@ const handlers = {
     if (kind === "word" && !str(a.word)) throw new Error("word is required");
     if (kind === "sentence" && !str(a.sentence)) throw new Error("sentence is required for a sentence card");
     const rec = { kind, word: str(a.word), reading: str(a.reading), meaning: str(a.meaning), sentence: str(a.sentence), sentenceReading: str(a.sentence_reading), sentenceEn: str(a.sentence_en),
-      note: str(a.note), level: str(a.level) || null, source: str(a.source), tags: list(a.tags), dR: list(a.wrong_readings), dM: list(a.wrong_meanings) };
+      note: str(a.note), level: str(a.level) || null, source: str(a.source), tags: list(a.tags), pos: str(a.pos).replace(/\s+/g, ""), dR: list(a.wrong_readings), dM: list(a.wrong_meanings) };
     let again = false;
     await changeStore(env, "mined", arr => {
       const ex = live(arr).find(m => m.kind === kind && (kind === "word" ? m.word === rec.word : m.sentence === rec.sentence));
@@ -380,6 +387,25 @@ const handlers = {
     });
     const what = kind === "word" ? `${rec.word}${rec.reading ? ` (${rec.reading}${rec.meaning ? ", " + rec.meaning : ""})` : ""}` : `the sentence ${rec.sentence}`;
     return `${again ? "Updated" : "Mined"} ${what}.${kind === "word" ? " The app matches it against the JLPT deck next time it opens." : ""} It goes first in the next batch of new cards.`;
+  },
+  async add_passage(env, a) {
+    const str = v => String(v || "").trim(), date = resolveDate(a.date), text = str(a.text);
+    if (!text) throw new Error("text is required");
+    const targets = (Array.isArray(a.targets) ? a.targets : []).map(t => ({ id: str(t?.id), word: str(t?.word), reading: str(t?.reading), meaning: str(t?.meaning) })).filter(t => t.word).slice(0, 40);
+    const questions = (Array.isArray(a.questions) ? a.questions : []).map(q => ({ q: str(q?.q), options: (Array.isArray(q?.options) ? q.options : []).map(str).filter(Boolean).slice(0, 5), answer: Number(q?.answer), why: str(q?.why) }))
+      .filter(q => q.q && q.options.length >= 2 && Number.isInteger(q.answer) && q.answer >= 0 && q.answer < q.options.length).slice(0, 5);
+    if (!questions.length) throw new Error("questions need q, options and a 0-based answer index");
+    const missing = targets.filter(t => !text.includes(t.word)).map(t => t.word);
+    const id = "ps-" + date;
+    let again = false;
+    await changeStore(env, "passages", arr => {
+      const ex = live(arr).find(p => p.id === id);
+      again = !!ex;
+      const same = ex && JSON.stringify(ex.questions) === JSON.stringify(questions);
+      putRec(arr, { id, date, title: str(a.title), text, reading: str(a.reading), en: str(a.en), targets, questions,
+        picks: same ? ex.picks || [] : [], tapped: same ? ex.tapped || [] : [], credited: same ? ex.credited || [] : [], done: same ? !!ex.done : false, xp: same ? ex.xp || 0 : 0, created: ex?.created || Date.now() });
+    });
+    return `${again ? "Replaced" : "Saved"} the passage for ${date}: ${text.length} characters, ${targets.length} target words, ${questions.length} question${questions.length === 1 ? "" : "s"}.${missing.length ? ` Not found word for word in the text (won't highlight): ${missing.join("、")}.` : ""}`;
   },
   async get_resume_data(env) {
     const [R, A] = await Promise.all([readStore(env, "resumes"), readStore(env, "applications")]);

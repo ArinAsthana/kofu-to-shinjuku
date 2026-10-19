@@ -26,6 +26,7 @@ import * as Dr from "./drill.js";
 import * as Rc from "./report.js";
 import * as Sr from "./search.js";
 import * as Mi from "./mined.js";
+import * as Ps from "./passage.js";
 import * as Rs from "./resume.js";
 import { cvPdf } from "./pdf.js";
 
@@ -901,7 +902,7 @@ function vGate(s) {
       <div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="gqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
       ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(q.opts[q.a])}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
   return head + (r ? sysBox(r.passed ? `Gate cleared: ${r.ok}/${r.n}. Arc ${Pa.arc(s).n} is open.` : `${r.ok}/${r.n}. The Gate holds.`, r.passed ? (r.xp ? `+${r.xp} XP` : "") : `Your misses are now flashcards in ${esc(st.label)} mistakes. The retake opens in 24 hours.`,
-      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button>${rcBtn()}</div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
+      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button>${rcBtn()}</div>`) : `${pbar(gq.ans.filter(x => x != null).length / gq.qs.length)}<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
     + gq.qs.map(qHtml).join("")
     + (r ? "" : `<div class="btns"><button class="btn go block" data-act="gqsubmit">Submit</button></div>`);
 }
@@ -1953,7 +1954,14 @@ function sortPick(know) {
 // v8: a Lexicon card. Front: the word or kanji. Back: reading, meaning, example (or on/kun and example words).
 // v12: a mined word carries the sentence it was found in, the word highlighted. A sentence card shows the sentence
 // with no furigana; once known (3 weeks+) it turns into a listening card: audio first, text on the back.
-const hilite = (sent, w) => w && sent.includes(w) ? esc(sent).split(esc(w)).join(`<mark>${esc(w)}</mark>`) : esc(sent);
+const hilite = (sent, w) => { // v13.2: conjugated verbs and adjectives match on their stem (食べる → 食べ)
+  const k = !w ? "" : sent.includes(w) ? w : w.length > 1 && /[ぁ-ん]$/.test(w) && sent.includes(w.slice(0, -1)) ? w.slice(0, -1) : "";
+  return k ? esc(sent).split(esc(k)).join(`<mark>${esc(k)}</mark>`) : esc(sent);
+};
+// v13.2: after answering, the part of speech and one example sentence: tap it for the reading, English below, Listen.
+const posTag = L => { const t = K.posLabel(L.pos); return t ? `<div class="fc-pos"><span class="tag">${esc(t)}</span></div>` : ""; };
+const exBlock = (L, id) => !L.ex ? "" : `<div class="fc-exb"><button class="fc-ex ja" data-act="exr">${hilite(L.ex, L.word)}</button>${L.exR ? `<div class="exr ja small muted" hidden>${esc(L.exR)}</div>` : ""}
+  ${L.exEn ? `<div class="small muted">${esc(L.exEn)}</div>` : ""}<div class="row" style="gap:8px;margin-top:6px"><button class="btn sm" data-act="sayex" data-id="${id}">${ic("sound")} Sentence</button></div></div>`;
 const listenCard = c => c.L.sent && (c.s || 0) >= 21;
 function minedFace(c, showBack, noSay) {
   const L = c.L, say = `<button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button>`;
@@ -1965,7 +1973,7 @@ function minedFace(c, showBack, noSay) {
         <div class="row" style="gap:8px;margin-top:10px">${say}<button class="btn sm" data-act="shadow" data-id="${c.id}">${ic("mic")} Shadow</button></div>`);
   }
   return `<div class="fc-front ja">${esc(L.word)}</div>${L.ex ? `<div class="fc-ex ja">${hilite(L.ex, L.word)}</div>` : ""}
-    ${showBack ? `<div class="fc-read ja">${esc((L.readings || []).join("、"))}</div><div class="fc-back">${esc(L.meaning || "")}</div>${L.exR ? `<div class="small ja muted">${esc(L.exR)}</div>` : ""}${L.exEn ? `<div class="small muted">${esc(L.exEn)}</div>` : ""}` : ""}
+    ${showBack ? `<div class="fc-read ja">${esc((L.readings || []).join("、"))}</div><div class="fc-back">${esc(L.meaning || "")}</div>${posTag(L)}${L.exR ? `<div class="small ja muted">${esc(L.exR)}</div>` : ""}${L.exEn ? `<div class="small muted">${esc(L.exEn)}</div>` : ""}` : ""}
     ${noSay ? "" : `<div class="row" style="gap:8px;margin-top:10px">${say}</div>`}`;
 }
 function lexFace(c, showBack, noSay) {
@@ -1973,17 +1981,22 @@ function lexFace(c, showBack, noSay) {
   const L = c.L, k = L.type === "kanji";
   const back = !showBack ? "" : k
     ? `<div class="fc-read ja">${L.on && L.on.length ? `音 ${esc(L.on.join("、"))}` : ""}${L.kun && L.kun.length ? `${L.on && L.on.length ? "<br>" : ""}訓 ${esc(L.kun.join("、"))}` : ""}</div><div class="fc-back">${esc(L.meaning)}</div>${L.examples ? `<div class="fc-ex ja">${esc(L.examples).replace(/\n/g, "<br>")}</div>` : ""}`
-    : `<div class="fc-read ja">${esc((L.readings || []).join("、"))}</div><div class="fc-back">${esc(L.meaning)}</div>${L.ex ? `<div class="fc-ex ja">${esc(L.ex)}</div>${L.exEn ? `<div class="small muted">${esc(L.exEn)}</div>` : ""}` : ""}`;
+    : `<div class="fc-read ja">${esc((L.readings || []).join("、"))}</div><div class="fc-back">${esc(L.meaning)}</div>${posTag(L)}${exBlock(L, c.id)}`;
   return `<div class="fc-front ja ${k ? "kanji" : ""}">${esc(Lx.face(L))}</div>${back}
     ${noSay ? "" : `<div class="row" style="gap:8px;margin-top:10px"><button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button></div>`}`;
 }
+// v13.2: a thin progress bar for the card session, no numbers. Answers this session over answers plus cards left;
+// an Again card stays in the queue, so the bar still moves forward.
+let rvS = { n: 0 };
+const pbar = p => `<div class="pbar" role="progressbar" aria-valuenow="${Math.round(p * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.max(0, Math.min(1, p)) * 100}%"></i></div>`;
 function vReview() {
   const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Dungeon" : "Flashcards"}</button>`;
   const g = St.focusGate();
   const q = K.queue(), done = K.reviewedToday(); // v6: open anytime, not only inside a block
   let c = rv && K.get(rv.id);
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), ask: K.mode(c) === "mcq" ? K.ask(c) : null, flip: false, pick: null } : null; }
-  const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div>${jpsOn() ? `<span class="row" style="gap:8px">${jpsTimer()}${jps.silent ? `<button class="btn sm" data-act="jpend">Back to class</button>` : ""}</span>` : `<span class="small muted">${done.n} today</span>`}</header>`;
+  if (!q.length) rvS = { n: 0 };
+  const head = `${back}<header class="top"><div><div class="hdr">Today's cards</div><h1>Flashcards</h1></div>${jpsOn() ? `<span class="row" style="gap:8px">${jpsTimer()}${jps.silent ? `<button class="btn sm" data-act="jpend">Back to class</button>` : ""}</span>` : ""}</header>${q.length ? pbar(rvS.n / (rvS.n + q.length)) : ""}`;
   if (!c && jpsOn()) return `${head}${sysBox("Cards cleared.", "Next in this session: today's grammar item, then fluency.", `<div class="btns"><button class="btn sm go" data-act="nav" data-id="jlpt">Next</button><button class="btn sm" data-act="jpend">End session</button></div>`)}`;
   if (!c) return `${head}${sysBox("Batch cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm go" data-act="learnmore">Continue · +10 cards</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
@@ -1992,7 +2005,8 @@ function vReview() {
   if (rv.mode === "mcq") {
     const answered = rv.pick != null, right = rv.ask.ans;
     return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, answered && c.lex, !answered && rv.ask.q === "reading")}</div>
-      <div class="rv-dock"><div class="opts">${rv.ask.opts.map((o, i) => `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
+      <div class="rv-dock ${answered ? "done" : ""}"><div class="opts">${rv.ask.opts.map((o, i) => { const n = answered && K.optNote(rv.ask, i);
+        return `<button class="opt ${answered ? (o === right ? "right" : i === rv.pick ? "wrong" : "dim") : ""}" data-act="rvpick" data-id="${i}" ${answered ? "disabled" : ""}>${esc(o)}${n ? `<small class="optn">${esc(n)}</small>` : ""}</button>`; }).join("")}</div>
       ${answered ? `<div class="btns"><button class="btn primary block" data-act="rvnext">Next</button></div>` : ""}</div></div>`;
   }
   if (!rv.flip) return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="rv-dock"><button class="btn primary block" data-act="rvflip">Show answer</button></div></div>`;
@@ -2073,6 +2087,7 @@ function jpSearch() {
 function vJlpt([sub, a]) {
   if (sub === "q") return vJlptQ(a);
   if (sub === "exam") return vExam(a);
+  if (sub === "read") return vRead(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
   const res = jps && jps.res ? sysBox(`Session over: ${jps.res.n} card${jps.res.n === 1 ? "" : "s"} · +${jps.res.xp} XP`, jps.res.loot ? `Loot drop: +${jps.res.loot} XP.` : "Short sessions add up. Come back at the next gap.", `<div class="btns"><button class="btn sm" data-act="jpclose">Close</button></div>`) : "";
   const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res + `<div class="panel jpq">${jpQuick()}</div>` + n2Panel();
@@ -2086,7 +2101,7 @@ function vJlpt([sub, a]) {
   const lastMock = exams.find(x => x.kind === "mock" && x.lvl === lvl), mockOpen = RANK_ORDER.indexOf(st.rank) >= RANK_ORDER.indexOf(J.MOCK_AT);
   const secBars = J.SECS.map(([k, l]) => { const s = st.by[k]; return s.n ? `<div class="row between small" style="margin-top:8px"><span>${l}</span><span class="muted">${s.right}/${s.n}</span></div>${bar(s.right / s.n, "var(--sys)")}` : ""; }).join("");
   const gateNote = g.open ? "" : `<p class="small muted">${ic("lock", "inl")} Practice opens in your next study block${g.next ? ": " + esc(dayLabel(g.next.date)) + " " + P.toHM(g.next.s) : ""}.</p>`;
-  return `${head}${reviewBtn()}${lexRow}${ladder}
+  return `${head}${reviewBtn()}${passRow()}${lexRow}${ladder}
   ${tip("jlpt", "Original questions in the real JLPT formats. Right answers rank you up; wrong ones become flashcards in the JLPT mistakes deck. Reach Rank " + J.MOCK_AT + " to open the Boss Raid, a mock exam that unlocks the next level.")}
   <div class="panel"><div class="row between"><div><span class="k">${lvl} rank</span><div class="rankbig">${st.rank}</div></div><div style="text-align:right"><div class="dm big2">${st.right}/${st.open}</div><div class="small muted">mastered</div></div></div>
     ${bar(st.frac, "var(--sys)")}${secBars}
@@ -2101,6 +2116,40 @@ function vJlpt([sub, a]) {
   ${tl.length ? `<h2>Titles</h2><div class="chips">${tl.map(t => `<span class="chip">${ic("star", "inl")} ${esc(t)}</span>`).join("")}</div>` : ""}
   ${exams.length ? fold("jlpt-exams", `<b class="grow">Exam history</b><span class="small muted">${exams.length}</span>`, exams.slice(0, 20).map(x => `<div class="item row between small"><span class="grow">${x.kind === "place" ? "Placement" : x.lvl + " Boss Raid"} · ${esc(dayLabel(x.date))}</span><span class="${x.pass ? "" : "muted"}">${Math.round(x.pct * 100)}% ${x.pass ? ic("check", "inl") : ""}</span></div>`).join("")) : ""}`;
 }
+// v13.2: the daily passage. "Today's passage" shows once Claude has written it and the day's reviews are done.
+let pr = { id: null, open: -1, en: false, rd: false };
+function passRow() {
+  const t = Ps.today(), n = Ps.all().length;
+  const row = t && !K.queue().length ? `<button class="btn ${t.done ? "" : "go"} block" data-act="go" data-id="jlpt/read/${t.id}">${px("scroll")} Today's passage${t.done ? " · read" : ""}</button>` : "";
+  return row + (n > (row ? 1 : 0) ? `<button class="quiet-row" data-act="go" data-id="jlpt/read"><span class="grow">Passages · ${n}</span><span class="chev">${ic("right")}</span></button>` : "");
+}
+function vRead(id) {
+  const p = id && Ps.byId(id);
+  if (!p) {
+    const L = Ps.all();
+    return `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} Japanese</button><header class="top"><div><div class="hdr">Japanese</div><h1>Passages</h1></div></header>
+      <div class="list">${L.map(x => `<button class="quiet-row" data-act="go" data-id="jlpt/read/${x.id}"><span class="grow"><b class="small">${esc(dayLabel(x.date))}</b>${x.title ? ` · <span class="ja">${esc(x.title)}</span>` : ""}<span class="tiny muted"> · ${(x.targets || []).length} words${x.done ? ` · ${(x.picks || []).filter((v, j) => v === (x.questions[j] || {}).answer).length}/${(x.questions || []).length}` : ""}</span></span><span class="chev">${ic("right")}</span></button>`).join("") || `<p class="empty">No passages yet. Claude writes one each evening from the words you studied.</p>`}</div>`;
+  }
+  if (pr.id !== p.id) pr = { id: p.id, open: -1, en: false, rd: false };
+  const T = p.targets || [], o = T[pr.open];
+  const text = Ps.runs(p).map(r => r.k < 0 ? esc(r.t).replace(/\n/g, "<br>") : `<button class="pw ${r.k === pr.open ? "on" : ""}" data-act="pword" data-id="${r.k}">${esc(r.t)}</button>`).join("");
+  const qs = (p.questions || []).map((q, i) => { const pk = (p.picks || [])[i], done = pk != null;
+    return `<div class="panel fc"><div class="k">Question ${i + 1}</div><div class="jq ja">${esc(q.q)}</div>
+      <div class="opts">${(q.options || []).map((x, j) => `<button class="opt ja ${done ? (j === q.answer ? "right" : j === pk ? "wrong" : "dim") : ""}" data-act="ppick" data-id="${i}:${j}" ${done ? "disabled" : ""}><span class="on">${j + 1}</span> ${esc(x)}</button>`).join("")}</div>
+      ${done && q.why ? `<div class="sys ex"><b>${pk === q.answer ? "Correct" : "Not quite"}</b> · ${esc(q.why)}</div>` : ""}</div>`; }).join("");
+  const answered = (p.picks || []).filter(x => x != null).length;
+  return `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} Japanese</button>
+    <header class="top"><div><div class="hdr">${esc(dayLabel(p.date))} · ${T.length} words</div><h1>${p.title ? `<span class="ja">${esc(p.title)}</span>` : "Today's passage"}</h1></div></header>
+    ${(p.questions || []).length ? pbar(answered / p.questions.length) : ""}
+    <div class="panel passage ja"><div class="ptext">${text}</div>
+      ${o ? `<div class="pword-note"><b class="ja">${esc(o.word)}</b> <span class="ja muted">${esc(o.reading || "")}</span> · ${esc(o.meaning || "")}</div>` : `<div class="tiny muted" style="margin-top:8px">Tap a highlighted word for its reading and meaning.</div>`}
+      <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn sm" data-act="psay" data-id="${p.id}">${ic("sound")} Listen</button><button class="btn sm" data-act="pshadow" data-id="${p.id}">${ic("mic")} Shadow</button>
+        ${p.reading ? `<button class="btn sm" data-act="prd">${pr.rd ? "Hide" : "Show"} reading</button>` : ""}${p.en ? `<button class="btn sm" data-act="pen">${pr.en ? "Hide" : "Show"} English</button>` : ""}</div>
+      ${pr.rd && p.reading ? `<div class="small ja muted" style="margin-top:8px">${esc(p.reading).replace(/\n/g, "<br>")}</div>` : ""}
+      ${pr.en && p.en ? `<div class="small muted" style="margin-top:8px">${esc(p.en).replace(/\n/g, "<br>")}</div>` : ""}</div>
+    ${qs}
+    ${p.done ? sysBox(`Passage read: ${(p.picks || []).filter((v, j) => v === p.questions[j].answer).length}/${p.questions.length}`, [p.xp ? `+${p.xp} XP` : "Reread it tomorrow; the words stick on the second pass.", (p.credited || []).length ? `${p.credited.length} word${p.credited.length === 1 ? "" : "s"} counted as reviewed.` : ""].filter(Boolean).join(" ")) : ""}`;
+}
 function vJlptQ(sec) {
   const lvl = J.level(), back = `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} JLPT ladder</button>`;
   const wait = jlptNeed([lvl]); if (wait) return back + wait;
@@ -2110,7 +2159,7 @@ function vJlptQ(sec) {
     jq = { lvl, sec: sec || null, id: it.id, pick: null, p: it.p || null, done: jq && jq.p === it.p ? jq.done : [], n: jq ? jq.n : 0, ok: jq ? jq.ok : 0 };
   }
   const it = J.bank(lvl).byId[jq.id], st = J.stats(lvl);
-  return `${back}<header class="top"><div><div class="hdr">Stage 3 · ${lvl} · Rank ${st.rank}${sec ? " · " + J.SECS.find(x => x[0] === sec)[1] : ""}</div><h1>JLPT practice</h1></div><span class="small muted">${jq.ok}/${jq.n} this round</span></header>
+  return `${back}<header class="top"><div><div class="hdr">Stage 3 · ${lvl} · Rank ${st.rank}${sec ? " · " + J.SECS.find(x => x[0] === sec)[1] : ""}</div><h1>JLPT practice</h1></div></header>${pbar(jq.n % 10 === 0 && jq.n && jq.pick != null ? 1 : (jq.n % 10) / 10)}
   ${qHtml(lvl, it, jq.pick, jq.pick != null, "jqpick")}
   ${jq.pick != null ? `<div class="btns"><button class="btn primary block" data-act="jqnext">Next</button></div>` : ""}`;
 }
@@ -2130,8 +2179,8 @@ function vExam(kind) {
       <div class="btns"><button class="btn primary" data-act="examquit">Done</button>${rcBtn()}</div>`;
   }
   const q = exam.qs[exam.i], it = J.bank(q.lvl).byId[q.id], answered = exam.ans.filter(x => x != null).length;
-  return `${back}<header class="top"><div><div class="hdr">${title} · ${exam.i + 1} of ${exam.qs.length}</div><h1>${J.SECS.find(x => x[0] === it.sec)[1]}</h1></div><span class="small muted">${answered} answered</span></header>
-    ${bar((exam.i + 1) / exam.qs.length, "var(--sys)")}
+  return `${back}<header class="top"><div><div class="hdr">${title}</div><h1>${J.SECS.find(x => x[0] === it.sec)[1]}</h1></div></header>
+    ${pbar(answered / exam.qs.length)}
     ${qHtml(q.lvl, it, exam.ans[exam.i], false, "exampick")}
     <div class="btns"><button class="btn" data-act="exammove" data-id="-1" ${exam.i ? "" : "disabled"}>Back</button>${exam.i < exam.qs.length - 1 ? `<button class="btn primary" data-act="exammove" data-id="1">Next</button>` : `<button class="btn go" data-act="examsubmit">Submit</button>`}</div>`;
 }
@@ -3415,14 +3464,21 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     { const c = K.get(id); if (c && !K.speak(K.jaText(c))) toast("No Japanese voice on this phone"); return; }
     case "rvpick": {
       const c = rv && K.get(rv.id); if (!c || rv.pick != null) return;
-      rv.pick = +id; announce(K.answerMcq(c, rv.ask.opts[+id] === rv.ask.ans)); save(); return render();
+      rv.pick = +id; rvS.n++; announce(K.answerMcq(c, rv.ask.opts[+id] === rv.ask.ans)); save(); return render();
     }
     case "rvnext": rv = null; return render();
-    case "learnmore": { const n = K.learnMore(); if (!n) return toast("No new cards left. Mine some words or add a deck"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
+    case "pword": { pr.open = pr.open === +id ? -1 : +id; const p = Ps.byId(pr.id); if (p && pr.open >= 0) { Ps.tap(p, +id); save(); } return render(); }
+    case "prd": pr.rd = !pr.rd; return render();
+    case "pen": pr.en = !pr.en; return render();
+    case "psay": case "pshadow": { const p = Ps.byId(id); if (!p) return; if (!K.speak(p.text, a === "pshadow" ? 0.75 : 0.9)) return toast("No Japanese voice on this phone"); if (a === "pshadow") toast("Repeat each sentence out loud, right after the voice"); return; }
+    case "ppick": { const p = Ps.byId(pr.id); if (!p) return; const [i, j] = id.split(":").map(Number); const r = Ps.answer(p, i, j); if (r) { announce(r.xp ? [{ xp: r.xp, label: "Daily passage" }] : []); if (r.credited) toast(`${r.credited} word${r.credited === 1 ? "" : "s"} counted as reviewed`); } save(); return render(); }
+    case "exr": { const r = el.closest(".fc-exb")?.querySelector(".exr"); if (r) r.hidden = !r.hidden; return; }
+    case "sayex": { const e = Lx.entry(id) || Mi.entry(id); if (e && e.ex && !K.speak(e.ex)) toast("No Japanese voice on this phone"); return; }
+    case "learnmore": { rvS = { n: 0 }; const n = K.learnMore(); if (!n) return toast("No new cards left. Mine some words or add a deck"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
     case "rvflip": if (rv) rv.flip = true; return render();
     case "rvgrade": {
       const c = rv && K.get(rv.id); if (!c) return;
-      announce(K.answerFlip(c, +id)); rv = null; save(); return render();
+      announce(K.answerFlip(c, +id)); rvS.n++; rv = null; save(); return render();
     }
 
     // trials
