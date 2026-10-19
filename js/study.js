@@ -117,7 +117,9 @@ export function assess() {
       } else if (!ex && !done) {
         const subj = subjectOf(o.b), top = subj ? current(subj) : null, half = (o.e - o.s) / 2;
         const mins = LENS.reduce((a, m) => Math.abs(m - half) < Math.abs(a - half) ? m : a, 30), task = "pentask-" + d + "-" + o.b.id;
-        put("tasks", { id: task, title: "Penalty quest: make up " + o.b.title + (top ? " · " + top.t : ""), mins, prio: 3, energy: "high", due: E.addDays(t, 1), done: false, created: now, pin: null, penalty: id });
+        const mk = put("tasks", { id: task, title: "Penalty quest: make up " + o.b.title + (top ? " · " + top.t : ""), mins, prio: 3, energy: "high", due: E.addDays(t, 1), done: false, created: now, pin: null, penalty: id });
+        // v11.5: a workout make-up waits for gym hours; if tomorrow has none free, it's due on the first day that does.
+        if (P.isWorkout(o.b)) { const at = P.plan().at.get(task); if (at && at.date > mk.due) put("tasks", { ...mk, due: at.date }); }
         fresh.push(put("penalties", { id, date: d, block: o.b.id, title: o.b.title, s: o.s, xp: s.penaltyXp ?? 30, task, topic: top ? top.t : null }));
       } else if (ex && !ex.del && done) {
         const k = live("tasks").find(x => x.id === ex.task);
