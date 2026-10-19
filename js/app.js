@@ -1881,7 +1881,7 @@ let lx = { type: "vocab", level: null, st: "all", q: "", n: 60, sel: null, open:
 const LX_ST = [["all", "All"], ["new", "New"], ["learning", "Learning"], ["known", "Known"], ["off", "Off"]];
 function lexImportHtml() {
   return `<div class="panel"><h3>Import your decks</h3><p class="small muted">Open <b>the-arin-japanese-decks.json</b> from the project files. It stays on this phone; only your progress syncs. Import it once on each phone you use.</p>
-    <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" accept="application/json,.json" data-ch="leximport" hidden></label></div></div>`;
+    <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" data-ch="leximport" hidden></label></div></div>`;
 }
 function vLex() {
   const back = `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} Japanese</button>`;
@@ -1891,7 +1891,7 @@ function vLex() {
   if (!Lx.ready()) return head + lexImportHtml();
   const m = Lx.recs(), lv = Lx.LEVELS[lx.type];
   const upd = Lx.version() < Lx.LATEST ? `<div class="panel"><h3>New deck version</h3><p class="small muted">Example sentences, parts of speech and smarter choices. Open the new <b>the-arin-japanese-decks.json</b>. Your progress stays.</p>
-    <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" accept="application/json,.json" data-ch="leximport" hidden></label></div></div>` : "";
+    <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" data-ch="leximport" hidden></label></div></div>` : "";
   if (lx.level && !lv.includes(lx.level)) lx.level = null;
   const chip = l => { const c = Lx.counts(lx.type, l, m), on = lx.level === l;
     return `<button class="lvchip ${on ? "on" : ""}" data-act="lexlvl" data-id="${l || ""}" aria-pressed="${on}"><b>${l || "All"}</b><span class="mono">${c.all.toLocaleString("en-US")}</span>
@@ -1914,7 +1914,7 @@ function vLex() {
   </div>
   <div class="lexlist">${shown.map(row).join("") || `<p class="empty">Nothing here.</p>`}</div>
   ${L.length > shown.length ? `<div class="btns"><button class="btn block" data-act="lexmore">Show more · ${L.length - shown.length} left</button></div>` : ""}
-  ${upd ? "" : `<div class="btns"><label class="btn sm">Re-import decks<input type="file" accept="application/json,.json" data-ch="leximport" hidden></label></div>`}`;
+  ${upd ? "" : `<div class="btns"><label class="btn sm">Re-import decks<input type="file" data-ch="leximport" hidden></label></div>`}`;
 }
 // v12: the Mined list, newest first. Source tag, status, and an N-level chip when the word is also in the deck.
 function minedList() {
