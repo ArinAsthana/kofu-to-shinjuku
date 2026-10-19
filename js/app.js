@@ -23,6 +23,7 @@ import * as N2 from "./n2.js";
 import * as Dy from "./day.js";
 import * as Dl from "./deadlines.js";
 import * as Dr from "./drill.js";
+import * as Rc from "./report.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -92,15 +93,15 @@ const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study:
 // v6: flashcards open at any stage and outside blocks.
 const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 0, people: 4 }; // v9.4: Japanese is open from day one
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { lex: "scroll", drill: "sword", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
-const TAB_OF = { drill: "home", lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
+const HEAD_PX = { lex: "scroll", drill: "sword", report: "star", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { drill: "home", report: "home", lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, drill: vDrill, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -410,6 +411,7 @@ function vDrill() {
       <div class="dr-big mono">${rec.score}</div>
       <div class="small mono">best ${b ?? rec.score}${avg7 != null ? ` · ${sgn(Math.round(rec.score - avg7))} vs 7-day avg` : ""}${xp ? ` · +${xp} XP` : ""}${pb ? " · new best" : ""}</div>
       ${drillResult.logged ? `<div class="small good-t" style="margin-top:6px">Logged to the Path: best ${Dr.todayBest("classic")}.</div>` : k && rec.mode === "classic" ? `<div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">Run 2</button><button class="btn" data-act="drlog">Log ${Dr.todayBest("classic")} to the Path</button></div>` : ""}
+      <div class="btns"><button class="btn sm" data-act="go" data-id="report">Full history</button></div>
       ${slow.length ? `<details class="key" style="margin-top:8px"><summary>Slow or skipped · ${slow.length}</summary>${slow.map(x => `<div class="row between small mono"><span>${esc(x.q)} = ${esc(Dr.answerText(x.a))}</span><span class="muted">${x.skipped ? "skipped" : x.s + " s"}</span></div>`).join("")}</details>` : ""}</div>`;
   }
   const rows = Dr.MODES.map(m => { const b = Dr.best(m.id), tb = Dr.todayBest(m.id), a = Dr.avg7(m.id);
@@ -417,6 +419,66 @@ function vDrill() {
       <div class="tiny mono" style="margin-top:4px">${b != null ? `best ${b}${a != null ? ` · 7-day ${Math.round(a)}` : ""}${tb != null ? ` · today ${tb}` : ""}` : "no runs yet"}</div></div>
       <button class="btn sm go" data-act="drillgo" data-id="${m.id}">${ic("play", "inl")} 2 min</button></div>`; }).join("");
   return `${head}${end}${rows}<p class="tiny muted">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p>`;
+}
+/* ================= REPORT CARD (v10.1) ================= */
+let rcPeriod = "all", rcSub = null, rcForm = false, rcMode = "classic";
+const pc = p => Math.round(p * 100) + "%", pts = d => sgn(Math.round(d * 100)) + " pts";
+const rcBtn = () => `<button class="btn sm" data-act="go" data-id="report">See report card</button>`;
+function rcLine() { const s = Rc.summary(Rc.tests()); return s.gpa != null ? ` · ${s.gpa.toFixed(1)} ${s.letter}` : ""; }
+const RC_SECS = [["Gate Tests", x => x.src === "gate" && x.subject !== "Japanese"], ["Classes", x => x.src === "quiz" || x.src === "boss"], ["Japanese", x => x.subject === "Japanese"], ["Real exams", x => x.src === "exam" && x.subject !== "Japanese"]];
+function rcRow(x) {
+  const a = x.last, L = Rc.letter(x.best.pct);
+  const per = x.src === "place" ? Object.entries(a.per || {}).map(([l, [o, n]]) => `${l} ${o}/${n}`).join(" · ") : "";
+  const bits = [x.pass != null ? `pass ${pc(x.pass)} · ${pts(x.margin)}` : "", `${x.tries.length} attempt${x.tries.length === 1 ? "" : "s"}`, x.change != null ? `${pts(x.change)} vs last` : "", x.tries.length > 1 && x.best !== a ? `best ${pc(x.best.pct)}` : ""].filter(Boolean);
+  return `<div class="item rc-row"><div class="row between"><b class="grow">${esc(x.name)}</b><span class="mono">${a.score}/${a.of} · ${pc(a.pct)}</span>${x.graded ? `<span class="rc-l ${L[1] === "F" ? "bad" : ""}">${L[1]}</span>` : ""}</div>
+    <div class="tiny muted mono">${esc(dayLabel(a.date))}${x.passed != null ? ` · ${x.passed ? "passed" : "not passed"}` : ""} · ${bits.join(" · ")}</div>
+    ${per ? `<div class="tiny mono">${esc(per)}</div>` : ""}${a.notes ? `<div class="tiny muted">${esc(a.notes)}</div>` : ""}
+    ${x.src === "exam" ? `<div class="btns" style="margin-top:4px"><button class="btn sm danger" data-act="rcdrop" data-id="${a.id}">Delete</button></div>` : ""}</div>`;
+}
+function rcDrill() {
+  const st = Rc.drill(rcMode, rcPeriod), man = rcMode === "classic" ? Rc.manualZetamac() : [];
+  const chips = `<div class="seg">${Dr.MODES.map(m => `<button data-act="rcmode" data-id="${m.id}" aria-pressed="${m.id === rcMode}">${esc(m.name)}</button>`).join("")}</div>`;
+  if (!st && !man.length) return `<h2>Mental math</h2>${chips}<div class="panel"><p class="small muted">No ${esc(Dr.mode(rcMode).name)} runs yet.</p><div class="btns"><button class="btn sm go" data-act="drillgo" data-id="${rcMode}">Start a Drill</button></div></div>`;
+  const s = Rc.drillSeries(rcMode, 30), hi = Math.max(10, ...s.best.filter(v => v != null)), max = Math.ceil(hi / 10) * 10;
+  const line = s.best.some(v => v != null) ? Ch.lines([{ d: s.avg, c: "dim", w: 1.5, dots: false }, { d: s.best, c: "acc", w: 2.5, r: 3 }],
+    { min: 0, max, ticks: [0, max / 2, max], label: "Drill daily best and 7-day average", labels: [[0, E.fmtDate(s.dates[0]).slice(4)], [29, "Today"]] }) : "";
+  const r = (l, v) => `<div class="row between small"><span class="muted">${l}</span><span class="mono">${v}</span></div>`;
+  return `<h2>Mental math</h2>${chips}<div class="panel">
+    ${st ? `${r("Runs", st.n)}${r("Best", st.best)}${r("Average", st.avg.toFixed(1) + " ± " + st.sd.toFixed(1))}${st.avg7 != null ? r("7-day average", st.avg7.toFixed(1)) : ""}${st.avg30 != null ? r("30-day average", st.avg30.toFixed(1)) : ""}${r("Problems a minute", st.ppm.toFixed(1))}${st.acc != null ? r("Accuracy", pc(st.acc)) : ""}` : ""}
+    ${line ? `<div style="margin-top:8px">${line}</div><div class="tiny muted mono">red: daily best · grey: 7-day average · 30 days</div>` : ""}
+    ${man.length ? `<div class="small" style="margin-top:8px">Zetamac (manual) · ${man.length} score${man.length === 1 ? "" : "s"} · best ${Math.max(...man.map(z => z.score))} · last ${man[man.length - 1].score}</div>` : ""}</div>`;
+}
+function rcExamForm() {
+  if (!rcForm) return `<div class="btns"><button class="btn sm" data-act="rcform">+ Exam result</button></div>`;
+  return `<div class="panel"><h3>Exam result</h3><div class="grid" id="rcForm">
+    <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Algebra midterm"></label>
+    <label class="f">Subject<input data-f="subject" list="rcSubs" placeholder="e.g. Math"></label><datalist id="rcSubs">${Rc.subjectNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist>
+    <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
+    <label class="f">Score<input type="number" inputmode="decimal" data-f="score"></label>
+    <label class="f">Out of<input type="number" inputmode="decimal" data-f="of" value="100"></label>
+    <label class="f">Pass mark % (optional)<input type="number" inputmode="decimal" data-f="pass"></label>
+    <label class="f" style="flex-basis:100%">Notes<input data-f="notes"></label></div>
+    <div class="btns"><button class="btn go" data-act="rcsave">Save</button><button class="btn" data-act="rcform">Cancel</button></div></div>`;
+}
+function vReport() {
+  const back = `<button class="back" data-act="nav" data-id="profile">${ic("left")} Profile</button>`;
+  const all = Rc.tests(rcPeriod), subs = [...new Set(all.map(x => x.subject))].sort();
+  if (rcSub && !subs.includes(rcSub)) rcSub = null;
+  const ts = rcSub ? all.filter(x => x.subject === rcSub) : all, sm = Rc.summary(ts, rcSub), sj = Rc.subjects(all);
+  const head = `${back}<header class="top"><div><div class="hdr">Profile · ${rcPeriod === "sem" ? esc(Rc.semester().name) : "exam history"}</div><h1>Report Card</h1></div></header>`;
+  const filt = `<div class="seg">${Rc.PERIODS.map(([k, l]) => `<button data-act="rcper" data-id="${k}" aria-pressed="${k === rcPeriod}">${l}</button>`).join("")}</div>
+    ${subs.length > 1 ? `<div class="chips">${subs.map(n => `<button class="chip" data-act="rcsub" data-id="${esc(n)}" aria-pressed="${n === rcSub}">${esc(n)}</button>`).join("")}</div>` : ""}`;
+  const sumHtml = sm.n ? win("Summary", `<div class="row between"><div><div class="k">GPA</div><div class="dr-big mono rc-gpa">${sm.gpa.toFixed(1)} <span>${sm.letter}</span></div></div>
+      <div style="text-align:right">${sm.passOf ? `<div class="k">Pass rate</div><div class="mono">${sm.passN}/${sm.passOf} · ${pc(sm.passN / sm.passOf)}</div><div class="tiny muted mono">first try ${sm.firstN}/${sm.passOf} · ${pc(sm.firstN / sm.passOf)}</div>` : ""}</div></div>
+      ${sm.strong ? `<div class="small" style="margin-top:8px">Strongest <b>${esc(sm.strong.name)}</b> ${pc(sm.strong.avg)} · weakest <b>${esc(sm.weak.name)}</b> ${pc(sm.weak.avg)}</div>` : ""}
+      ${sm.month != null ? `<div class="small muted">This month ${pc(sm.month)}${sm.trend != null ? ` · ${pts(sm.trend)} vs last month` : ""}</div>` : ""}
+      <div class="tiny muted" style="margin-top:6px">A 90+, B 80, C 70, D 60, F under 60. Each test's best attempt counts.</div>`, "", "star") : "";
+  const bars = sj.length ? `<h2>By subject</h2><div class="panel rc-bars">${sj.map(s => `<div class="rc-b"><div class="row between small"><span>${esc(s.name)}</span><span class="mono">${pc(s.avg)}</span></div>
+      <div class="rc-track"><i style="width:${Math.min(100, s.avg * 100)}%"></i>${s.pass != null ? `<b style="left:${s.pass * 100}%" title="pass mark"></b>` : ""}</div></div>`).join("")}<div class="tiny muted mono">bar: average % · tick: pass mark</div></div>` : "";
+  const secs = RC_SECS.map(([name, f]) => { const L = ts.filter(f); return L.length ? fold("rc-" + name, `<b class="grow">${name}</b><span class="small muted">${L.length}</span>`, L.map(rcRow).join(""), true) : ""; }).join("");
+  const other = ts.filter(x => !RC_SECS.some(([, f]) => f(x)));
+  const empty = !all.length ? `<div class="panel"><p class="small muted">No tests in ${rcPeriod === "all" ? "the app yet" : "this period"}. Gate Tests, class quizzes, JLPT exams and real exams you add land here.</p></div>` : "";
+  return `${head}${filt}${sumHtml}${empty}${bars}${secs}${other.length ? fold("rc-other", `<b class="grow">Other</b>`, other.map(rcRow).join(""), true) : ""}${rcExamForm()}${rcSub ? "" : rcDrill()}`;
 }
 function vPath() {
   const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
@@ -534,7 +596,7 @@ function vGate(s) {
       <div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="gqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
       ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(q.opts[q.a])}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
   return head + (r ? sysBox(r.passed ? `Gate cleared: ${r.ok}/${r.n}. Arc ${Pa.arc(s).n} is open.` : `${r.ok}/${r.n}. The Gate holds.`, r.passed ? (r.xp ? `+${r.xp} XP` : "") : `Your misses are now flashcards in ${esc(st.label)} mistakes. The retake opens in 24 hours.`,
-      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button></div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
+      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button>${rcBtn()}</div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
     + gq.qs.map(qHtml).join("")
     + (r ? "" : `<div class="btns"><button class="btn go block" data-act="gqsubmit">Submit</button></div>`);
 }
@@ -915,6 +977,7 @@ function vProfile() {
   <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
   ${profilePath()}
+  <button class="quiet-row" data-act="go" data-id="report"><span class="grow">Report Card${rcLine()}</span><span class="chev">${ic("right")}</span></button>
   <button class="quiet-row" data-act="go" data-id="drill"><span class="grow">Mental math Drill${Dr.best("classic") != null ? ` · best ${Dr.best("classic")}` : ""}</span><span class="chev">${ic("right")}</span></button>
   ${sleepPanel()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
@@ -1397,7 +1460,7 @@ function vDiscQuiz(id, ch) {
         : `<div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="dqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>`}
       ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(Cl.answerText(q))}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
   return head + (r ? sysBox(r.pass ? (boss ? `Boss cleared. Title earned: <b>${esc(d.title)}</b>.` : "Chapter cleared. The next one is open.") : `${r.ok}/${r.n}. Not yet.`, r.pass ? "" : "Your misses are now flashcards. Review them and retake when ready.",
-      `<div class="btns"><button class="btn sm primary" data-act="go" data-id="classes/d/${id}">Back to ${esc(d.name)}</button>${r.pass ? "" : `<button class="btn sm" data-act="dqretry">Retake</button>`}</div>`) : "")
+      `<div class="btns"><button class="btn sm primary" data-act="go" data-id="classes/d/${id}">Back to ${esc(d.name)}</button>${r.pass ? "" : `<button class="btn sm" data-act="dqretry">Retake</button>`}${rcBtn()}</div>`) : "")
     + dq.qs.map(qHtml).join("")
     + (r ? "" : `<div class="btns"><button class="btn go block" data-act="dqsubmit">Submit</button></div>`);
 }
@@ -1717,7 +1780,7 @@ function vExam(kind) {
       ${sysBox(esc(verdict), gains.length ? esc(gains.map(x => "+" + x.xp + " XP · " + x.label).join(", ")) : "")}
       <div class="panel">${rows}${kind === "place" ? Object.entries(g.per).map(([l, [o, n]]) => `<div class="row between small" style="margin-top:8px"><span>${l}</span><span>${o}/${n}</span></div>`).join("") : ""}</div>
       ${miss.length ? fold("exam-miss", `<b class="grow">Review mistakes</b><span class="small muted">${miss.length}</span>`, miss.map(x => `<div class="item small"><div class="ja">${stem(x.it.q)}</div><div><b class="ja">${stem(x.it.opts[x.it.a])}</b>${exam.ans[x.i] != null ? ` <span class="muted">· you chose ${stem(x.it.opts[exam.ans[x.i]])}</span>` : ""}</div><div class="muted">${esc(x.it.ex || "")}</div></div>`).join(""), true) : ""}
-      <div class="btns"><button class="btn primary" data-act="examquit">Done</button></div>`;
+      <div class="btns"><button class="btn primary" data-act="examquit">Done</button>${rcBtn()}</div>`;
   }
   const q = exam.qs[exam.i], it = J.bank(q.lvl).byId[q.id], answered = exam.ans.filter(x => x != null).length;
   return `${back}<header class="top"><div><div class="hdr">${title} · ${exam.i + 1} of ${exam.qs.length}</div><h1>${J.SECS.find(x => x[0] === it.sec)[1]}</h1></div><span class="small muted">${answered} answered</span></header>
@@ -2811,6 +2874,18 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "drk": { const ok = Dr.key(id); drillPaint(ok); return; }
     case "drskip": Dr.skip(); drillPaint(true); return;
     case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
+    case "rcper": rcPeriod = id; return render();
+    case "rcsub": rcSub = rcSub === id ? null : id; return render();
+    case "rcmode": rcMode = id; return render();
+    case "rcform": rcForm = !rcForm; render(); if (rcForm) $("#rcForm input")?.focus(); return;
+    case "rcsave": {
+      const f = readForm("#rcForm"), sc = Number(f.score), of = Number(f.of);
+      if (!f.name) return toast("Add a name");
+      if (f.score === "" || !isFinite(sc) || !(of > 0)) return toast("Add the score and what it's out of");
+      Rc.addExam({ name: f.name, subject: f.subject || "Other", date: f.date || E.today(), score: sc, of, passPct: f.pass === "" ? null : Number(f.pass), notes: f.notes });
+      rcForm = false; save(); toast(`Saved · ${Math.round(sc / of * 100)}%`); return render();
+    }
+    case "rcdrop": if (!confirm("Delete this exam result?")) return; Rc.dropExam(id); save(); return render();
     case "drlog": { const k = mentalTask(); if (!k) return; const g = Pa.finish(k, "done", Dr.todayBest("classic")); save(); drillResult = null; announce([g]); return render(); }
     case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
     case "dlform": dlMove = null; sheet = "deadline"; render(); $("#dlForm input")?.focus(); return;

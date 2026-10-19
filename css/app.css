@@ -741,3 +741,9 @@ html.navy body::before{filter:hue-rotate(225deg) saturate(.7) brightness(.55)}
 .dr-k .ic{width:22px;height:22px;fill:currentColor}
 .dr-end{text-align:center}.dr-big{font:800 64px/1 var(--dot);margin:8px 0}
 body[data-tab="drill"] #fab{display:none}
+/* v10.1 Report Card */
+.rc-gpa{font-size:44px;text-align:left;margin:4px 0 0}.rc-gpa span{font-size:24px;color:var(--acc)}
+.rc-row .row{gap:10px;align-items:baseline}.rc-row .tiny{margin-top:3px}
+.rc-l{font:800 15px var(--dot);min-width:22px;text-align:center;border:1px solid var(--rule);padding:1px 4px}.rc-l.bad{color:var(--acc);border-color:var(--acc)}
+.rc-b{margin-bottom:10px}.rc-track{position:relative;height:10px;background:var(--rule);margin-top:4px}
+.rc-track i{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}.rc-track b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg);transform:translateX(-1px)}
