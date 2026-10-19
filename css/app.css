@@ -748,7 +748,7 @@ body[data-tab="drill"] #fab{display:none}
 .rc-b{margin-bottom:10px}.rc-track{position:relative;height:10px;background:var(--rule);margin-top:4px}
 .rc-track i{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}.rc-track b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg);transform:translateX(-1px)}
 /* v11: two tabs, search, quest list */
-nav .in{grid-template-columns:repeat(2,1fr)}
+nav .in{grid-template-columns:repeat(3,1fr)}
 nav button span{position:relative}
 .nbadge{position:absolute;top:-9px;right:-16px;min-width:17px;height:17px;padding:0 4px;background:#FF3B2F;color:#fff;font:700 11px/17px var(--mono);text-align:center}
 .srch{position:relative;margin:4px 0 14px;z-index:5}
@@ -780,3 +780,16 @@ nav button span{position:relative}
 @media (min-width:900px){main,nav .in,.sheet,.dbar{max-width:640px}main{padding-top:40px}}
 .srch-cmd{margin:4px 8px 6px;padding:10px 12px;border:1px solid #FF3B2F;background:rgba(255,59,47,.12)}
 .srch-cmd .btns{margin-top:8px}
+/* v11.2: Home is the title and the search bar; the bell sits by the name. Path streams get their own page. */
+.home-min .srch{margin-top:18vh}
+.hiname{display:flex;align-items:center;gap:12px}
+.hiname .bell{width:36px;height:36px}
+.nbadge.qn{top:-9px;right:-18px}
+.s-link{display:inline-flex;align-items:center;gap:4px;padding:0;background:none;border:0;color:inherit;font:inherit;text-align:left}
+.s-week{gap:6px;margin-top:4px}
+.s-day{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
+.s-day i{width:100%;height:10px;background:rgba(255,255,255,.12)}
+.s-day.on i{background:var(--lime);opacity:1}
+.s-day small{font:10px var(--mono);opacity:.6}
+.item.s-hist{align-items:flex-start;gap:10px}
+.item.s-hist .tiny{flex:none;max-width:45%;text-align:right}

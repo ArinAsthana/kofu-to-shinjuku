@@ -4,12 +4,18 @@
 
 // [name, hint, route, aliases, pixel icon]. Route "a:<act>:<id>" runs an app action instead of opening a screen.
 const F = [
-  ["Quests", "today's list", "home", "home today system list", "sword"],
+  ["Home", "search", "home", "start main", "eye"],
+  ["Quests", "today's list", "quests", "today system list todo", "sword"],
+  ["Case", "Path stream", "path/s/case", "case interview consulting frameworks", "flag"],
+  ["Aptitude", "Path stream", "path/s/aptitude", "aptitude spi tests logic", "flag"],
+  ["Accounting", "Path stream", "path/s/accounting", "accounting boki finance", "flag"],
+  ["SAP/Murex", "Path stream", "path/s/sapmurex", "sap murex calypso fico", "flag"],
+  ["Mental Math", "Path stream", "path/s/mental", "mental math zetamac arithmetic", "flag"],
   ["Notifications", "alerts", "alerts", "alerts bell inbox", "bell"],
   ["Profile", "level, titles, sleep", "profile", "level titles stats me sleep act escape kofu xp", "star"],
   ["Report Card", "grades and exam history", "report", "grades exam exams gpa results scores tests history", "star"],
   ["Drill", "mental math", "drill", "zetamac math mental arithmetic numbers", "sword"],
-  ["The Path", "job readiness streams", "path", "path finance accounting sap murex case aptitude readiness streams gate floor arc", "flag"],
+  ["The Path", "job readiness streams", "path", "path finance readiness streams gate floor arc", "flag"],
   ["Applications", "jobs and companies", "path/apps", "apps jobs apply companies es entry sheet", "flag"],
   ["Resources", "books and links", "path/res", "books links materials", "scroll"],
   ["Japanese", "JLPT ladder and N2 plan", "jlpt", "nihongo 日本語 にほんご jlpt n2 n3 grammar ladder raid", "flag"],
