@@ -9,7 +9,7 @@ import { S, live, put, remove } from "./store.js";
 import * as E from "./engine.js";
 import * as Pa from "./path.js";
 import { segments } from "./planner.js";
-import { HABITS } from "./data.js";
+import { HABIT_DEFS } from "./data.js";
 
 export const START = Pa.START, ID = "n2";
 export const XP_ITEM = 20, XP_FLUENCY = 5;
@@ -56,7 +56,7 @@ export function finish(result = "done", t = E.today()) {
   const f1 = floor();
   // It ticks the daily Japanese quest, like logging a workout ticks the gym one.
   let habit = null;
-  if (!E.habitDone("jp", t)) { const h = put("habitLog", { date: t, habit: "jp", auto: true }); habit = E.gainXP("habit", h.id, HABITS.find(x => x.id === "jp").name); }
+  if (!E.habitDone("jp", t)) { const h = put("habitLog", { date: t, habit: "jp", auto: true }); habit = E.gainXP("habit", h.id, HABIT_DEFS.find(x => x.id === "jp").name); }
   return { xp, habit, label: ahead ? "Ahead" : result === "partly" ? "Partly" : "Grammar done", floor: f1 && f0 && f1.n !== f0.n ? f1 : null };
 }
 // Undo the latest item only.

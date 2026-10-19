@@ -5,7 +5,6 @@
 
 import { S, live, put } from "./store.js";
 import * as E from "./engine.js";
-import * as St from "./study.js";
 import * as K from "./cards.js";
 
 export const LEVELS = ["N5", "N4", "N3", "N2"];
@@ -44,7 +43,7 @@ export const unlocked = () => cfg().unlocked || ["N5"];
 export const level = () => cfg().level || unlocked()[unlocked().length - 1];
 const recs = () => Object.fromEntries(live("jlptItems").map(r => [r.item, r]));
 // A Genki-tagged question is open once that lesson's topic in the study list is at 100%.
-export const genkiOpen = n => !n || St.progress("jp", "genki" + n) >= 100;
+export const genkiOpen = () => true; // v13.1: Genki is retired, so no item waits on a Genki lesson
 export const isOpen = it => genkiOpen(it.genki);
 
 export function stats(lvl) {

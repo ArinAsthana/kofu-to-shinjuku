@@ -11,7 +11,8 @@
 const TZ = "Asia/Tokyo";
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // Mirrors js/data.js. Keep in step if habits change.
-const HABITS = { anki: "Japanese: reviews + today's new cards", jp: "Japanese: today's N2 item", fin: "Finance block", math: "Mental math", news: "News and markets", case: "Case or interview practice", gym: "Workout" };
+// v13.1: jp, fin, math and case were retired as duplicates (the Finance block, Path and Drill cover them).
+const HABITS = { anki: "Japanese: reviews + 10 new cards", news: "News and markets", gym: "Workout" };
 const XP = { habit: 10, task: 10 };
 const MEALS = ["breakfast", "lunch", "dinner", "snack"];
 // Mirrors js/deadlines.js PREP and sessions(). Keep in step.

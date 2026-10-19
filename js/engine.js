@@ -301,9 +301,18 @@ export function storeQueue() {
 export const suggestXp = yen => Math.max(10, Math.round((yen || 0) / (S.settings.fun.yenPerXp || 20) / 10) * 10);
 
 /* ---------- skills ---------- */
+// v13.1: a src can also be "block:fin" (a reported Finance block), "drill" (a Drill run) or "path:<stream>" (a finished
+// Path item). Each counts once per key, and a day's block or Drill shares its key with the retired habit it replaced,
+// so old ticks keep counting and nothing is counted twice.
 export function skillValue(sk) {
   if (sk.src === "run") return Math.max(0, ...live("runs").map(r => r.km));
-  return live("habitLog").filter(h => sk.src.includes(h.habit)).length;
+  const keys = new Set(live("habitLog").filter(h => sk.src.includes(h.habit)).map(h => h.habit + "|" + h.date));
+  if (sk.src.includes("block:fin")) live("blockLog").filter(r => r.subj === "fin" && ((r.gain || 0) > 0 || (r.poms || 0) > 0 || r.done)).forEach(r => keys.add("fin|" + r.date));
+  for (const r of live("path")) {
+    if (r.kind === "drill" && sk.src.includes("drill")) keys.add("math|" + r.date);
+    else if (!r.kind && r.stream && sk.src.includes("path:" + r.stream)) keys.add(r.stream === "mental" ? "math|" + r.date : "p|" + r.id);
+  }
+  return keys.size;
 }
 export function skillInfo(sk) {
   const v = skillValue(sk), tier = sk.at.filter(t => v >= t).length;
