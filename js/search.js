@@ -18,6 +18,7 @@ const F = [
   ["Drill", "mental math", "drill", "zetamac math mental arithmetic numbers", "sword"],
   ["The Path", "job readiness streams", "path", "path finance readiness streams gate floor arc", "flag"],
   ["Applications", "jobs and companies", "path/apps", "apps jobs apply companies es entry sheet", "flag"],
+  ["Resumes", "a CV per company", "path/cv", "resume resumes cv cvs curriculum vitae transcript", "scroll"],
   ["Resources", "books and links", "path/res", "books links materials", "scroll"],
   ["Japanese", "JLPT ladder and N2 plan", "jlpt", "nihongo 日本語 にほんご jlpt n2 n3 grammar ladder raid", "flag"],
   ["Lexicon", "words and kanji", "lex", "vocab vocabulary kanji words dictionary sort", "scroll"],

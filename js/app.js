@@ -26,6 +26,8 @@ import * as Dr from "./drill.js";
 import * as Rc from "./report.js";
 import * as Sr from "./search.js";
 import * as Mi from "./mined.js";
+import * as Rs from "./resume.js";
+import { cvPdf } from "./pdf.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -105,7 +107,7 @@ function render() {
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "s" ? vStream(r[1]) : r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, quests: vQuests, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "s" ? vStream(r[1]) : r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "cv" ? vCv(r[1], r[2]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, quests: vQuests, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   const si = $("#srch"), keepS = si && document.activeElement === si ? { v: si.value, p: si.selectionStart } : null; // v11: typing survives a re-render
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   if (keepS && $("#srch")) { const n = $("#srch"); n.value = keepS.v; n.focus(); try { n.setSelectionRange(keepS.p, keepS.p); } catch (e) {} srUpdate(); }
@@ -737,18 +739,118 @@ function vApps(id) {
       <label class="f">Status<select data-f="status">${opt(Ap.STATUSES, a.status)}</select></label>
       ${inp("deadline", "Deadline", "date")}${inp("contact", "Contact", "text", "Name, email")}
       ${inp("next", "Next step", "text", "Submit ES")}${inp("nextDate", "Next step date", "date")}
-      <div class="btns"><button class="btn go" data-act="appsave" data-id="${id}">Save</button><button class="btn" data-act="go" data-id="path/apps">Cancel</button>${id !== "new" ? `<button class="btn danger" data-act="appdel" data-id="${id}">Delete</button>` : ""}</div></div>`;
+      <div class="btns"><button class="btn go" data-act="appsave" data-id="${id}">Save</button><button class="btn" data-act="go" data-id="path/apps">Cancel</button>${id !== "new" ? `<button class="btn" data-act="cvfor" data-id="${id}">${Rs.forApp(id) ? "CV" : "Make a CV"}</button><button class="btn danger" data-act="appdel" data-id="${id}">Delete</button>` : ""}</div></div>`;
   }
   const L = Ap.all(), open = L.filter(a => !Ap.closed(a)), done = L.filter(Ap.closed);
   const row = a => { const w = Ap.when(a), d = w && E.daysBetween(E.today(), w), nx = Ap.STATUSES[Ap.STATUSES.indexOf(a.status) + 1];
     return `<div class="panel app-r"><div class="row between"><b>${esc(a.firm)}</b><span class="tag ${a.status === "Offer" ? "t-ahead" : a.status === "Rejected" ? "t-pen" : ""}">${esc(a.status)}</span></div>
       <div class="small muted">${[a.role, a.track].filter(Boolean).map(esc).join(" · ")}</div>
       ${w ? `<div class="small ${d <= 2 ? "bad-t" : ""}" style="margin-top:4px">${esc(a.nextDate ? a.next || "Next step" : "Deadline")} · ${esc(E.fmtDate(w))} · ${inDays(d)}</div>` : ""}
-      <div class="btns">${Ap.closed(a) ? "" : `<button class="btn sm go" data-act="appnext" data-id="${a.id}">${esc(nx === "Rejected" ? "Offer" : nx)}</button><button class="btn sm" data-act="apprej" data-id="${a.id}">Rejected</button>`}<button class="btn sm" data-act="go" data-id="path/apps/${a.id}">Edit</button></div></div>`; };
+      <div class="btns">${Ap.closed(a) ? "" : `<button class="btn sm go" data-act="appnext" data-id="${a.id}">${esc(nx === "Rejected" ? "Offer" : nx)}</button><button class="btn sm" data-act="apprej" data-id="${a.id}">Rejected</button>`}<button class="btn sm" data-act="go" data-id="path/apps/${a.id}">Edit</button><button class="btn sm" data-act="cvfor" data-id="${a.id}">CV</button></div></div>`; };
   return `${back}<header class="top"><div><div class="hdr">Job hunt</div><h1>Applications</h1></div></header>
-  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/apps/new">${ic("plus")} New application</button></div>
+  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/apps/new">${ic("plus")} New application</button><button class="btn" data-act="go" data-id="path/cv">Resumes</button></div>
   ${open.length ? open.map(row).join("") : `<p class="empty">None yet. Add each firm as you find it; dates within 7 days become Raids on Home.</p>`}
   ${done.length ? fold("apps-closed", `<b class="grow">Closed</b><span class="small muted">${done.length}</span>`, done.map(row).join("")) : ""}`;
+}
+/* ---------- v13: Resumes ---------- */
+let cvEdit = null, cvDraft = null, cvGrey = false; // CV being edited and its unsaved copy; print grey lines as "in progress"
+const cvGo = g => !g ? "" : g.startsWith("classes") && !Sy.has(NEEDS.classes) ? "path/s/sapmurex" : g;
+function cvTick() {
+  let ch = Rs.initSeen() | Rs.refreshCache();
+  const g = Rs.firstReward(); if (g) { ch = true; announce([g]); }
+  if (ch) save();
+}
+function cvLine(l) {
+  if (l.state === "off") return "";
+  if (l.state === "earned") return l.head ? `<div class="cv-h">${esc(l.text)}</div>` : `<li>${esc(l.text)}</li>`;
+  const go = cvGo(l.go);
+  return `<li class="cv-g"${go ? ` data-act="go" data-id="${esc(go)}"` : ""}><span>${l.state === "locked" ? px("lock") + " " : ""}${esc(l.text)}</span>${l.pct != null ? `<i class="cv-bar"><b style="width:${Math.round(Math.min(1, l.pct) * 100)}%"></b></i>` : ""}<span class="cv-c">${esc(l.cond || "")}</span></li>`;
+}
+function cvPaper(cv) {
+  const p = Rs.profile(), V = k => (cv.sections[k] || []).map(Rs.view);
+  const sec = (k, title) => {
+    if (k === "summary") return cv.sections.summary ? `<div class="cv-sec"><div class="cv-st">${title}</div><p>${esc(cv.sections.summary)}</p></div>` : "";
+    const L = V(k).filter(l => l.state !== "off"); if (!L.length) return "";
+    if (k === "courses") return `<div class="cv-sec"><div class="cv-st">${title}</div><p>${L.map(l => l.state === "earned" ? esc(l.text) : `<span class="cv-g">${esc(l.text)}</span>`).join(", ")}</p></div>`;
+    return `<div class="cv-sec"><div class="cv-st">${title}</div><ul>${L.map(cvLine).join("")}</ul></div>`;
+  };
+  return `<div class="cv-paper"><div class="cv-name">${esc(p.name)}</div><div class="cv-contact">${esc([p.location, p.email, p.phone].filter(Boolean).join(" · ")) || "Add email and phone in Edit"}</div>
+    ${Rs.SECTIONS.map(([k, t]) => sec(k, t)).join("")}</div>`;
+}
+function vCv(id, arg) {
+  const back = `<button class="back" data-act="nav" data-id="${id ? "path/cv" : "profile"}">${ic("left")} ${id ? "Resumes" : "Profile"}</button>`;
+  cvTick();
+  const T = Rs.transcript();
+  const importer = `<div class="panel"><div class="hdr">${px("scroll")} Transcript</div><p class="small muted">${T ? `${esc(T.school || "")} · GPA ${T.gpaCumulative} · ${T.courses.length} courses` : "Import your transcript (the JSON file) so CVs can list your courses and GPA."}</p>
+    <div class="btns"><label class="btn sm ${T ? "" : "go"}">${T ? "Replace" : "Import transcript"}<input type="file" accept="application/json,.json" data-ch="cvtranscript" hidden></label></div></div>`;
+  if (id === "new") {
+    const a = arg && live("applications").find(x => x.id === arg);
+    return `${back}<header class="top"><div><div class="hdr">Resumes</div><h1>New CV</h1></div></header>${T ? "" : importer}
+    <div class="panel" id="cvNew"><label class="f">Company<input data-f="company" value="${esc(a ? a.firm : "")}" placeholder="Murex"></label>
+      <label class="f">Role<input data-f="role" value="${esc(a ? a.role || "" : "")}" placeholder="Junior consultant"></label>
+      <label class="f">Track<select data-f="track">${Rs.TRACKS.map(t => `<option ${t === (a ? a.track : Rs.TRACKS[0]) ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></label>
+      <p class="tiny muted">The app drafts a rough CV from the track. For one tailored to the company, ask Claude: "CV for ${esc(a ? a.firm : "Murex")}, ${esc(a && a.role ? a.role : "junior consultant")}".</p>
+      <div class="btns"><button class="btn go" data-act="cvnew" data-id="${esc(arg || "")}">Create</button><button class="btn" data-act="go" data-id="path/cv">Cancel</button></div></div>`;
+  }
+  if (id) {
+    const cv = Rs.byId(id); if (!cv) return `${back}<p class="empty">That CV is gone.</p>`;
+    if (Rs.markSeen(cv)) save();
+    if (cvEdit === id) return back + cvEditor(cv);
+    const m = Rs.match(cv), gp = Rs.gaps(cv), nu = Rs.newSinceExport(cv), app = cv.appId && live("applications").find(a => a.id === cv.appId);
+    const hasJp = Rs.lines(cv).some(l => l.src === "jp"), j = hasJp ? Rs.jp() : null;
+    return `${back}<header class="top"><div><div class="hdr">${esc(cv.track || "CV")}${app ? " · " + esc(app.status) : ""}</div><h1>${esc(cv.company)}</h1></div></header>
+    <p class="small muted" style="margin:0 4px 8px">${esc(cv.role || "")}${cv.by === "claude" ? " · written by Claude" : ""} · edited ${esc(E.fmtDate(E.ymd(new Date(cv.updated || cv.created))))}</p>
+    ${nu.length ? `<div class="panel cv-new">${px("star")} Unlocked since last export: ${nu.map(s => esc(Rs.line(s).text)).join(", ")}. Worth exporting again.</div>` : ""}
+    <div class="panel"><div class="row between"><div class="hdr">${px("eye")} What they want</div>${m.of ? `<b class="mono">${m.n}/${m.of}</b>` : ""}</div>
+      <div class="list">${m.rows.map(r => `<div class="row small" style="gap:8px">${r.met ? ic("check", "inl") : `<span class="pdot"></span>`}<span class="${r.met === false ? "muted" : ""}">${esc(r.text)}</span></div>`).join("") || `<p class="small muted">No company notes yet. Ask Claude to research ${esc(cv.company)}.</p>`}</div>
+      ${gp.length ? `<div class="hdr" style="margin-top:12px">${px("flag")} Gaps</div><div class="list">${gp.slice(0, 5).map(g => `<div class="row between small item"><span class="grow">${esc(g.label)}</span>${g.go ? `<button class="btn sm" data-act="go" data-id="${esc(cvGo(g.go))}">Open</button>` : ""}</div>`).join("")}</div>` : ""}
+      ${j && !j.real ? `<div class="tiny muted" style="margin-top:10px">Japanese estimate: ${j.est ? `${j.est} reached` : "no level reached yet"}${j.next ? ` · next ${esc(Rs.jpBreakdown(j.next))}` : ""}${j.cached ? " · from your other phone" : ""}</div>` : ""}</div>
+    <div class="btns"><button class="btn primary" data-act="cvpdf" data-id="${id}">Export PDF</button><button class="btn" data-act="cvedit" data-id="${id}">Edit</button></div>
+    <label class="row small" style="gap:8px;margin:8px 4px"><input type="checkbox" data-ch="cvgrey" ${cvGrey ? "checked" : ""}> Print grey lines as "in progress"</label>
+    ${cvPaper(cv)}
+    ${(cv.versions || []).length ? fold("cv-ver", `<b class="grow">Versions</b><span class="small muted">${cv.versions.length}</span>`, cv.versions.map((v, i) => `<div class="row between item small"><span>${esc(E.fmtDate(E.ymd(new Date(v.at))))} ${E.pad(new Date(v.at).getHours())}:${E.pad(new Date(v.at).getMinutes())}</span><button class="btn sm" data-act="cvrestore" data-id="${id}:${i}">Restore</button></div>`).join("")) : ""}
+    <div class="btns"><button class="btn danger" data-act="cvdel" data-id="${id}">Delete CV</button></div>`;
+  }
+  const L = Rs.all(), j = Rs.jp();
+  return `${back}<header class="top"><div><div class="hdr">Job hunt</div><h1>Resumes</h1></div></header>
+  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/cv/new">${ic("plus")} New CV</button></div>
+  ${L.map(cv => { const a = cv.appId && live("applications").find(x => x.id === cv.appId), m = Rs.match(cv), nu = Rs.newSinceExport(cv).length;
+    return `<button class="panel app-r" data-act="go" data-id="path/cv/${cv.id}" style="display:block;width:100%;text-align:left"><div class="row between"><b>${esc(cv.company)}</b><span class="tag">${esc(cv.track || "")}</span></div>
+      <div class="small muted">${[cv.role, a && a.status, "edited " + E.fmtDate(E.ymd(new Date(cv.updated || cv.created)))].filter(Boolean).map(esc).join(" · ")}</div>
+      ${m.of ? `<div class="small" style="margin-top:4px">Match ${m.n}/${m.of}${nu ? ` · ${nu} unlocked since export` : ""}</div>` : ""}</button>`; }).join("") || `<p class="empty">No CVs yet. Make one here, or tell Claude "CV for &lt;company&gt;, &lt;role&gt;".</p>`}
+  ${importer}
+  <div class="panel"><div class="hdr">${px("flag")} Japanese level</div><p class="small">${j.real ? `JLPT ${esc(j.real.lvl)} certified` : j.est ? `${esc(j.est)} (estimated from your scores)` : "No level reached yet"}</p>
+    ${j.next && !j.real ? `<p class="tiny muted">Next: ${esc(Rs.jpBreakdown(j.next))}. A level counts at 70% of its vocab known, 60% of its kanji, and tests averaging 70% over 30 days.</p>` : ""}${!j.lexicon && !j.cached ? `<p class="tiny muted">Import the Lexicon decks on this phone to estimate.</p>` : ""}</div>`;
+}
+function cvEditor(cv) {
+  const d = cvDraft, p = Rs.profile();
+  const row = (k, l, i) => `<div class="row cv-er" style="gap:6px" data-sec="${k}" data-src="${esc(l.src || "")}" data-head="${l.head ? 1 : ""}"><input value="${esc(Rs.view(l).text)}"${l.src ? ` title="${esc(l.src)}"` : ""}>${l.src && Rs.line(l.src).state !== "earned" ? `<span class="tiny muted">grey</span>` : ""}<button class="btn sm" data-act="cvdelline" data-id="${k}:${i}" aria-label="Remove">${ic("x")}</button></div>`;
+  return `<header class="top"><div><div class="hdr">Edit CV</div><h1>${esc(cv.company)}</h1></div></header>
+  <div class="panel" id="cvForm"><label class="f">Company<input data-f="company" value="${esc(d.company)}"></label><label class="f">Role<input data-f="role" value="${esc(d.role)}"></label>
+    <div class="hdr" style="margin-top:12px">Header (all CVs)</div>
+    <div class="grid"><label class="f">Name<input data-p="name" value="${esc(p.name)}"></label><label class="f">Location<input data-p="location" value="${esc(p.location)}"></label>
+      <label class="f">Email<input data-p="email" type="email" value="${esc(p.email)}"></label><label class="f">Phone<input data-p="phone" type="tel" value="${esc(p.phone)}"></label></div>
+    <div class="hdr" style="margin-top:12px">What they want</div>
+    ${d.motives.map((m, i) => `<div class="row cv-em" style="gap:6px" data-src="${esc((m.src || []).join(","))}"><input value="${esc(m.text)}"><button class="btn sm" data-act="cvdelline" data-id="motives:${i}" aria-label="Remove">${ic("x")}</button></div>`).join("")}
+    <button class="btn sm" data-act="cvaddline" data-id="motives">${ic("plus")} Want</button>
+    ${Rs.SECTIONS.map(([k, t]) => k === "summary" ? `<div class="hdr" style="margin-top:12px">${t}</div><textarea data-f="summary" rows="4">${esc(d.sections.summary || "")}</textarea>`
+      : `<div class="hdr" style="margin-top:12px">${t}</div>${(d.sections[k] || []).map((l, i) => row(k, l, i)).join("")}<button class="btn sm" data-act="cvaddline" data-id="${k}">${ic("plus")} Line</button>`).join("")}
+    <p class="tiny muted">Lines tied to the app (grey until earned) keep their link when you reword them.</p>
+    <div class="btns"><button class="btn go" data-act="cvsave" data-id="${cv.id}">Save</button><button class="btn" data-act="cvcancel">Cancel</button></div></div>`;
+}
+// The editor's fields back into the draft (before adding or removing a line, and on save).
+function cvRead() {
+  const d = cvDraft, f = readForm("#cvForm"); if (!d || !$("#cvForm")) return d;
+  d.company = f.company || d.company; d.role = f.role; d.sections.summary = f.summary;
+  const secs = {}; for (const [k] of Rs.SECTIONS) if (k !== "summary") secs[k] = [];
+  document.querySelectorAll("#cvForm .cv-er").forEach(el => {
+    const v = el.querySelector("input").value.trim(), src = el.dataset.src || null, head = !!el.dataset.head;
+    const l = {}; if (src) l.src = src; if (!src || v !== Rs.line(src).text) l.text = v; if (head) l.head = true; secs[el.dataset.sec].push(l);
+  });
+  Object.assign(d.sections, secs);
+  d.motives = [...document.querySelectorAll("#cvForm .cv-em")].map(el => ({ text: el.querySelector("input").value.trim(), src: (el.dataset.src || "").split(",").filter(Boolean) }));
+  d.profile = Object.fromEntries([...document.querySelectorAll("#cvForm [data-p]")].map(el => [el.dataset.p, el.value.trim()]));
+  return d;
 }
 function vRes() {
   const R = Pa.resources(), by = {};
@@ -1147,6 +1249,7 @@ function alertList() {
     wd && ["wind:" + t, sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.")],
     ...Dl.active(t).map(k => { const nx = Dl.nextSession(k.id); return ["dl:" + k.id + ":" + Dl.daysLeft(k, t), sysBox(`<b>${esc(k.title)}</b> · ${dlLeft(k)}`, nx ? `Next: ${esc(Dl.sessionName(nx, k))}` : "", `<div class="btns"><button class="btn sm" data-act="sheet" data-id="deadline:${k.id}">Open</button></div>`)]; }),
     ...Dl.unscored(t).map(d => ["examscore:" + d.id, sysBox(`${esc(d.title)}: how did it go?`, "Add the score and it goes on the Report Card.", `<div class="btns"><button class="btn sm" data-act="rcask" data-id="${d.id}">Add score</button></div>`)]),
+    ...Rs.stronger().map(x => ["cv:" + x.cv.id + ":" + x.srcs.join(","), sysBox(`Your ${esc(x.cv.company)} CV just got stronger: ${x.names.map(esc).join(", ")} earned.`, "Studying is turning into lines on the CV.", btn("path/cv/" + x.cv.id, "Open CV"))]),
     E.moneyDue() && ["money:" + E.weekStart(t), sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now"))],
     flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
     unplaced && ["unplaced:" + unplaced, sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan"))],
@@ -1179,6 +1282,7 @@ function vProfile() {
   ${profilePath()}
   <button class="quiet-row" data-act="go" data-id="report"><span class="grow">Report Card${rcLine()}</span><span class="chev">${ic("right")}</span></button>
   <button class="quiet-row" data-act="go" data-id="drill"><span class="grow">Mental math Drill${Dr.best("classic") != null ? ` · best ${Dr.best("classic")}` : ""}</span><span class="chev">${ic("right")}</span></button>
+  <button class="quiet-row" data-act="go" data-id="path/cv"><span class="grow">Resumes${Rs.all().length ? ` · ${Rs.all().length}` : ""}</span><span class="chev">${ic("right")}</span></button>
   ${sleepPanel()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
   <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
@@ -2684,7 +2788,8 @@ function vSettings([sec] = []) {
   ${sx("dungeon", "Dungeon", dungeonSettings())}
   ${Us.available() && Sy.has(1) ? sx("usage", "Phone limit", usageSettings(), Us.isGranted() ? Us.cfg().limitMin + " min" : "off") : ""}
   ${Al.available() && Sy.has(1) ? sx("alarms", "Alarms", alarmSettings(), Al.granted() ? "on" : "off") : ""}
-  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"], [1, "lex", "Japanese decks (Lexicon)"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}</div>`) : ""}
+  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"], [1, "lex", "Japanese decks (Lexicon)"], [1, "path/cv", "Resumes"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}
+    <label class="quiet-row" style="margin-top:0"><span class="grow">Import transcript${Rs.transcript() ? ` · GPA ${Rs.transcript().gpaCumulative}, ${Rs.transcript().courses.length} courses` : ""}</span><input type="file" accept="application/json,.json" data-ch="cvtranscript" hidden><span class="chev">${ic("right")}</span></label></div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
   ${sx("money", "Money and Store", moneySettings())}
   ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
@@ -3034,6 +3139,31 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "n2exam": N2.setExam(id); save(); toast(`Exam Raid: JLPT ${id}, Sun 4 Jul 2027`); return render();
     case "raidclear": { const xp = Pa.clearRaid(id); if (!xp) return; save(); toast(`Raid cleared · +${xp} XP`, true); return render(); }
     case "raidundo": { if (!confirm("Undo this Raid? Its XP goes too.")) return; Pa.unclearRaid(id); save(); return render(); }
+    // v13: Resumes
+    case "cvfor": { const cv = Rs.forApp(id); return go(cv ? "path/cv/" + cv.id : "path/cv/new/" + id); }
+    case "cvnew": {
+      const f = readForm("#cvNew"); if (!f.company) return toast("Add the company");
+      const cv = Rs.create({ company: f.company, role: f.role, track: f.track, appId: id || null }); cvTick(); save();
+      return go("path/cv/" + cv.id);
+    }
+    case "cvpdf": {
+      const cv = Rs.byId(id); if (!cv) return;
+      const name = `CV-${(Rs.profile().name || "Arin").replace(/\W+/g, "")}-${cv.company.replace(/\W+/g, "")}.pdf`;
+      download(name, cvPdf(Rs.printModel(cv, cvGrey)), "application/pdf");
+      Rs.markExported(cv); save(); toast(cvGrey ? "PDF ready (grey lines marked in progress)" : "PDF ready (earned lines only)"); return render();
+    }
+    case "cvedit": { const cv = Rs.byId(id); if (!cv) return; cvEdit = id; cvDraft = JSON.parse(JSON.stringify({ company: cv.company, role: cv.role || "", motives: cv.motives || [], sections: cv.sections })); return render(); }
+    case "cvcancel": cvEdit = cvDraft = null; return render();
+    case "cvaddline": { cvRead(); if (id === "motives") cvDraft.motives.push({ text: "", src: [] }); else (cvDraft.sections[id] = cvDraft.sections[id] || []).push({ text: "" }); render(); const L = document.querySelectorAll(id === "motives" ? "#cvForm .cv-em input" : `#cvForm [data-sec="${id}"] input`); if (L.length) L[L.length - 1].focus(); return; }
+    case "cvdelline": { cvRead(); const [k, i] = id.split(":"); if (k === "motives") cvDraft.motives.splice(+i, 1); else cvDraft.sections[k].splice(+i, 1); return render(); }
+    case "cvsave": {
+      const cv = Rs.byId(id), d = cvRead(); if (!cv || !d) return;
+      const sections = Object.fromEntries(Object.entries(d.sections).map(([k, v]) => [k, Array.isArray(v) ? v.filter(l => l.src || l.text) : v]));
+      Rs.saveProfile(d.profile); Rs.update(cv, { company: d.company, role: d.role, motives: d.motives.filter(m => m.text), sections });
+      cvEdit = cvDraft = null; save(); toast("Saved · the old one is in Versions"); return render();
+    }
+    case "cvrestore": { const [cid, i] = id.split(":"), cv = Rs.byId(cid); if (!cv || !confirm("Restore this version? The current one is kept in Versions.")) return; Rs.restore(cv, +i); save(); toast("Restored"); return render(); }
+    case "cvdel": { const cv = Rs.byId(id); if (!cv || !confirm(`Delete the ${cv.company} CV?`)) return; Rs.del(id); save(); return go("path/cv"); }
     case "appsave": {
       const f = readForm("#appForm"); if (!f.firm) return toast("Add the firm");
       const r = Ap.save(f, id === "new" ? null : id); save(); appOffer(r.rec);
@@ -3391,6 +3521,13 @@ document.addEventListener("change", async ev => {
   const k = el.dataset.ch;
   if (k === "jpq") { jpq = el.value; render(); const i = $('input[data-ch="jpq"]'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return; }
   if (k === "lexq") { lx = { ...lx, q: el.value, n: 60, open: null }; return render(); }
+  if (k === "cvtranscript") {
+    const f = el.files && el.files[0]; if (!f) return;
+    try { const r = Rs.importTranscript(await f.text()); cvTick(); save(); toast(`Transcript imported: ${r.courses} courses, GPA ${r.gpa}`, true); }
+    catch (e) { toast(e.message || "Import failed"); }
+    return render();
+  }
+  if (k === "cvgrey") { cvGrey = el.checked; return; }
   if (k === "leximport") {
     const f = el.files && el.files[0]; if (!f) return;
     try { const r = await Lx.importText(await f.text()); toast(`Imported ${r.vocab.toLocaleString("en-US")} words and ${r.kanji} kanji`, true); }
@@ -3484,6 +3621,7 @@ function renameStyle() {
   if (await Dy.upgradeTimetable()) save();
   if (Dy.archiveOld()) save();
   await Lx.load();
+  cvTick();
   renameStyle();
   if (Soc.migrateTraits()) save();
   // First 60 seconds: one quest is already done, so the bar has moved before anything else happens.
@@ -3495,7 +3633,7 @@ function renameStyle() {
   fullOnTap();
   Sync.init({ render, toast });
   // Penalties are judged a few seconds after start (so a sync can bring in work done on another phone) and every minute.
-  setTimeout(() => { runAssess(); render(); }, 6000);
+  setTimeout(() => { runAssess(); cvTick(); render(); }, 6000);
   setInterval(tickPomo, 1000);
   setInterval(() => { if (!jpsOn()) return; if (jps.ends < Date.now() - 10 * 60000) { jps = null; return jpsSave(); } if (jpsLeft() <= 0) return jpEnd(); const el = $("#jpsT"); if (el) el.textContent = mmss(jpsLeft()); }, 1000);
   setInterval(() => { if (!gq || !gq.qs || gq.res || route()[0] !== "path") return; const el = $("#gateT"), left = gq.ends - Date.now(); if (left <= 0) return gateSubmit(); if (el) el.textContent = mmss(left); }, 1000);

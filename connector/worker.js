@@ -22,10 +22,13 @@ const PREP = {
   presentation: { lead: 7, s: [["Slides", 90], ["Rehearse 1", 30], ["Rehearse 2", 30]] },
   other: { lead: 3, s: [["Prep", 60]] },
 };
+// Mirrors js/resume.js TRACKS and SECTIONS. Keep in step.
+const CV_TRACKS = ["Strategy consulting", "SAP FI/CO", "Murex/Calypso", "Other"];
+const CV_SECTIONS = ["education", "courses", "skills", "certs", "projects", "experience", "languages", "extras"];
 // Mirrors js/store.js RECORD_STORES, plus settings. Keep in step.
 const STORES = ["habitLog", "xpEvents", "rewardHistory", "exercises", "areaState", "workouts", "runs", "bodyweight", "physique", "meals", "savedMeals",
   "money", "bills", "blocks", "tasks", "care", "careLog", "people", "hangouts", "wishlist", "blockLog", "penalties", "fieldNotes", "appraisals",
-  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "mined", "cards", "reviewDays", "settings"];
+  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "mined", "resumes", "cards", "reviewDays", "settings"];
 const KINDS = ["class", "work", "sleep", "nap", "quest", "club", "social", "other"];
 
 /* ---------- time ---------- */
@@ -166,6 +169,15 @@ const TOOLS = [
       sentence: { type: "string", description: "The sentence it was found in (required for a sentence card)" }, sentence_reading: { type: "string", description: "The sentence in kana" }, sentence_en: { type: "string", description: "English translation" }, note: { type: "string", description: "One-line grammar or usage note" },
       level: { type: "string", enum: ["N5", "N4", "N3", "N2", "N1"] }, source: { type: "string", enum: ["shift", "class", "anime", "NHK", "conversation", "other"] }, tags: { type: "array", items: { type: "string" }, description: "e.g. ['keigo']" },
       wrong_readings: { type: "array", items: { type: "string" }, description: "3 close wrong readings" }, wrong_meanings: { type: "array", items: { type: "string" }, description: "3 close wrong meanings" } } } },
+  { name: "get_resume_data", description: "Read-only: everything needed to write Arin's CV for a company and role. Returns the transcript (courses with grades, GPA), the CV header, every app-linked line with its state (earned / prog = in progress with pct / locked with its unlock condition / off = not worth showing), the Japanese level estimate and its inputs, the Zetamac best, the job applications and the saved CVs. Line srcs: disc:<id> (a discipline, earned when its boss is passed), cert:boki3|boki2|sapfi (earned only by a passed real exam), cap:markets|sapfico|strategist (class capstone projects), stat:zetamac, jp (Japanese level line), gpa (degree line), course:<title prefix> (from the transcript, always earned). States come from Arin's phone (cacheAt says when). Use before save_resume.",
+    inputSchema: { type: "object", properties: {} } },
+  { name: "save_resume", description: "Save a CV for a company and role into the app's Resumes. Arin says e.g. 'CV for Murex, junior consultant'. First call get_resume_data and research the company (business, what the role needs, values, what they screen for). Then write: motives = 3-5 things the company wants, each with the srcs that prove them; sections = lines of {text, src?, head?}. Put every skill, certificate, project and the Japanese line on its src so the app greys it out until earned (never claim a non-earned item as done in the text: the app shows its state and leaves grey lines out of the PDF). Lines without src are plain facts (education, FamilyMart night shift, Music Club, English and Hindi native). Pick 4-6 relevant courses as course:<title> lines and 3-5 skills, most relevant first. Saving the same company and role again replaces it and keeps the old one as a version (5 kept). The CV is linked to the company's application; one is created (status To apply) if missing. Reply with the match score idea in one line and say it's in the app under Resumes.",
+    inputSchema: { type: "object", required: ["company", "role", "track", "sections"], properties: {
+      company: { type: "string" }, role: { type: "string" }, track: { type: "string", enum: CV_TRACKS },
+      motives: { type: "array", items: { type: "object", required: ["text"], properties: { text: { type: "string" }, src: { type: "array", items: { type: "string" } } } }, description: "What the company wants, 3-5" },
+      sections: { type: "object", description: "summary (string, 2-3 sentences), and arrays of lines for " + CV_SECTIONS.join(", "), properties: { summary: { type: "string" },
+        ...Object.fromEntries(CV_SECTIONS.map(k => [k, { type: "array", items: { type: "object", properties: { text: { type: "string" }, src: { type: "string" }, head: { type: "boolean", description: "a bold heading line, e.g. the employer" } } } }])) } },
+      transcript: { type: "object", description: "Only if get_resume_data has no transcript: {school, major, gpaCumulative, courses:[[sem, dept, title, credits, grade|null]]}" } } } },
   { name: "get_money", description: "Read Arin's money tracker (read-only): weekly bank and debt reports, pace to the savings and debt-free goal by graduation, bills, the Store fund and the wishlist. Use before giving money advice.",
     inputSchema: { type: "object", properties: {} } },
   { name: "add_wishlist_item", description: "Add a reward to the wishlist with its price in yen. The XP cost is set from the price.",
@@ -367,6 +379,43 @@ const handlers = {
     });
     const what = kind === "word" ? `${rec.word}${rec.reading ? ` (${rec.reading}${rec.meaning ? ", " + rec.meaning : ""})` : ""}` : `the sentence ${rec.sentence}`;
     return `${again ? "Updated" : "Mined"} ${what}.${kind === "word" ? " The app matches it against the JLPT deck next time it opens." : ""} It goes first in the next batch of new cards.`;
+  },
+  async get_resume_data(env) {
+    const [R, A] = await Promise.all([readStore(env, "resumes"), readStore(env, "applications")]);
+    const L = live(R.data), get = id => L.find(r => r.id === id) || null, cache = get("cache") || {};
+    const out = {
+      transcript: get("transcript")?.data || null, header: get("profile") ? { name: get("profile").name, location: get("profile").location } : null,
+      lines: cache.lines || null, japanese: cache.jp || null, zetamac: cache.zetamac ?? null, cacheAt: cache.at ? new Date(cache.at).toISOString() : null,
+      applications: live(A.data).map(a => ({ firm: a.firm, role: a.role, track: a.track, status: a.status, deadline: a.deadline || null })),
+      resumes: L.filter(r => !r.kind).map(r => ({ company: r.company, role: r.role, track: r.track, by: r.by, updated: r.updated ? new Date(r.updated).toISOString().slice(0, 10) : null, versions: (r.versions || []).length })),
+      always: "Languages: English (native), Hindi (native). Work: FamilyMart night shift staff, Kofu (customer service in Japanese while studying full time). Activities: Music Club. Expected graduation Aug 2027. Show GPA only while 3.5+.",
+    };
+    if (!out.lines) out.note = "No line states yet: Arin's phone writes them the next time the app opens (v13+).";
+    return JSON.stringify(out);
+  },
+  async save_resume(env, a) {
+    const str = v => String(v || "").trim(), company = str(a.company), role = str(a.role), track = CV_TRACKS.includes(a.track) ? a.track : "Other";
+    if (!company) throw new Error("company is required");
+    const ln = l => { const o = {}; if (str(l?.text)) o.text = str(l.text); if (str(l?.src)) o.src = str(l.src); if (l?.head) o.head = true; return o.text || o.src ? o : null; };
+    const sections = { summary: str(a.sections?.summary) };
+    for (const k of CV_SECTIONS) sections[k] = (Array.isArray(a.sections?.[k]) ? a.sections[k] : []).map(ln).filter(Boolean).slice(0, 30);
+    const motives = (Array.isArray(a.motives) ? a.motives : []).map(m => ({ text: str(m?.text ?? m), src: (Array.isArray(m?.src) ? m.src : []).map(str).filter(Boolean) })).filter(m => m.text).slice(0, 8);
+    let appId = null, madeApp = false, again = false, name = company;
+    await changeStore(env, "applications", arr => {
+      const ex = live(arr).find(x => str(x.firm).toLowerCase() === company.toLowerCase() && !["Offer", "Rejected"].includes(x.status));
+      if (ex) { appId = ex.id; return; }
+      appId = putRec(arr, { firm: company, role, track, channel: "", deadline: "", status: "To apply", contact: "", next: "", nextDate: "", created: Date.now() }).id; madeApp = true;
+    });
+    await changeStore(env, "resumes", arr => {
+      if (a.transcript && Array.isArray(a.transcript.courses) && !live(arr).some(r => r.id === "transcript")) putRec(arr, { id: "transcript", kind: "transcript", data: a.transcript, at: Date.now() });
+      const ex = live(arr).find(r => !r.kind && str(r.company).toLowerCase() === company.toLowerCase() && str(r.role).toLowerCase() === role.toLowerCase());
+      if (ex) {
+        again = true; name = ex.company;
+        const versions = [{ at: ex.updated || Date.now(), sections: ex.sections, motives: ex.motives }, ...(ex.versions || [])].slice(0, 5);
+        putRec(arr, { ...ex, track, appId: ex.appId || appId, motives, sections, versions, by: "claude", updated: Date.now() });
+      } else putRec(arr, { id: "cv-" + uid(), company, role, track, appId, motives, sections, versions: [], by: "claude", created: Date.now(), updated: Date.now() });
+    });
+    return `${again ? "Updated" : "Saved"} the ${name} CV (${role}, ${track})${again ? "; the old one is in Versions" : ""}.${madeApp ? ` Added ${company} to Applications (To apply).` : ""} It's in the app under Resumes.`;
   },
   async add_wishlist_item(env, a) {
     const price = Math.round(+a.price); if (!a.name || !(price >= 0)) throw new Error("name and price are required");

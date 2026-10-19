@@ -835,3 +835,23 @@ nav button span{position:relative}
 .mn-tags .tag{color:rgba(242,239,232,.75);border-color:rgba(242,239,232,.25)}
 .mn-tags .tag.t-lv{border-color:var(--lime);color:var(--lime)}
 .pills.seg:has(> :nth-child(3)){grid-template-columns:repeat(3,1fr)}
+
+/* v13: Resumes. The CV is an A4 sheet: black on white, the print view. Grey lines are not earned yet. */
+.cv-paper{background:#fff;color:#111;border-radius:2px;padding:22px 18px;margin:12px 0;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.45;box-shadow:0 2px 0 #0006}
+.cv-paper .cv-name{font-size:22px;font-weight:700;letter-spacing:.01em}
+.cv-paper .cv-contact{color:#555;font-size:12px;margin-top:2px}
+.cv-paper .cv-sec{margin-top:14px}
+.cv-paper .cv-st{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #111;padding-bottom:2px;margin-bottom:6px}
+.cv-paper p{margin:0}
+.cv-paper ul{margin:0;padding-left:18px}
+.cv-paper li{margin:2px 0}
+.cv-paper .cv-h{font-weight:700;margin-top:4px}
+.cv-paper .cv-g{color:#9a9a9a;cursor:pointer}
+.cv-paper li.cv-g::marker{color:#bbb}
+.cv-paper .cv-g svg,.cv-paper .cv-g .px{width:11px;height:11px;vertical-align:-1px;opacity:.7}
+.cv-paper .cv-bar{display:block;height:3px;background:#e4e4e4;border-radius:2px;margin:3px 0 1px;max-width:180px;overflow:hidden}
+.cv-paper .cv-bar b{display:block;height:100%;background:#9a9a9a}
+.cv-paper .cv-c{display:block;font-size:11px;color:#a8a8a8}
+.cv-new{font-size:13px}
+.cv-er,.cv-em{margin:4px 0}
+.cv-er input,.cv-em input{flex:1;min-width:0}
