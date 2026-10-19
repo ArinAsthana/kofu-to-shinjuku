@@ -57,7 +57,7 @@
             android:id="@+id/w_jp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="日本語"
+            android:text="Japanese"
             android:textColor="#FFF2EFE8"
             android:textSize="13sp"
             android:textStyle="bold" />

@@ -24,6 +24,7 @@ import * as Dy from "./day.js";
 import * as Dl from "./deadlines.js";
 import * as Dr from "./drill.js";
 import * as Rc from "./report.js";
+import * as Sr from "./search.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -77,7 +78,7 @@ document.addEventListener("touchend", e => {
     if (d < el.dataset.min || d > el.dataset.max) return;
     planDate = d === E.today() ? null : d; entering = true; render(); return;
   }
-  const T = openTabs(), cur = T.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = T[cur + (dx < 0 ? 1 : -1)];
+  const T = openTabs(), cur = T.findIndex(([k]) => k === (route()[0] || "home")), next = cur < 0 ? null : T[cur + (dx < 0 ? 1 : -1)];
   if (next) go(next[0]);
 }, { passive: true });
 window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (!location.hash.startsWith("#classes/q")) dq = null; chEdit = false; trialForm = null; battle = null; apForm = null; momentForm = null; if (recorder) recorder.stop(); if (afterNav) { afterNav(); afterNav = null; } render(); window.scrollTo(0, 0); });
@@ -85,7 +86,8 @@ window.addEventListener("hashchange", () => { if (location.hash === "#plan/peopl
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 // v4: five fixed slots. A slot stays empty until its stage unlocks; tabs never shift.
-const TABS = [["home", "System", "eye", 0], ["plan", "Plan", "cal", 0], ["classes", "Study", "scroll", 3], ["people", "People", "people", 4], ["money", "Store", "coin", 2]];
+// v11: two tabs. Quests (opens with the app) and Notifications. Every other screen is reached by search or a quest.
+const TABS = [["home", "Quests", "sword", 0], ["alerts", "Notifications", "bell", 0]];
 const openTabs = () => TABS.filter(t => Sy.has(t[3]));
 // Old links still land somewhere: the Dungeon is a Home state, Status is Profile, topics live in Study, People is a tab.
 const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
@@ -102,9 +104,13 @@ function render() {
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
   const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const si = $("#srch"), keepS = si && document.activeElement === si ? { v: si.value, p: si.selectionStart } : null; // v11: typing survives a re-render
   $("#app").innerHTML = (views[tab] || vHome)(rest);
+  if (keepS && $("#srch")) { const n = $("#srch"); n.value = keepS.v; n.focus(); try { n.setSelectionRange(keepS.p, keepS.p); } catch (e) {} srUpdate(); }
   const fresh = Sy.pendingUnlock();
-  $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
+  const nA = alertList().length;
+  $("#nav").innerHTML = TABS.map(([k, l, icon]) => `<button data-act="nav" data-id="${k}" ${tab === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}${k === "alerts" && nA ? `<b class="nbadge">${nA}</b>` : ""}</span></button>`).join("");
+  if (tab === "home") dayCleared();
   document.body.dataset.tab = tab;
   document.body.classList.toggle("silent", jpsOn() && !!jps.silent);
   // v9.1: workout mode. The page turns deep navy while a workout runs, and back to red when it ends.
@@ -120,7 +126,7 @@ function render() {
   const inDrill = tab === "drill" && Dr.running(); // v10: nothing pops over a running Drill
   const cer = !sheet && !inDrill ? ceremony() : null, brief = briefOpen && !cer && !sheet && !inDrill;
   $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.update ? updateWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
-  $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
+  $("#fab").innerHTML = ["plan", "people"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
   pushWidget();
@@ -227,16 +233,6 @@ function jpQuick() {
   if (jpsOn()) return `<div class="row between jps-bar"><span class="small">${px("sword")} ${jps.silent ? "Silent · in class" : `Quick start · ${jps.mins} min`}</span><span class="row" style="gap:8px">${jpsTimer()}<button class="btn sm" data-act="jpend">${jps.silent ? "Back to class" : "End"}</button></span></div>`;
   return `<div class="jps-row">${[5, 15, 30].map(m => `<button class="btn sm ${m === 15 ? "go" : ""}" data-act="jpgo" data-id="${m}">${m} min</button>`).join("")}</div>`;
 }
-// v9 §3: two tiles under Now. PLAN shows the next block; 日本語 starts a 5-minute session in one tap.
-function homeTiles() {
-  // v9.5: the Plan tile is gone (Now already shows what's next); only 日本語 stays, full width.
-  const jp = Sy.has(NEEDS.jlpt), due = jp ? K.queue().filter(c => c.intro).length : 0;
-  if (!jp) return "";
-  return `<div class="tiles one">
-    ${`<div class="tile jp"><button class="tile-main" data-act="go" data-id="jlpt"><span class="hdr">日本語</span><b class="tile-t">${jpsOn() ? `<span id="jpsT">${mmss(jpsLeft())}</span>` : due || !K.queue().length ? `${due} due` : `${K.queue().length} new`}</b><span class="small muted">${jpsOn() ? "in session" : "5 min"}</span></button>
-      <button class="tile-go" data-act="${jpsOn() ? "go" : "jpgo"}" data-id="${jpsOn() ? "cards/review" : "5"}" aria-label="${jpsOn() ? "Resume" : "Start 5 minutes of Japanese"}">${ic("play")}</button></div>`}
-  </div>`;
-}
 // v9 §4 and §7: a class gap shows its one finance item; the Outreach slot shows its goals.
 function dayCard() {
   const nw = Dy.watchNow();
@@ -245,7 +241,7 @@ function dayCard() {
     return `<div class="panel daycard nwatch"><div class="row between"><span class="hdr">${px("eye")} Night watch · until ${P.toHM(nw.e)}</span><span class="small mono">${d.n} done${d.ahead ? ` · +50% · ${d.ahead} ahead` : ""}</span></div>
       <p class="tiny muted" style="margin:4px 0 6px">Shift work is done. The rest of the night is yours. Nothing here times out, so a customer can interrupt any time.${d.n < Dy.NW_AT ? ` ${Dy.NW_AT} items: +${Dy.NW_BONUS} XP.` : ""}</p>
       ${its.map(x => `<div class="item row between"><div class="grow"><b class="small">${esc(x.label)}</b><div class="small muted">${esc(x.t)}</div></div>${x.k ? `<button class="btn sm go" data-act="taskdone" data-id="${x.k.id}">Report</button>` : `<button class="btn sm go" data-act="pathahead" data-id="${x.s}">Go ahead</button>`}</div>`).join("") || `<div class="small muted">Both streams are waiting on a Gate Test.</div>`}
-      ${Sy.has(NEEDS.jlpt) ? `<div class="btns"><button class="btn sm" data-act="jpgo" data-id="5">Break: 5 min 日本語</button></div>` : ""}</div>`;
+      ${Sy.has(NEEDS.jlpt) ? `<div class="btns"><button class="btn sm" data-act="jpgo" data-id="5">Break: 5 min Japanese</button></div>` : ""}</div>`;
   }
   const gp = Dy.gapNow();
   if (gp) {
@@ -261,18 +257,104 @@ function dayCard() {
   return "";
 }
 function vHome() {
-  const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
+  const t = E.today(), hs = homeState(t), q = todayQuests(t);
   const dungeon = hs.k === "study" || hs.k === "body";
-  return `
-  <header class="top"><div class="hihead" data-act="nav" data-id="profile" role="link" aria-label="Profile, level ${E.level()}"><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}
-    ${dungeon ? "" : `<div class="hilv"><b>LV ${E.level()}</b><span class="hilv-bar"><i style="width:${E.levelProgress() * 100}%"></i></span><span>${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to ${E.level() + 1}</span></div>`}</div>
-    <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
-    ${gear("home")}</div></header>
-  ${dungeon ? "" : actLine(a1)}
-  ${homeHero(hs, t)}
-  ${dungeon ? "" : dayCard() + homeTiles() + dlHome()}
-  ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
-  ${dungeon ? dungeonBar(hs) : ""}`;
+  const head = `<header class="top"><div class="hihead" data-act="nav" data-id="profile" role="link" aria-label="Profile, level ${E.level()}"><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}.</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}
+    ${dungeon ? "" : `<div class="hilv"><b>LV ${E.level()}</b><span class="hilv-bar"><i style="width:${E.levelProgress() * 100}%"></i></span><span>${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to ${E.level() + 1}</span></div>`}</div></header>`;
+  // Takeovers: a running Dungeon or workout replaces the list.
+  if (dungeon) return `${head}${homeHero(hs, t)}<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questList(q) : ""}${dungeonBar(hs)}`;
+  const hero = hs.k === "next" ? (Pa.running() ? homeHero(hs, t) : "") : homeHero(hs, t);
+  return `${head}${searchBar()}${hero}${dayCard()}${questList(q)}`;
+}
+/* ---------- v11: search ---------- */
+const searchBar = () => `<div class="srch" id="srchWrap"><label class="srch-box">${ic("search")}<span class="srch-in"><span class="srch-ghost" id="srchGhost" aria-hidden="true"></span><input id="srch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="Search or jump to…" aria-label="Search features" role="combobox" aria-controls="srchList"></span></label><div class="srch-list" id="srchList" role="listbox"></div></div>`;
+let srHits = [], srSel = 0;
+const ACT_NEEDS = { moment: 4 };
+function srNeed(it) { if (!it.route.startsWith("a:")) return NEEDS[it.route.split("/")[0]] || 0; return ACT_NEEDS[it.route.split(":")[1]] || 0; }
+// Before typing: what fits now (a class gap, the Mental Math item, the next deadline step), then recent searches.
+function srSuggest() {
+  const out = [], add = it => { if (it && !out.some(x => x.route === it.route) && !(srNeed(it) && !Sy.has(srNeed(it)))) out.push(it); };
+  if (Dy.gapNow()) add(Sr.byRoute("a:jpgo:5"));
+  if (Pa.started() && (Pa.today().list || []).some(k => k.path.stream === "mental" && !k.done)) add(Sr.byRoute("a:drillgo:classic"));
+  const d = Dl.active()[0], nx = d && Dl.nextSession(d.id); if (nx) add({ name: `${d.title}: ${Dl.sessionName(nx, d)}`, hint: "next step", route: "a:sheet:deadline:" + d.id, icon: "flag" });
+  Sr.recent().slice(0, 2).forEach(r => add(Sr.byRoute(r)));
+  ["a:jpgo:5", "drill", "plan", "report"].forEach(r => out.length < 4 && add(Sr.byRoute(r)));
+  return out.slice(0, 4);
+}
+function srUpdate() {
+  const inp = $("#srch"), list = $("#srchList"), gh = $("#srchGhost"); if (!inp || !list) return;
+  const v = inp.value; srHits = v.trim() ? Sr.find(v, 6) : srSuggest(); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
+  const rest = v ? Sr.complete(v, srHits[0]) : "";
+  gh.innerHTML = rest ? `<span class="gh-t">${esc(v)}</span>${esc(rest)}` : "";
+  list.innerHTML = (v.trim() ? "" : `<div class="srch-h">${srHits.length ? "Suggested" : ""}</div>`) + (srHits.map((it, i) => { const nd = srNeed(it), lk = nd && !Sy.has(nd);
+    return `<button class="srch-it ${i === srSel ? "sel" : ""} ${lk ? "lk" : ""}" data-act="srgo" data-id="${i}" role="option" aria-selected="${i === srSel}">${px(it.icon || "eye")}<span class="grow"><b>${esc(it.name)}</b><span class="muted"> · ${lk ? `Locked · unlocks at stage ${nd}` : esc(it.hint)}</span></span></button>`; }).join("") || (v.trim() ? `<div class="srch-h">No match. Try a feature name.</div>` : ""));
+}
+function srRun(it) {
+  if (!it) return;
+  const nd = srNeed(it); if (nd && !Sy.has(nd)) return toast(`Locked · unlocks at stage ${nd}`);
+  if (Sr.byRoute(it.route)) Sr.remember(it);
+  const inp = $("#srch"); if (inp) { inp.value = ""; inp.blur(); }
+  if (!it.route.startsWith("a:")) return goR(it.route);
+  const [, a, ...idp] = it.route.split(":"), b = document.createElement("button");
+  b.dataset.act = a; if (idp.join(":")) b.dataset.id = idp.join(":"); b.hidden = true; document.body.append(b); b.click(); b.remove();
+}
+function srFocus() { if (route()[0] !== "home") { afterNav = () => setTimeout(() => $("#srch")?.focus(), 0); go("home"); } else $("#srch")?.focus(); }
+document.addEventListener("input", e => { if (e.target.id === "srch") { srSel = 0; srUpdate(); } });
+document.addEventListener("focusin", e => { if (e.target.id === "srch") srUpdate(); });
+document.addEventListener("keydown", e => {
+  const inp = e.target.id === "srch" ? e.target : null;
+  if (!inp) {
+    const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || "") || document.activeElement?.isContentEditable;
+    if (!typing && !document.body.classList.contains("modal-open") && !(Dr.running() && route()[0] === "drill") && (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"))) { e.preventDefault(); srFocus(); }
+    return;
+  }
+  const rest = inp.value ? Sr.complete(inp.value, srHits[0]) : "";
+  if ((e.key === "Tab" || (e.key === "ArrowRight" && inp.selectionStart === inp.value.length)) && rest) { e.preventDefault(); inp.value = srHits[0].name; srUpdate(); }
+  else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); srSel = (srSel + (e.key === "ArrowDown" ? 1 : -1) + srHits.length) % Math.max(1, srHits.length); srUpdate(); }
+  else if (e.key === "Enter") { e.preventDefault(); srRun(srHits[srSel] || srHits[0]); }
+  else if (e.key === "Escape") { inp.value = ""; inp.blur(); }
+});
+/* ---------- v11: today's quests, each one a way into its page ---------- */
+// Days in a row this habit was done, ending today (or yesterday while today is still open).
+function habitStreak(id) {
+  let d = E.today(); if (!E.habitDone(id, d)) d = E.addDays(d, -1);
+  let n = 0; while (E.habitDone(id, d) && n < 999) { n++; d = E.addDays(d, -1); }
+  return n;
+}
+const HABIT_GO = { anki: "cards/review", jp: "jlpt", fin: () => Sy.has(NEEDS.classes) ? "classes" : "path", math: "drill", case: "path", gym: () => Sy.has(NEEDS.train) ? "train" : null };
+const qRow = ({ done, box, title, sub, right, act, id, cls = "" }) => `<div class="q qr ${done ? "done" : ""} ${cls}">${box}
+  ${act ? `<button class="grow tbtn" data-act="${act}" data-id="${esc(id)}"><div class="t">${title}</div>${sub ? `<div class="small muted">${sub}</div>` : ""}</button>` : `<div class="grow"><div class="t">${title}</div>${sub ? `<div class="small muted">${sub}</div>` : ""}</div>`}
+  <div class="xp">${right}</div></div>`;
+const tickBox = (act, id, on, label) => `<button class="bx" data-act="${act}" data-id="${id}" aria-pressed="${!!on}" aria-label="${esc(label)} done">${on ? ic("check") : ""}</button>`;
+function questRows(q) {
+  const t = E.today(), p = P.plan(), rows = [];
+  if (jpsOn()) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("sword")}</span>`, title: "Japanese · in session", sub: `<span id="jpsT">${mmss(jpsLeft())}</span> left`, right: "", act: "go", id: "cards/review" }) });
+  if (Pa.started()) {
+    for (const g of Pa.gates().filter(g => g.retakeAt <= Date.now())) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("gate")}</span>`, title: `${tag("trial", "Gate")} Gate Test · ${esc(Pa.stream(g.stream).label)}`, sub: `${Math.round(Pa.GATE_PASS * 100)}% to pass`, right: `+${Pa.XP_GATE}`, act: "go", id: "path/gate/" + g.stream }) });
+    for (const r of allRaids().filter(r => r.days <= 7).slice(0, 2)) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("skull")}</span>`, title: `${tag("raid", `Raid · ${r.days <= 0 ? "today" : r.days + "d"}`)} ${esc(r.name)}`, sub: "", right: "", act: "go", id: "path" }) });
+  }
+  for (const x of q.trials) rows.push({ done: !!x.done, html: trialRow(x.k, x.done) });
+  for (const k of q.path.list) rows.push({ done: !!k.done, html: qRow({ done: k.done, box: tickBox(k.done ? "taskundo" : "taskdone", k.id, k.done, k.title), title: esc(Pa.stream(k.path.stream).label) + (k.path.sun ? " · Sunday" : ""), sub: esc(pathText(k)), right: P.dur(k.mins), act: "go", id: k.path.stream === "mental" ? "drill" : k.path.stream === "n2" ? "jlpt" : "path" }) });
+  for (const e of q.events) { const k = e.k;
+    rows.push({ done: !!e.done, html: qRow({ done: e.done, cls: k.penalty ? "pen-q" : "", box: tickBox(e.done ? "taskundo" : "taskdone", k.id, e.done, k.title), title: (k.penalty ? tag("pen", "Penalty") + " " : "") + esc(k.title), sub: e.done ? "done" : `${span(e.at.s, e.at.e)} · ${P.dur(k.mins)}`, right: k.penalty ? "" : "+" + XP.task, act: "sheet", id: k.dl ? "deadline:" + k.dl : "task:" + k.id }) }); }
+  for (const { h, on } of q.habits) { const g = HABIT_GO[h.id], to = typeof g === "function" ? g() : g, st = habitStreak(h.id);
+    rows.push({ done: on, html: qRow({ done: on, box: tickBox("habit", h.id, on, h.name), title: esc(habitName(h, q)), sub: `${E.habitWeekCount(h.id)}/${E.habitTarget(h.id)} this week${st ? ` · <span class="qstreak">${px("flame")} ${st}</span>` : ""}`, right: `+${XP.habit}`, act: to ? "go" : "", id: to || "" }) }); }
+  return rows;
+}
+function questList(q) {
+  const rows = questRows(q), open = rows.filter(r => !r.done), done = rows.filter(r => r.done), all = q.total && q.done >= q.total;
+  return `<div class="panel quests qlist"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Today's quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
+    ${all ? `<div class="dclear">${px("trophy")} Day cleared</div>` : ""}
+    ${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
+    <div class="list">${open.map(r => r.html).join("")}</div>
+    ${done.length ? fold("q-done", `<span class="grow small muted">Done · ${done.length}</span>`, `<div class="list">${done.map(r => r.html).join("")}</div>`) : ""}
+    ${usageLine()}</div>`;
+}
+// The "Day cleared" moment: once a day, when the last quest is ticked.
+function dayCleared() {
+  const q = todayQuests(), t = E.today(); if (!q.total || q.done < q.total) return;
+  try { if (localStorage.getItem("kts-cleared") === t) return; localStorage.setItem("kts-cleared", t); } catch (e) { return; }
+  toast(`Day cleared · all ${q.total} quests`, true);
 }
 // v7: the due pile as one big button within thumb reach (Home and Study).
 function reviewBtn() { const n = K.queue().length; return n ? `<button class="btn go block big rvbig" data-act="go" data-id="cards/review">${px("scroll")} Review ${n} due</button>` : ""; }
@@ -401,7 +483,7 @@ function drillPaint(ok) {
 const sgn = n => (n > 0 ? "+" : "") + n;
 let drLen = 120;
 function vDrill() {
-  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>`;
   if (Dr.running()) return drillRunHtml();
   const head = `${back}<header class="top"><div><div class="hdr">Mental math</div><h1>Drill</h1></div></header>`;
   let end = "";
@@ -484,7 +566,7 @@ function vReport() {
   return `${head}${filt}${sumHtml}${empty}${bars}${secs}${other.length ? fold("rc-other", `<b class="grow">Other</b>`, other.map(rcRow).join(""), true) : ""}${rcExamForm()}${rcSub ? "" : rcDrill()}`;
 }
 function vPath() {
-  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>`;
   const fl = Pa.started() && Pa.floor();
   const head = `${back}<header class="top"><div><div class="hdr">${fl ? `Floor ${fl.n} · ${esc(fl.name)}` : "Job readiness"}</div><h1>The Path</h1></div></header>`;
   if (!Pa.ready()) return `${head}<p class="empty">The Path couldn't load. Check the connection and reopen.</p>`;
@@ -683,7 +765,7 @@ function questsPanel(q) {
     ${showAllQuests ? questsAll(q) : ""}</div>`;
 }
 // v8.1: the Japanese daily quest names today's N2 item.
-const habitName = (h, q) => h.id === "jp" && q.jp ? "日本語 · " + q.jp : h.name;
+const habitName = (h, q) => h.id === "jp" && q.jp ? "Japanese · " + q.jp : h.name;
 function questsAll(q) {
   return `<div class="qall">${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
     ${q.trials.length ? `<div class="qsec trial">${px("flag")} Trial <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}
@@ -823,7 +905,7 @@ function briefHtml() {
   const empty = d => !live("habitLog").some(h => h.date === d) && !live("tasks").some(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === d);
   const back = live("habitLog").length > 0 && empty(E.addDays(t, -1)) && empty(E.addDays(t, -2));
   const row = r => {
-    if (r.type === "gap") return `<div class="bl gap-l"><span class="mono">${span(r.s, r.e)}</span> <span class="muted">Gap</span>${r.fin && gi ? `<div class="small topic-l">${ic("target", "inl")} ${esc(gi.label)}: ${esc(gi.t)}</div>` : `<div class="small topic-l">${ic("target", "inl")} 日本語 · a few cards</div>`}</div>`;
+    if (r.type === "gap") return `<div class="bl gap-l"><span class="mono">${span(r.s, r.e)}</span> <span class="muted">Gap</span>${r.fin && gi ? `<div class="small topic-l">${ic("target", "inl")} ${esc(gi.label)}: ${esc(gi.t)}</div>` : `<div class="small topic-l">${ic("target", "inl")} Japanese · a few cards</div>`}</div>`;
     const b = r.b, subj = b.kind === "quest" && St.subjectOf(b), top = subj && St.current(subj), og = b.id === Dy.OUTREACH.id ? Dy.outreachGoals() : [];
     return `<div class="bl"><span class="mono">${span(r.s, r.e)}</span> <b>${esc(b.title)}</b>${b.room ? ` <span class="small muted">· ${esc(b.room)}</span>` : ""}${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}${og.map(g => `<div class="small topic-l">${ic("target", "inl")} ${esc(g.t)}</div>`).join("")}</div>`;
   };
@@ -833,7 +915,7 @@ function briefHtml() {
     ${back ? `<p class="small">No penalties for the days away. Clear any one quest today for +${Sy.COMEBACK_XP} XP.</p>` : ""}
     ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} ${penWhat(p)} · shop locked until done</div>`).join("")}` : ""}
     <div class="bsec">Schedule</div>${list.map(row).join("") || `<div class="bl muted">Nothing planned. A free day.</div>`}
-    ${Sy.has(NEEDS.jlpt) ? `<div class="bsec">日本語</div><div class="bl">${due} due · ${q.length - due} new${N2.ready() && N2.current() ? ` · grammar: ${esc(N2.current().g)}` : ""}</div>` : ""}
+    ${Sy.has(NEEDS.jlpt) ? `<div class="bsec">Japanese</div><div class="bl">${due} due · ${q.length - due} new${N2.ready() && N2.current() ? ` · grammar: ${esc(N2.current().g)}` : ""}</div>` : ""}
     <div class="btns"><button class="btn primary block" data-act="briefclose">Start the day</button></div></div>`;
 }
 
@@ -865,7 +947,7 @@ function reportDueBox(fg) {
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="focus">Report now</button></div>`);
 }
 function vFocus() {
-  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>`;
   if (g.open) { const o = g.o, subj = St.subjectOf(o.b), top = subj && St.current(subj);
     return `${back}<header class="top"><div><div class="hdr">Dungeon · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>${focusBody(g)}`; }
   {
@@ -950,6 +1032,7 @@ function alertList() {
     pens.length && ["pen:" + pens.map(p => p.id).join(","), penaltyBox()],
     fg.open && fg.ended && ["report:" + St.occKey(fg.o), reportDueBox(fg)],
     wd && ["wind:" + t, sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.")],
+    ...Dl.active(t).map(k => { const nx = Dl.nextSession(k.id); return ["dl:" + k.id + ":" + Dl.daysLeft(k, t), sysBox(`<b>${esc(k.title)}</b> · ${dlLeft(k)}`, nx ? `Next: ${esc(Dl.sessionName(nx, k))}` : "", `<div class="btns"><button class="btn sm" data-act="sheet" data-id="deadline:${k.id}">Open</button></div>`)]; }),
     ...Dl.unscored(t).map(d => ["examscore:" + d.id, sysBox(`${esc(d.title)}: how did it go?`, "Add the score and it goes on the Report Card.", `<div class="btns"><button class="btn sm" data-act="rcask" data-id="${d.id}">Add score</button></div>`)]),
     E.moneyDue() && ["money:" + E.weekStart(t), sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now"))],
     flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
@@ -967,7 +1050,7 @@ function dismiss(key) {
 }
 function vAlerts() {
   const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
-  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Notifications</h1>
+  return `<header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Notifications</h1></div></header>
   ${list.length ? `<p class="tiny muted" style="margin:10px 4px 0">Tap the red dot to dismiss an alert. It comes back if something changes.</p>` : ""}
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
@@ -977,7 +1060,7 @@ function vAlerts() {
 function vProfile() {
   const xp = E.xpTotal(), nx = Sy.nextStage(), tl = Sy.has(5) ? Cl.titles() : [], eq = (S.settings.classes || {}).equipped;
   const ups = levelUps(), discs = Sy.has(3) ? Cl.all().filter(d => Cl.bossPassed(d.id) || Cl.active().includes(d.id)) : [];
-  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>
+  return `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>
   <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
   ${profilePath()}
@@ -1919,10 +2002,6 @@ function dlFold() {
     return `<button class="item row between tbtn" data-act="sheet" data-id="deadline:${k.id}"><span class="grow"><b class="small">${esc(k.title)}</b><div class="small muted">${dlWhen(k)} · ${dlLeft(k)}${ps.length ? ` · prep ${n}/${ps.length}` : ""}</div></span>${ic("right")}</button>`; }).join("")}</div>`);
 }
 // Home: one line per deadline, only from its start date.
-function dlHome() {
-  return Dl.active().slice(0, 2).map(k => { const nx = Dl.nextSession(k.id);
-    return `<button class="panel dlline" data-act="sheet" data-id="deadline:${k.id}">${px("flag")}<span class="grow"><b>${esc(k.title)}</b> · ${dlLeft(k)}${nx ? ` · next: ${esc(Dl.sessionName(nx, k))}` : ""}</span></button>`; }).join("");
-}
 function dlFormHtml() {
   return `<h3>Deadline</h3><div class="panel" id="dlForm">
     <label class="f">What<input data-f="title" placeholder="e.g. Social psych paper" enterkeyhint="next"></label>
@@ -2197,7 +2276,7 @@ function vTrainHome() {
   const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const hasData = live("workouts").some(x => (x.entries || []).some(e => e.sets.length)) || live("runs").length > 0;
   // Gate closed: one card saying when, and today's session folded away instead of greyed-out rows.
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Workout</h1></div>${gear("body")}</header>
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button><h1>Workout</h1></div>${gear("body")}</header>
   ${gate.open ? `<div class="hero">${session}</div>` : lockedHtml(gate) + fold("train-peek", `<b class="grow">Peek: ${esc(plan.name)}</b><span class="small muted">${plan.slots.length + plan.extra.length} exercises</span>`, session)}
   ${drawer ? sessionDrawer() : ""}
   <div class="quiet-links"><button data-act="go" data-id="train/runs">${ic("right", "inl")} Runs · longest ${Math.max(0, ...live("runs").map(r => r.km))}/${RUN_GOAL_KM} km</button><button data-act="go" data-id="train/pick/browse">${ic("right", "inl")} Exercise library</button></div>
@@ -2779,8 +2858,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const g = N2.finish(id); if (!g) return; save();
       const p = N2.pos(), A = Pa.arc("n2");
       if (g.floor) toast(`+${g.xp} XP · Floor ${g.floor.n} open: ${g.floor.name}`, true);
-      else if (p % Pa.ARC === 0) toast(`+${g.xp} XP · 日本語: Arc ${A.n - 1} cleared.${N2.current()?.gate ? " A Gate Test stands before the next." : ""}`, true);
-      else announce([{ xp: g.xp, label: "日本語 · " + g.label }, g.habit]);
+      else if (p % Pa.ARC === 0) toast(`+${g.xp} XP · Japanese: Arc ${A.n - 1} cleared.${N2.current()?.gate ? " A Gate Test stands before the next." : ""}`, true);
+      else announce([{ xp: g.xp, label: "Japanese · " + g.label }, g.habit]);
       return render();
     }
     case "jpgo": return jpStart(+id);
@@ -2878,6 +2957,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "drk": { const ok = Dr.key(id); drillPaint(ok); return; }
     case "drskip": Dr.skip(); drillPaint(true); return;
     case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
+    case "srgo": return srRun(srHits[+id]);
+    case "rcadd": rcForm = true; rcPre = null; return goR("report");
     case "rcper": rcPeriod = id; return render();
     case "rcsub": rcSub = rcSub === id ? null : id; return render();
     case "rcmode": rcMode = id; return render();
