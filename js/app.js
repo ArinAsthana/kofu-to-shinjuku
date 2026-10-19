@@ -1890,6 +1890,8 @@ function vLex() {
   if (lx.type === "mined") return head + pills + minedList();
   if (!Lx.ready()) return head + lexImportHtml();
   const m = Lx.recs(), lv = Lx.LEVELS[lx.type];
+  const upd = Lx.version() < Lx.LATEST ? `<div class="panel"><h3>New deck version</h3><p class="small muted">Example sentences, parts of speech and smarter choices. Open the new <b>the-arin-japanese-decks.json</b>. Your progress stays.</p>
+    <div class="btns"><label class="btn go">${ic("plus")} Choose the file<input type="file" accept="application/json,.json" data-ch="leximport" hidden></label></div></div>` : "";
   if (lx.level && !lv.includes(lx.level)) lx.level = null;
   const chip = l => { const c = Lx.counts(lx.type, l, m), on = lx.level === l;
     return `<button class="lvchip ${on ? "on" : ""}" data-act="lexlvl" data-id="${l || ""}" aria-pressed="${on}"><b>${l || "All"}</b><span class="mono">${c.all.toLocaleString("en-US")}</span>
@@ -1902,7 +1904,7 @@ function vLex() {
       ${open ? `<div class="lexdet">${st !== "new" ? `<span class="tag">${st}</span> ` : ""}${e.type === "kanji" && Mi.seenIn(e.kanji).length ? `<div class="small">Seen in: <span class="ja">${esc(Mi.seenIn(e.kanji).join("、"))}</span></div>` : ""}${e.type === "kanji" ? `${e.examples ? `<div class="ja small">${esc(e.examples).replace(/\n/g, "<br>")}</div>` : ""}` : `${e.ex ? `<div class="ja small">${esc(e.ex)}</div><div class="small muted">${esc(e.exEn || "")}</div>` : ""}`}
         <div class="btns"><button class="btn sm" data-act="lexsay" data-id="${e.id}">${ic("sound")} Listen</button></div></div>` : ""}</div>`; };
   const cnt = Lx.counts(lx.type, lx.level, m);
-  return `${head}${pills}
+  return `${head}${pills}${upd}
   <div class="lvchips">${[null, ...lv].map(chip).join("")}</div>
   <div class="panel lexbar">
     <div class="pills st">${LX_ST.map(([k, l]) => `<button class="pill" data-act="lexst" data-id="${k}" aria-pressed="${lx.st === k}">${l}${k !== "all" ? ` <span class="mono">${cnt[k]}</span>` : ""}</button>`).join("")}</div>
@@ -1911,7 +1913,8 @@ function vLex() {
     ${lx.sel ? `<div class="btns"><span class="small grow">${lx.sel.size} selected</span><button class="btn sm" data-act="lexbulk" data-id="off">Turn off</button><button class="btn sm" data-act="lexbulk" data-id="on">Turn on</button><button class="btn sm" data-act="lexshown">Turn off all ${L.length} shown</button></div>` : ""}
   </div>
   <div class="lexlist">${shown.map(row).join("") || `<p class="empty">Nothing here.</p>`}</div>
-  ${L.length > shown.length ? `<div class="btns"><button class="btn block" data-act="lexmore">Show more · ${L.length - shown.length} left</button></div>` : ""}`;
+  ${L.length > shown.length ? `<div class="btns"><button class="btn block" data-act="lexmore">Show more · ${L.length - shown.length} left</button></div>` : ""}
+  ${upd ? "" : `<div class="btns"><label class="btn sm">Re-import decks<input type="file" accept="application/json,.json" data-ch="leximport" hidden></label></div>`}`;
 }
 // v12: the Mined list, newest first. Source tag, status, and an N-level chip when the word is also in the deck.
 function minedList() {
