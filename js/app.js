@@ -22,6 +22,9 @@ import * as Lx from "./lexicon.js";
 import * as N2 from "./n2.js";
 import * as Dy from "./day.js";
 import * as Dl from "./deadlines.js";
+import * as Dr from "./drill.js";
+import * as Rc from "./report.js";
+import * as Sr from "./search.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -75,7 +78,7 @@ document.addEventListener("touchend", e => {
     if (d < el.dataset.min || d > el.dataset.max) return;
     planDate = d === E.today() ? null : d; entering = true; render(); return;
   }
-  const T = openTabs(), cur = T.findIndex(([k]) => k === (TAB_OF[route()[0]] || "home")), next = T[cur + (dx < 0 ? 1 : -1)];
+  const T = openTabs(), cur = T.findIndex(([k]) => k === (route()[0] || "home")), next = cur < 0 ? null : T[cur + (dx < 0 ? 1 : -1)];
   if (next) go(next[0]);
 }, { passive: true });
 window.addEventListener("hashchange", () => { if (location.hash === "#plan/people") { location.replace("#social"); return; } if (location.hash === "#plan/study") { location.replace("#study"); return; } if (location.hash.startsWith("#body")) { location.replace("#home"); return; } entering = true; sheet = null; draft = null; taskForm = null; blockForm = null; wishForm = null; personForm = false; hangSel = null; topicEdit = null; cardForm = null; rv = null; bulkOpen = false; if (!location.hash.startsWith("#jlpt/q")) jq = null; if (!location.hash.startsWith("#classes/q")) dq = null; chEdit = false; trialForm = null; battle = null; apForm = null; momentForm = null; if (recorder) recorder.stop(); if (afterNav) { afterNav(); afterNav = null; } render(); window.scrollTo(0, 0); });
@@ -83,7 +86,8 @@ window.addEventListener("hashchange", () => { if (location.hash === "#plan/peopl
 // Four tabs (v2). System = what to do now (the Dungeon launches from here); Plan = when things happen (Day, Week, People);
 // Store = money; Status = stats and skills. Body and Study are reached from System, not tabs.
 // v4: five fixed slots. A slot stays empty until its stage unlocks; tabs never shift.
-const TABS = [["home", "System", "eye", 0], ["plan", "Plan", "cal", 0], ["classes", "Study", "scroll", 3], ["people", "People", "people", 4], ["money", "Store", "coin", 2]];
+// v11: two tabs. Quests (opens with the app) and Notifications. Every other screen is reached by search or a quest.
+const TABS = [["home", "Quests", "sword", 0], ["alerts", "Notifications", "bell", 0]];
 const openTabs = () => TABS.filter(t => Sy.has(t[3]));
 // Old links still land somewhere: the Dungeon is a Home state, Status is Profile, topics live in Study, People is a tab.
 const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
@@ -91,18 +95,22 @@ const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study:
 // v6: flashcards open at any stage and outside blocks.
 const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 0, people: 4 }; // v9.4: Japanese is open from day one
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { lex: "scroll", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
-const TAB_OF = { lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
+const HEAD_PX = { lex: "scroll", drill: "sword", report: "star", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { drill: "home", report: "home", lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const si = $("#srch"), keepS = si && document.activeElement === si ? { v: si.value, p: si.selectionStart } : null; // v11: typing survives a re-render
   $("#app").innerHTML = (views[tab] || vHome)(rest);
+  if (keepS && $("#srch")) { const n = $("#srch"); n.value = keepS.v; n.focus(); try { n.setSelectionRange(keepS.p, keepS.p); } catch (e) {} srUpdate(); }
   const fresh = Sy.pendingUnlock();
-  $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
+  const nA = alertList().length;
+  $("#nav").innerHTML = TABS.map(([k, l, icon]) => `<button data-act="nav" data-id="${k}" ${tab === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}${k === "alerts" && nA ? `<b class="nbadge">${nA}</b>` : ""}</span></button>`).join("");
+  if (tab === "home") dayCleared();
   document.body.dataset.tab = tab;
   document.body.classList.toggle("silent", jpsOn() && !!jps.silent);
   // v9.1: workout mode. The page turns deep navy while a workout runs, and back to red when it ends.
@@ -115,9 +123,10 @@ function render() {
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
-  const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
+  const inDrill = tab === "drill" && Dr.running(); // v10: nothing pops over a running Drill
+  const cer = !sheet && !inDrill ? ceremony() : null, brief = briefOpen && !cer && !sheet && !inDrill;
   $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.update ? updateWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
-  $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
+  $("#fab").innerHTML = ["plan", "people"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
   document.body.classList.toggle("has-dbar", !!$("#app .dbar"));
   pushWidget();
@@ -224,16 +233,6 @@ function jpQuick() {
   if (jpsOn()) return `<div class="row between jps-bar"><span class="small">${px("sword")} ${jps.silent ? "Silent · in class" : `Quick start · ${jps.mins} min`}</span><span class="row" style="gap:8px">${jpsTimer()}<button class="btn sm" data-act="jpend">${jps.silent ? "Back to class" : "End"}</button></span></div>`;
   return `<div class="jps-row">${[5, 15, 30].map(m => `<button class="btn sm ${m === 15 ? "go" : ""}" data-act="jpgo" data-id="${m}">${m} min</button>`).join("")}</div>`;
 }
-// v9 §3: two tiles under Now. PLAN shows the next block; 日本語 starts a 5-minute session in one tap.
-function homeTiles() {
-  // v9.5: the Plan tile is gone (Now already shows what's next); only 日本語 stays, full width.
-  const jp = Sy.has(NEEDS.jlpt), due = jp ? K.queue().filter(c => c.intro).length : 0;
-  if (!jp) return "";
-  return `<div class="tiles one">
-    ${`<div class="tile jp"><button class="tile-main" data-act="go" data-id="jlpt"><span class="hdr">日本語</span><b class="tile-t">${jpsOn() ? `<span id="jpsT">${mmss(jpsLeft())}</span>` : due || !K.queue().length ? `${due} due` : `${K.queue().length} new`}</b><span class="small muted">${jpsOn() ? "in session" : "5 min"}</span></button>
-      <button class="tile-go" data-act="${jpsOn() ? "go" : "jpgo"}" data-id="${jpsOn() ? "cards/review" : "5"}" aria-label="${jpsOn() ? "Resume" : "Start 5 minutes of Japanese"}">${ic("play")}</button></div>`}
-  </div>`;
-}
 // v9 §4 and §7: a class gap shows its one finance item; the Outreach slot shows its goals.
 function dayCard() {
   const nw = Dy.watchNow();
@@ -242,7 +241,7 @@ function dayCard() {
     return `<div class="panel daycard nwatch"><div class="row between"><span class="hdr">${px("eye")} Night watch · until ${P.toHM(nw.e)}</span><span class="small mono">${d.n} done${d.ahead ? ` · +50% · ${d.ahead} ahead` : ""}</span></div>
       <p class="tiny muted" style="margin:4px 0 6px">Shift work is done. The rest of the night is yours. Nothing here times out, so a customer can interrupt any time.${d.n < Dy.NW_AT ? ` ${Dy.NW_AT} items: +${Dy.NW_BONUS} XP.` : ""}</p>
       ${its.map(x => `<div class="item row between"><div class="grow"><b class="small">${esc(x.label)}</b><div class="small muted">${esc(x.t)}</div></div>${x.k ? `<button class="btn sm go" data-act="taskdone" data-id="${x.k.id}">Report</button>` : `<button class="btn sm go" data-act="pathahead" data-id="${x.s}">Go ahead</button>`}</div>`).join("") || `<div class="small muted">Both streams are waiting on a Gate Test.</div>`}
-      ${Sy.has(NEEDS.jlpt) ? `<div class="btns"><button class="btn sm" data-act="jpgo" data-id="5">Break: 5 min 日本語</button></div>` : ""}</div>`;
+      ${Sy.has(NEEDS.jlpt) ? `<div class="btns"><button class="btn sm" data-act="jpgo" data-id="5">Break: 5 min Japanese</button></div>` : ""}</div>`;
   }
   const gp = Dy.gapNow();
   if (gp) {
@@ -258,18 +257,168 @@ function dayCard() {
   return "";
 }
 function vHome() {
-  const t = E.today(), n = alertList().length, hs = homeState(t), q = todayQuests(t), a1 = Sy.act1(), sk = Sy.streak();
+  const t = E.today(), hs = homeState(t), q = todayQuests(t);
   const dungeon = hs.k === "study" || hs.k === "body";
-  return `
-  <header class="top"><div class="hihead" data-act="nav" data-id="profile" role="link" aria-label="Profile, level ${E.level()}"><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}
-    ${dungeon ? "" : `<div class="hilv"><b>LV ${E.level()}</b><span class="hilv-bar"><i style="width:${E.levelProgress() * 100}%"></i></span><span>${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to ${E.level() + 1}</span></div>`}</div>
-    <div class="row" style="gap:8px"><button class="rbtn bell" data-act="nav" data-id="alerts" aria-label="Notifications, ${n} new">${ic("bell")}${n ? `<span class="badge">${n}</span>` : ""}</button>
-    ${gear("home")}</div></header>
-  ${dungeon ? "" : actLine(a1)}
-  ${homeHero(hs, t)}
-  ${dungeon ? "" : dayCard() + homeTiles() + dlHome()}
-  ${dungeon ? `<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questsAll(q) : ""}` : questsPanel(q)}
-  ${dungeon ? dungeonBar(hs) : ""}`;
+  const head = `<header class="top"><div class="hihead" data-act="nav" data-id="profile" role="link" aria-label="Profile, level ${E.level()}"><div class="hdr">${E.fmtDate(t)}</div><h1>Hi, ${esc(S.settings.name || "Arin")}.</h1>${Cl.identity() ? `<div class="ident">${esc(Cl.identity())}</div>` : ""}
+    ${dungeon ? "" : `<div class="hilv"><b>LV ${E.level()}</b><span class="hilv-bar"><i style="width:${E.levelProgress() * 100}%"></i></span><span>${Math.round((1 - E.levelProgress()) * LEVEL_XP)} XP to ${E.level() + 1}</span></div>`}</div></header>`;
+  // Takeovers: a running Dungeon or workout replaces the list.
+  if (dungeon) return `${head}${homeHero(hs, t)}<button class="quiet-row" data-act="questsall"><span class="grow">Quests ${q.done}/${q.total}</span><span class="chev">${ic("right")}</span></button>${showAllQuests ? questList(q) : ""}${dungeonBar(hs)}`;
+  const hero = hs.k === "next" ? (Pa.running() ? homeHero(hs, t) : "") : homeHero(hs, t);
+  return `${head}${searchBar()}${hero}${dayCard()}${questList(q)}`;
+}
+/* ---------- v11: search ---------- */
+const searchBar = () => `<div class="srch" id="srchWrap"><label class="srch-box">${ic("search")}<span class="srch-in"><span class="srch-ghost" id="srchGhost" aria-hidden="true"></span><input id="srch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" placeholder="Search or jump to…" aria-label="Search features" role="combobox" aria-controls="srchList"></span></label><div class="srch-list" id="srchList" role="listbox"></div></div>`;
+let srHits = [], srSel = 0, srCmd = null, srDone = null; // srDone: the command just applied, with its undo
+// v11.1: things in the app, built per search: to-dos, deadlines, daily quests, the Path, people, decks, wishlist items.
+const thing = (name, hint, route, icon) => ({ name, hint, route, icon, keys: [Sr.norm(name)] });
+function srThings() {
+  const out = [], t = E.today();
+  for (const k of live("tasks")) if (!k.done && !k.path && !k.trial && !Dl.isDeadline(k)) out.push(thing(k.title, k.dl ? "prep session" : "to-do", k.dl ? "a:sheet:deadline:" + k.dl : "a:sheet:task:" + k.id, "check"));
+  for (const k of Dl.list(t)) out.push(thing(k.title, `deadline · ${dlLeft(k)}`, "a:sheet:deadline:" + k.id, "flag"));
+  for (const h of HABITS) { const g = HABIT_GO[h.id], to = typeof g === "function" ? g() : g; if (to) out.push(thing(h.name, "daily quest", to, "sword")); }
+  if (Pa.started()) for (const k of Pa.today(t).list || []) out.push(thing(`${Pa.stream(k.path.stream).label}: ${pathText(k)}`, "Path today", k.path.stream === "mental" ? "drill" : "path", "flag"));
+  if (Sy.has(4)) for (const pp of live("people")) out.push(thing(pp.name, "person", "people/p/" + pp.id, "people"));
+  for (const d of K.deckNames()) out.push(thing(d, "deck", "cards/deck/" + encodeURIComponent(d), "scroll"));
+  if (Sy.has(2)) for (const w of live("wishlist").filter(x => !x.bought)) out.push(thing(w.name, `wishlist · ${yen(w.price)}`, "money", "coin"));
+  return out;
+}
+// Lexicon words: kanji, kana, romaji (taberu → たべる) or English. Opens the word in the Lexicon.
+function srWords(v) {
+  if (!Lx.ready()) return [];
+  const q = v.trim(), ql = q.toLowerCase(), h = Sr.kana(q), kk = h ? Sr.kata(h) : "", out = [];
+  const en = /^[a-z][a-z ]{2,}$/.test(ql) ? new RegExp("(^|[^a-z])" + ql.replace(/[^a-z ]/g, "")) : null;
+  for (const type of ["vocab", "kanji"]) for (const L of Lx.all(type)) {
+    const f = Lx.face(L), r = Lx.reading(L);
+    const hit = f.startsWith(q) || (/[^\x00-\x7f]/.test(q) && r.split("、").some(x => x.startsWith(q))) || (h && r.split("、").some(x => x.startsWith(h) || x.startsWith(kk))) || (en && en.test((L.meaning || "").toLowerCase()));
+    if (hit) { out.push({ name: f, hint: `${r} · ${(L.meaning || "").slice(0, 40)}`, route: "a:lexfind:" + L.id, icon: "scroll", jp: true }); if (out.length >= 3) return out; }
+  }
+  return out;
+}
+// The confirm card for a typed command, or the "done, undo?" card after one.
+function srCmdHtml() {
+  if (srDone) return `<div class="srch-cmd"><div class="small">${esc(srDone.text)}</div><div class="btns"><button class="btn sm" data-act="cmdundo">Undo</button></div></div>`;
+  const c = srCmd; if (!c) return "";
+  const what = c.kind === "deadline" ? `Add deadline: <b>${esc(c.title)}</b> · ${esc(Dl.KINDS[c.dlKind])} · due ${esc(E.fmtDate(c.due))}`
+    : c.kind === "task" ? `Add to-do: <b>${esc(c.title)}</b> · ${P.dur(c.mins)}` : c.kind === "move" ? `Move <b>${esc(c.block)}</b> to ${c.start} today`
+    : `Exam result: <b>${esc(c.name)}</b> · ${c.score}/${c.of} · ${Math.round(c.score / c.of * 100)}%`;
+  return `<div class="srch-cmd"><div class="small">${what}</div><div class="btns"><button class="btn sm go" data-act="cmdapply">Apply</button><button class="btn sm" data-act="cmdedit">Edit</button></div></div>`;
+}
+// Today's occurrence of a block whose title matches.
+function blockToday(name) {
+  const q = Sr.norm(name), seg = P.segments(E.today()).filter(x => x.b && !x.tail);
+  return (seg.find(x => Sr.norm(x.b.title) === q) || seg.find(x => Sr.norm(x.b.title).includes(q) || q.includes(Sr.norm(x.b.title)))
+    || (/gym|workout|lift|train/.test(q) && seg.find(x => P.isWorkout(x.b))) || {}).b || null;
+}
+function cmdApply() {
+  const c = srCmd; if (!c) return; let text = "", undo = null;
+  if (c.kind === "deadline") { const r = Dl.add({ title: c.title, kind: c.dlKind, due: c.due }); text = `Added ${c.title}, due ${E.fmtDate(c.due)}, with ${r.sessions.length} prep session${r.sessions.length === 1 ? "" : "s"}.`; undo = () => { for (const k of live("tasks").filter(k => k.dl === r.d.id)) remove("tasks", k.id); remove("tasks", r.d.id); }; }
+  else if (c.kind === "task") { const mins = P.TASK_LEN.reduce((m, x) => Math.abs(x - c.mins) < Math.abs(m - c.mins) ? x : m), k = put("tasks", { title: c.title, mins, prio: 2, energy: "med", done: false, created: Date.now(), pin: null }); text = `Added ${c.title}. The System finds it a slot.`; undo = () => remove("tasks", k.id); }
+  else if (c.kind === "exam") { const r = Rc.addExam({ name: c.name, subject: "Other", date: E.today(), score: c.score, of: c.of }); text = `Saved ${c.name}: ${Math.round(c.score / c.of * 100)}% on the Report Card.`; undo = () => Rc.dropExam(r.id); }
+  else if (c.kind === "move") {
+    const b = blockToday(c.block); if (!b) return toast(`No block like "${c.block}" today`);
+    const lk = P.editLock(b); if (lk) return toast(`Locked: starts or runs ${P.toHM(lk.s)}–${P.toHM(lk.e)}. Edit after ${P.toHM(lk.until)}.`);
+    const toM = x => { const [h, m] = x.split(":").map(Number); return h * 60 + m; }, len = ((toM(b.end) - toM(b.start)) % 1440 + 1440) % 1440 || 60, e = P.toHM((toM(c.start) + len) % 1440), t = E.today(), old = { ...b };
+    if ((b.days || []).length) { put("blocks", { ...b, skip: [...new Set([...(b.skip || []), t])] }); const nb = put("blocks", { title: b.title, kind: b.kind, days: [], date: t, start: c.start, end: e, locked: !!b.locked, from: b.id }); undo = () => { remove("blocks", nb.id); put("blocks", old); }; }
+    else { put("blocks", { ...b, start: c.start, end: e }); undo = () => put("blocks", old); }
+    text = `${b.title} moved to ${c.start}–${e} today.`;
+  }
+  save(); srDone = { text, undo }; srCmd = null; const inp = $("#srch"); if (inp) inp.value = ""; render(); setTimeout(() => $("#srch")?.focus(), 0);
+}
+function cmdEdit() {
+  const c = srCmd; if (!c) return; const inp = $("#srch"); if (inp) { inp.value = ""; inp.blur(); } srCmd = null;
+  const fill = (sel, vals) => setTimeout(() => { for (const [f, v] of Object.entries(vals)) { const el = document.querySelector(`${sel} [data-f="${f}"]`); if (el) el.value = v; } }, 0);
+  if (c.kind === "deadline") { dlMove = null; sheet = "deadline"; render(); fill("#dlForm", { title: c.title, kind: c.dlKind, due: c.due }); }
+  else if (c.kind === "task") { taskForm = "new"; sheet = "task"; render(); fill("#taskForm", { title: c.title, mins: P.TASK_LEN.reduce((m, x) => Math.abs(x - c.mins) < Math.abs(m - c.mins) ? x : m) }); }
+  else if (c.kind === "exam") { rcForm = true; rcPre = { name: c.name, date: E.today(), score: c.score, of: c.of }; goR("report"); }
+  else { const b = blockToday(c.block); if (!b) return toast(`No block like "${c.block}" today`); blockForm = b.id; blockNew = null; sheet = "block"; render(); }
+}
+const ACT_NEEDS = { moment: 4 };
+function srNeed(it) { if (!it.route.startsWith("a:")) return NEEDS[it.route.split("/")[0]] || 0; return ACT_NEEDS[it.route.split(":")[1]] || 0; }
+// Before typing: what fits now (a class gap, the Mental Math item, the next deadline step), then recent searches.
+function srSuggest() {
+  const out = [], add = it => { if (it && !out.some(x => x.route === it.route) && !(srNeed(it) && !Sy.has(srNeed(it)))) out.push(it); };
+  if (Dy.gapNow()) add(Sr.byRoute("a:jpgo:5"));
+  if (Pa.started() && (Pa.today().list || []).some(k => k.path.stream === "mental" && !k.done)) add(Sr.byRoute("a:drillgo:classic"));
+  const d = Dl.active()[0], nx = d && Dl.nextSession(d.id); if (nx) add({ name: `${d.title}: ${Dl.sessionName(nx, d)}`, hint: "next step", route: "a:sheet:deadline:" + d.id, icon: "flag" });
+  Sr.recent().slice(0, 2).forEach(r => add(Sr.byRoute(r)));
+  ["a:jpgo:5", "drill", "plan", "report"].forEach(r => out.length < 4 && add(Sr.byRoute(r)));
+  return out.slice(0, 4);
+}
+function srUpdate() {
+  const inp = $("#srch"), list = $("#srchList"), gh = $("#srchGhost"); if (!inp || !list) return;
+  const v = inp.value; srCmd = v.trim() ? Sr.command(v, E.today()) : null;
+  srHits = v.trim() ? [...Sr.find(v, 6, srThings()), ...srWords(v)].slice(0, 8) : srSuggest(); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
+  const rest = v ? Sr.complete(v, srHits[0]) : "";
+  gh.innerHTML = rest ? `<span class="gh-t">${esc(v)}</span>${esc(rest)}` : "";
+  list.innerHTML = srCmdHtml() + (v.trim() ? "" : `<div class="srch-h">${srHits.length ? "Suggested" : ""}</div>`) + (srHits.map((it, i) => { const nd = srNeed(it), lk = nd && !Sy.has(nd);
+    return `<button class="srch-it ${i === srSel ? "sel" : ""} ${lk ? "lk" : ""}" data-act="srgo" data-id="${i}" role="option" aria-selected="${i === srSel}">${px(it.icon || "eye")}<span class="grow"><b>${esc(it.name)}</b><span class="muted"> · ${lk ? `Locked · unlocks at stage ${nd}` : esc(it.hint)}</span></span></button>`; }).join("") || (v.trim() && !srCmd ? `<div class="srch-h">No match. Try a feature name.</div>` : ""));
+}
+function srRun(it) {
+  if (!it) return;
+  const nd = srNeed(it); if (nd && !Sy.has(nd)) return toast(`Locked · unlocks at stage ${nd}`);
+  if (Sr.byRoute(it.route)) Sr.remember(it);
+  const inp = $("#srch"); if (inp) { inp.value = ""; inp.blur(); }
+  if (!it.route.startsWith("a:")) return goR(it.route);
+  const [, a, ...idp] = it.route.split(":"), b = document.createElement("button");
+  b.dataset.act = a; if (idp.join(":")) b.dataset.id = idp.join(":"); b.hidden = true; document.body.append(b); b.click(); b.remove();
+}
+function srFocus() { if (route()[0] !== "home") { afterNav = () => setTimeout(() => $("#srch")?.focus(), 0); go("home"); } else $("#srch")?.focus(); }
+document.addEventListener("input", e => { if (e.target.id === "srch") { srSel = 0; srDone = null; srUpdate(); } });
+document.addEventListener("focusin", e => { if (e.target.id === "srch") srUpdate(); });
+document.addEventListener("keydown", e => {
+  const inp = e.target.id === "srch" ? e.target : null;
+  if (!inp) {
+    const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || "") || document.activeElement?.isContentEditable;
+    if (!typing && !document.body.classList.contains("modal-open") && !(Dr.running() && route()[0] === "drill") && (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"))) { e.preventDefault(); srFocus(); }
+    return;
+  }
+  const rest = inp.value ? Sr.complete(inp.value, srHits[0]) : "";
+  if ((e.key === "Tab" || (e.key === "ArrowRight" && inp.selectionStart === inp.value.length)) && rest) { e.preventDefault(); inp.value = srHits[0].name; srUpdate(); }
+  else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); srSel = (srSel + (e.key === "ArrowDown" ? 1 : -1) + srHits.length) % Math.max(1, srHits.length); srUpdate(); }
+  else if (e.key === "Enter") { e.preventDefault(); if (srCmd) cmdApply(); else srRun(srHits[srSel] || srHits[0]); }
+  else if (e.key === "Escape") { inp.value = ""; inp.blur(); }
+});
+/* ---------- v11: today's quests, each one a way into its page ---------- */
+// Days in a row this habit was done, ending today (or yesterday while today is still open).
+function habitStreak(id) {
+  let d = E.today(); if (!E.habitDone(id, d)) d = E.addDays(d, -1);
+  let n = 0; while (E.habitDone(id, d) && n < 999) { n++; d = E.addDays(d, -1); }
+  return n;
+}
+const HABIT_GO = { anki: "cards/review", jp: "jlpt", fin: () => Sy.has(NEEDS.classes) ? "classes" : "path", math: "drill", case: "path", gym: () => Sy.has(NEEDS.train) ? "train" : null };
+const qRow = ({ done, box, title, sub, right, act, id, cls = "" }) => `<div class="q qr ${done ? "done" : ""} ${cls}">${box}
+  ${act ? `<button class="grow tbtn" data-act="${act}" data-id="${esc(id)}"><div class="t">${title}</div>${sub ? `<div class="small muted">${sub}</div>` : ""}</button>` : `<div class="grow"><div class="t">${title}</div>${sub ? `<div class="small muted">${sub}</div>` : ""}</div>`}
+  <div class="xp">${right}</div></div>`;
+const tickBox = (act, id, on, label) => `<button class="bx" data-act="${act}" data-id="${id}" aria-pressed="${!!on}" aria-label="${esc(label)} done">${on ? ic("check") : ""}</button>`;
+function questRows(q) {
+  const t = E.today(), p = P.plan(), rows = [];
+  if (jpsOn()) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("sword")}</span>`, title: "Japanese · in session", sub: `<span id="jpsT">${mmss(jpsLeft())}</span> left`, right: "", act: "go", id: "cards/review" }) });
+  if (Pa.started()) {
+    for (const g of Pa.gates().filter(g => g.retakeAt <= Date.now())) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("gate")}</span>`, title: `${tag("trial", "Gate")} Gate Test · ${esc(Pa.stream(g.stream).label)}`, sub: `${Math.round(Pa.GATE_PASS * 100)}% to pass`, right: `+${Pa.XP_GATE}`, act: "go", id: "path/gate/" + g.stream }) });
+    for (const r of allRaids().filter(r => r.days <= 7).slice(0, 2)) rows.push({ done: false, html: qRow({ box: `<span class="lockbox">${px("skull")}</span>`, title: `${tag("raid", `Raid · ${r.days <= 0 ? "today" : r.days + "d"}`)} ${esc(r.name)}`, sub: "", right: "", act: "go", id: "path" }) });
+  }
+  for (const x of q.trials) rows.push({ done: !!x.done, html: trialRow(x.k, x.done) });
+  for (const k of q.path.list) rows.push({ done: !!k.done, html: qRow({ done: k.done, box: tickBox(k.done ? "taskundo" : "taskdone", k.id, k.done, k.title), title: esc(Pa.stream(k.path.stream).label) + (k.path.sun ? " · Sunday" : ""), sub: esc(pathText(k)), right: P.dur(k.mins), act: "go", id: k.path.stream === "mental" ? "drill" : k.path.stream === "n2" ? "jlpt" : "path" }) });
+  for (const e of q.events) { const k = e.k;
+    rows.push({ done: !!e.done, html: qRow({ done: e.done, cls: k.penalty ? "pen-q" : "", box: tickBox(e.done ? "taskundo" : "taskdone", k.id, e.done, k.title), title: (k.penalty ? tag("pen", "Penalty") + " " : "") + esc(k.title), sub: e.done ? "done" : `${span(e.at.s, e.at.e)} · ${P.dur(k.mins)}`, right: k.penalty ? "" : "+" + XP.task, act: "sheet", id: k.dl ? "deadline:" + k.dl : "task:" + k.id }) }); }
+  for (const { h, on } of q.habits) { const g = HABIT_GO[h.id], to = typeof g === "function" ? g() : g, st = habitStreak(h.id);
+    rows.push({ done: on, html: qRow({ done: on, box: tickBox("habit", h.id, on, h.name), title: esc(habitName(h, q)), sub: `${E.habitWeekCount(h.id)}/${E.habitTarget(h.id)} this week${st ? ` · <span class="qstreak">${px("flame")} ${st}</span>` : ""}`, right: `+${XP.habit}`, act: to ? "go" : "", id: to || "" }) }); }
+  return rows;
+}
+function questList(q) {
+  const rows = questRows(q), open = rows.filter(r => !r.done), done = rows.filter(r => r.done), all = q.total && q.done >= q.total;
+  return `<div class="panel quests qlist"><div class="row between"><b class="row" style="gap:8px">${px("sword")}Today's quests</b><span class="mono small">${q.done}/${q.total}</span></div>${bar(q.done / (q.total || 1), "var(--sys)")}
+    ${all ? `<div class="dclear">${px("trophy")} Day cleared</div>` : ""}
+    ${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
+    <div class="list">${open.map(r => r.html).join("")}</div>
+    ${done.length ? fold("q-done", `<span class="grow small muted">Done · ${done.length}</span>`, `<div class="list">${done.map(r => r.html).join("")}</div>`) : ""}
+    ${usageLine()}</div>`;
+}
+// The "Day cleared" moment: once a day, when the last quest is ticked.
+function dayCleared() {
+  const q = todayQuests(), t = E.today(); if (!q.total || q.done < q.total) return;
+  try { if (localStorage.getItem("kts-cleared") === t) return; localStorage.setItem("kts-cleared", t); } catch (e) { return; }
+  toast(`Day cleared · all ${q.total} quests`, true);
 }
 // v7: the due pile as one big button within thumb reach (Home and Study).
 function reviewBtn() { const n = K.queue().length; return n ? `<button class="btn go block big rvbig" data-act="go" data-id="cards/review">${px("scroll")} Review ${n} due</button>` : ""; }
@@ -356,12 +505,132 @@ function pathDoneHtml(id) {
   const ahead = !k.path.sun && E.today() < Pa.schedDate(k.path.idx);
   return `<div class="hdr">${px("flag")} Path · ${esc(Pa.stream(k.path.stream).label)}</div><h3 style="margin:6px 0">${esc(pathText(k))}</h3>
     ${ahead ? `<p class="small good-t">Ahead of schedule: +50% XP if it's Done.</p>` : ""}
-    ${k.path.stream === "mental" && !k.path.sun ? `<label class="f">Zetamac score (best of the two runs)<input id="zetIn" type="number" inputmode="numeric" placeholder="${Pa.zetamac()?.last ?? ""}"></label>` : ""}
+    ${k.path.stream === "mental" && !k.path.sun ? (() => { const tb = Dr.todayBest("classic"), n = Dr.todayRuns("classic").length;
+      return `<div class="panel" style="margin:8px 0"><div class="small">${n ? `Drill today: ${n} run${n === 1 ? "" : "s"} · best <b class="mono">${tb}</b>` : "Two Classic Drill runs, 2 min each. The best one is logged."}</div>
+        <div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">${n ? "Run again" : "Start Drill"}</button></div></div>
+        <label class="f">Score${tb != null ? "" : " (if you ran Zetamac outside the app)"}<input id="zetIn" type="number" inputmode="numeric" value="${tb ?? ""}" placeholder="${Pa.zetamac()?.last ?? ""}"></label>`; })() : ""}
     <div class="btns"><button class="btn go" data-act="pathfin" data-id="${k.id}|done">Done</button><button class="btn" data-act="pathfin" data-id="${k.id}|partly">Partly</button></div>
     <p class="tiny muted">Partly: half XP, and the stream still moves on. Not done: leave it. It waits for tomorrow and nothing else piles up.</p>`;
 }
+/* ---------- v10.0: Drill ---------- */
+let drillT = null, drillResult = null; // timer, and the last run's result for the end screen
+const mentalTask = () => Pa.ready() && Pa.started() ? live("tasks").find(k => k.path && k.path.stream === "mental" && !k.path.sun && !k.done && k.due <= E.today()) : null;
+function drillTick() {
+  clearInterval(drillT);
+  drillT = setInterval(() => {
+    if (Dr.running()) { const el = $("#drT"); if (el) el.textContent = Dr.left(); return; }
+    clearInterval(drillT); if (!Dr.current()) return;
+    drillResult = Dr.finish();
+    // Path: the 2nd Classic run of the day logs the best score to the open Mental Math item by itself.
+    const k = drillResult && drillResult.rec.mode === "classic" && Dr.todayRuns("classic").length >= 2 ? mentalTask() : null;
+    if (k) { const g = Pa.finish(k, "done", Dr.todayBest("classic")); drillResult.logged = g; }
+    save();
+    if (drillResult && drillResult.pb) setTimeout(() => toast(`New best · ${Dr.mode(drillResult.rec.mode).name} ${drillResult.rec.score}`, true), 400);
+    if (route()[0] === "drill") render();
+  }, 250);
+}
+const PAD = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "-", "0", "."];
+function drillRunHtml() {
+  const r = Dr.current();
+  return `<div class="drill-run" id="drillRun"><div class="row between"><span class="hdr">${esc(Dr.mode(r.mode).name)}</span><span class="mono dr-t"><b id="drT">${Dr.left()}</b> s</span></div>
+    <div class="dr-score mono">Score <b id="drS">${r.score}</b></div>
+    <div class="dr-q" id="drQ">${esc(r.p.q)}</div><div class="dr-in mono" id="drIn">${esc(r.input) || "&nbsp;"}</div>
+    <div class="dr-pad">${PAD.map(k => `<button class="dr-k" data-act="drk" data-id="${k}">${k === "-" ? "±" : k}</button>`).join("")}
+      <button class="dr-k sm" data-act="drskip">Skip</button><button class="dr-k sm" data-act="drquit">Stop</button><button class="dr-k" data-act="drk" data-id="del" aria-label="Delete">${ic("left")}</button></div></div>`;
+}
+// Updates the run in place (no full render while typing). ok = the problem changed.
+function drillPaint(ok) {
+  const r = Dr.current(); if (!r || !$("#drillRun")) return;
+  $("#drIn").innerHTML = esc(r.input) || "&nbsp;"; $("#drS").textContent = r.score;
+  if (ok) { const q = $("#drQ"); q.textContent = r.p.q; q.classList.remove("hit"); void q.offsetWidth; q.classList.add("hit"); }
+}
+const sgn = n => (n > 0 ? "+" : "") + n;
+let drLen = 120;
+function vDrill() {
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>`;
+  if (Dr.running()) return drillRunHtml();
+  const head = `${back}<header class="top"><div><div class="hdr">Mental math</div><h1>Drill</h1></div></header>`;
+  let end = "";
+  if (drillResult) {
+    const { rec, xp, pb, avg7 } = drillResult, b = Dr.best(rec.mode), k = mentalTask();
+    const slow = rec.slow || [];
+    end = `<div class="panel dr-end"><div class="hdr">${esc(Dr.mode(rec.mode).name)} · ${rec.secs} s</div>
+      <div class="dr-big mono">${rec.score}</div>
+      <div class="small mono">best ${b ?? rec.score}${avg7 != null ? ` · ${sgn(Math.round(rec.score - avg7))} vs 7-day avg` : ""}${xp ? ` · +${xp} XP` : ""}${pb ? " · new best" : ""}</div>
+      ${drillResult.logged ? `<div class="small good-t" style="margin-top:6px">Logged to the Path: best ${Dr.todayBest("classic")}.</div>` : k && rec.mode === "classic" ? `<div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">Run 2</button><button class="btn" data-act="drlog">Log ${Dr.todayBest("classic")} to the Path</button></div>` : ""}
+      <div class="btns"><button class="btn sm" data-act="go" data-id="report">Full history</button></div>
+      ${slow.length ? `<details class="key" style="margin-top:8px"><summary>Slow or skipped · ${slow.length}</summary>${slow.map(x => `<div class="row between small mono"><span>${esc(x.q)} = ${esc(Dr.answerText(x.a))}</span><span class="muted">${x.skipped ? "skipped" : x.s + " s"}</span></div>`).join("")}
+        <div class="btns"><button class="btn sm" data-act="drcards" ${drillResult.carded ? "disabled" : ""}>${drillResult.carded ? "In Drill slow" : "Make flashcards"}</button></div></details>` : ""}</div>`;
+  }
+  const rows = Dr.MODES.map(m => { const b = Dr.best(m.id), tb = Dr.todayBest(m.id), a = Dr.avg7(m.id);
+    return `<div class="panel row between"><div class="grow"><b>${esc(m.name)}</b><div class="tiny muted">${esc(m.note)}</div>
+      <div class="tiny mono" style="margin-top:4px">${b != null ? `best ${b}${a != null ? ` · 7-day ${Math.round(a)}` : ""}${tb != null ? ` · today ${tb}` : ""}` : "no runs yet"}</div></div>
+      <button class="btn sm go" data-act="drillgo" data-id="${m.id}${drLen === Dr.SECS ? "" : ":" + drLen}">${ic("play", "inl")} ${drLen < 120 ? drLen + " s" : drLen / 60 + " min"}</button></div>`; }).join("");
+  const lens = `<div class="seg" style="margin-bottom:8px">${Dr.LENGTHS.map(n => `<button data-act="drlen" data-id="${n}" aria-pressed="${n === drLen}">${n < 120 ? n + " s" : n / 60 + " min"}</button>`).join("")}</div>${drLen === Dr.SECS ? "" : `<p class="tiny muted">Custom length: saved, but kept off the best and the graph.</p>`}`;
+  return `${head}${end}${lens}${rows}<p class="tiny muted">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p>`;
+}
+/* ================= REPORT CARD (v10.1) ================= */
+let rcPeriod = "all", rcSub = null, rcForm = false, rcMode = "classic", rcPre = null; // rcPre: an exam deadline being scored
+const pc = p => Math.round(p * 100) + "%", pts = d => sgn(Math.round(d * 100)) + " pts";
+const rcBtn = () => `<button class="btn sm" data-act="go" data-id="report">See report card</button>`;
+function rcLine() { const s = Rc.summary(Rc.tests()); return s.gpa != null ? ` · ${s.gpa.toFixed(1)} ${s.letter}` : ""; }
+const RC_SECS = [["Gate Tests", x => x.src === "gate" && x.subject !== "Japanese"], ["Classes", x => x.src === "quiz" || x.src === "boss"], ["Japanese", x => x.subject === "Japanese"], ["Real exams", x => x.src === "exam" && x.subject !== "Japanese"]];
+function rcRow(x) {
+  const a = x.last, L = Rc.letter(x.best.pct);
+  const per = x.src === "place" ? Object.entries(a.per || {}).map(([l, [o, n]]) => `${l} ${o}/${n}`).join(" · ") : "";
+  const bits = [x.pass != null ? `pass ${pc(x.pass)} · ${pts(x.margin)}` : "", `${x.tries.length} attempt${x.tries.length === 1 ? "" : "s"}`, x.change != null ? `${pts(x.change)} vs last` : "", x.tries.length > 1 && x.best !== a ? `best ${pc(x.best.pct)}` : ""].filter(Boolean);
+  return `<div class="item rc-row"><div class="row between"><b class="grow">${esc(x.name)}</b><span class="mono">${a.score}/${a.of} · ${pc(a.pct)}</span>${x.graded ? `<span class="rc-l ${L[1] === "F" ? "bad" : ""}">${L[1]}</span>` : ""}</div>
+    <div class="tiny muted mono">${esc(dayLabel(a.date))}${x.passed != null ? ` · ${x.passed ? "passed" : "not passed"}` : ""} · ${bits.join(" · ")}</div>
+    ${per ? `<div class="tiny mono">${esc(per)}</div>` : ""}${a.notes ? `<div class="tiny muted">${esc(a.notes)}</div>` : ""}
+    ${x.src === "exam" ? `<div class="btns" style="margin-top:4px"><button class="btn sm danger" data-act="rcdrop" data-id="${a.id}">Delete</button></div>` : ""}</div>`;
+}
+function rcDrill() {
+  const st = Rc.drill(rcMode, rcPeriod), man = rcMode === "classic" ? Rc.manualZetamac() : [];
+  const chips = `<div class="chips">${Dr.MODES.map(m => `<button class="chip" data-act="rcmode" data-id="${m.id}" aria-pressed="${m.id === rcMode}">${esc(m.name)}</button>`).join("")}</div>`;
+  if (!st && !man.length) return `<h2>Mental math</h2>${chips}<div class="panel"><p class="small muted">No ${esc(Dr.mode(rcMode).name)} runs yet.</p><div class="btns"><button class="btn sm go" data-act="drillgo" data-id="${rcMode}">Start a Drill</button></div></div>`;
+  const s = Rc.drillSeries(rcMode, 30), hi = Math.max(10, ...s.best.filter(v => v != null)), max = Math.ceil(hi / 10) * 10;
+  const line = s.best.some(v => v != null) ? Ch.lines([{ d: s.avg, c: "dim", w: 1.5, dots: false }, { d: s.best, c: "acc", w: 2.5, r: 3 }],
+    { min: 0, max, ticks: [0, max / 2, max], label: "Drill daily best and 7-day average", labels: [[0, E.fmtDate(s.dates[0]).slice(4)], [29, "Today"]] }) : "";
+  const r = (l, v) => `<div class="row between small"><span class="muted">${l}</span><span class="mono">${v}</span></div>`;
+  return `<h2>Mental math</h2>${chips}<div class="panel">
+    ${st ? `${r("Runs", st.n)}${r("Best", st.best)}${r("Average", st.avg.toFixed(1) + " ± " + st.sd.toFixed(1))}${st.avg7 != null ? r("7-day average", st.avg7.toFixed(1)) : ""}${st.avg30 != null ? r("30-day average", st.avg30.toFixed(1)) : ""}${r("Problems a minute", st.ppm.toFixed(1))}${st.acc != null ? r("Accuracy", pc(st.acc)) : ""}` : ""}
+    ${line ? `<div style="margin-top:8px">${line}</div><div class="tiny muted mono">red: daily best · grey: 7-day average · 30 days</div>` : ""}
+    ${man.length ? `<div class="small" style="margin-top:8px">Zetamac (manual) · ${man.length} score${man.length === 1 ? "" : "s"} · best ${Math.max(...man.map(z => z.score))} · last ${man[man.length - 1].score}</div>` : ""}</div>`;
+}
+function rcExamForm() {
+  if (!rcForm) return `<div class="btns"><button class="btn sm" data-act="rcform">+ Exam result</button></div>`;
+  return `<div class="panel"><h3>Exam result</h3><div class="grid" id="rcForm">
+    <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Algebra midterm" value="${esc(rcPre?.name || "")}"></label>
+    <label class="f">Subject<input data-f="subject" list="rcSubs" placeholder="e.g. Math" value="${esc(rcPre?.subject || "")}"></label><datalist id="rcSubs">${Rc.subjectNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist>
+    <label class="f">Date<input type="date" data-f="date" value="${rcPre?.date || E.today()}"></label>
+    <label class="f">Score<input type="number" inputmode="decimal" data-f="score" value="${rcPre?.score ?? ""}"></label>
+    <label class="f">Out of<input type="number" inputmode="decimal" data-f="of" value="${rcPre?.of ?? 100}"></label>
+    <label class="f">Pass mark % (optional)<input type="number" inputmode="decimal" data-f="pass"></label>
+    <label class="f" style="flex-basis:100%">Notes<input data-f="notes"></label></div>
+    <div class="btns"><button class="btn go" data-act="rcsave">Save</button><button class="btn" data-act="rcform">Cancel</button></div></div>`;
+}
+function vReport() {
+  const back = `<button class="back" data-act="nav" data-id="profile">${ic("left")} Profile</button>`;
+  const all = Rc.tests(rcPeriod), subs = [...new Set(all.map(x => x.subject))].sort();
+  if (rcSub && !subs.includes(rcSub)) rcSub = null;
+  const ts = rcSub ? all.filter(x => x.subject === rcSub) : all, sm = Rc.summary(ts, rcSub), sj = Rc.subjects(all);
+  const head = `${back}<header class="top"><div><div class="hdr">Profile · ${rcPeriod === "sem" ? esc(Rc.semester().name) : "exam history"}</div><h1>Report Card</h1></div></header>`;
+  const filt = `<div class="seg">${Rc.PERIODS.map(([k, l]) => `<button data-act="rcper" data-id="${k}" aria-pressed="${k === rcPeriod}">${l}</button>`).join("")}</div>
+    ${subs.length > 1 ? `<div class="chips">${subs.map(n => `<button class="chip" data-act="rcsub" data-id="${esc(n)}" aria-pressed="${n === rcSub}">${esc(n)}</button>`).join("")}</div>` : ""}`;
+  const sumHtml = sm.n ? win("Summary", `<div class="row between"><div><div class="k">GPA</div><div class="dr-big mono rc-gpa">${sm.gpa.toFixed(1)} <span>${sm.letter}</span></div></div>
+      <div style="text-align:right">${sm.passOf ? `<div class="k">Pass rate</div><div class="mono">${sm.passN}/${sm.passOf} · ${pc(sm.passN / sm.passOf)}</div><div class="tiny muted mono">first try ${sm.firstN}/${sm.passOf} · ${pc(sm.firstN / sm.passOf)}</div>` : ""}</div></div>
+      ${sm.strong ? `<div class="small" style="margin-top:8px">Strongest <b>${esc(sm.strong.name)}</b> ${pc(sm.strong.avg)} · weakest <b>${esc(sm.weak.name)}</b> ${pc(sm.weak.avg)}</div>` : ""}
+      ${sm.month != null ? `<div class="small muted">This month ${pc(sm.month)}${sm.trend != null ? ` · ${pts(sm.trend)} vs last month` : ""}</div>` : ""}
+      <div class="tiny muted" style="margin-top:6px">A 90+, B 80, C 70, D 60, F under 60. Each test's best attempt counts.</div>`, "", "star") : "";
+  const bars = sj.length ? `<h2>By subject</h2><div class="panel rc-bars">${sj.map(s => `<div class="rc-b"><div class="row between small"><span>${esc(s.name)}</span><span class="mono">${pc(s.avg)}</span></div>
+      <div class="rc-track"><i style="width:${Math.min(100, s.avg * 100)}%"></i>${s.pass != null ? `<b style="left:${s.pass * 100}%" title="pass mark"></b>` : ""}</div></div>`).join("")}<div class="tiny muted mono">bar: average % · tick: pass mark</div></div>` : "";
+  const secs = RC_SECS.map(([name, f]) => { const L = ts.filter(f); return L.length ? fold("rc-" + name, `<b class="grow">${name}</b><span class="small muted">${L.length}</span>`, L.map(rcRow).join(""), true) : ""; }).join("");
+  const other = ts.filter(x => !RC_SECS.some(([, f]) => f(x)));
+  const empty = !all.length ? `<div class="panel"><p class="small muted">No tests in ${rcPeriod === "all" ? "the app yet" : "this period"}. Gate Tests, class quizzes, JLPT exams and real exams you add land here.</p></div>` : "";
+  return `${head}${filt}${sumHtml}${empty}${bars}${secs}${other.length ? fold("rc-other", `<b class="grow">Other</b>`, other.map(rcRow).join(""), true) : ""}${rcExamForm()}${rcSub ? "" : rcDrill()}`;
+}
 function vPath() {
-  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>`;
   const fl = Pa.started() && Pa.floor();
   const head = `${back}<header class="top"><div><div class="hdr">${fl ? `Floor ${fl.n} · ${esc(fl.name)}` : "Job readiness"}</div><h1>The Path</h1></div></header>`;
   if (!Pa.ready()) return `${head}<p class="empty">The Path couldn't load. Check the connection and reopen.</p>`;
@@ -376,7 +645,7 @@ function vPath() {
     return `<div class="panel pstream"><div class="row between"><b>${esc(s.label)}</b><span class="row" style="gap:6px">${badge}<span class="small muted">${P.dur(s.mins)}</span></span></div>
       <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : gt ? "Gate Test before Arc " + Pa.arc(s.id).n + "." : "Stream complete."}</div>
       ${gt ? "" : fold("arc-" + s.id, `<span class="grow tiny mono">Arc ${A.n} · ${A.done}/${A.size}</span>`, list, false, "arcf")}
-      ${s.id === "mental" && z ? `<div class="tiny muted" style="margin-bottom:6px">Zetamac best ${z.best} · average ${z.avg}</div>` : ""}
+      ${s.id === "mental" ? `<div class="row between tiny muted" style="margin-bottom:6px"><span>${Dr.best("classic") != null ? `Drill best ${Dr.best("classic")}` : z ? `Zetamac best ${z.best} · average ${z.avg}` : "Classic Drill: 2 min"}</span><button class="btn sm" data-act="go" data-id="drill">Drill</button></div>` : ""}
       ${gt ? gateBox(gt) : k ? `<div class="btns"><button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button></div>` : it ? `<div class="btns"><button class="btn sm" data-act="pathahead" data-id="${s.id}">Go ahead</button></div>` : ""}</div>`;
   }).join("");
   const due = K.dueCount(), c = Pa.cfg(), tdy = E.today();
@@ -476,7 +745,7 @@ function vGate(s) {
       <div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="gqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>
       ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(q.opts[q.a])}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
   return head + (r ? sysBox(r.passed ? `Gate cleared: ${r.ok}/${r.n}. Arc ${Pa.arc(s).n} is open.` : `${r.ok}/${r.n}. The Gate holds.`, r.passed ? (r.xp ? `+${r.xp} XP` : "") : `Your misses are now flashcards in ${esc(st.label)} mistakes. The retake opens in 24 hours.`,
-      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button></div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
+      `<div class="btns"><button class="btn sm primary" data-act="gatedone">Back to ${s === "n2" ? "Japanese" : "the Path"}</button>${rcBtn()}</div>`) : `<p class="small muted" style="margin:0 4px 10px">${esc(gq.title || "")}. ${Math.round(Pa.GATE_PASS * 100)}% to pass. One minute a question; it submits itself when time runs out.</p>`)
     + gq.qs.map(qHtml).join("")
     + (r ? "" : `<div class="btns"><button class="btn go block" data-act="gqsubmit">Submit</button></div>`);
 }
@@ -560,7 +829,7 @@ function questsPanel(q) {
     ${showAllQuests ? questsAll(q) : ""}</div>`;
 }
 // v8.1: the Japanese daily quest names today's N2 item.
-const habitName = (h, q) => h.id === "jp" && q.jp ? "日本語 · " + q.jp : h.name;
+const habitName = (h, q) => h.id === "jp" && q.jp ? "Japanese · " + q.jp : h.name;
 function questsAll(q) {
   return `<div class="qall">${q.call ? `<div class="q done"><span class="lockbox">${ic("check")}</span><div class="grow"><div class="t">Answer the call</div></div><div class="xp">+${CALL_XP}</div></div>` : ""}
     ${q.trials.length ? `<div class="qsec trial">${px("flag")} Trial <span>${q.trials.filter(x => x.done).length}/${q.trials.length}</span></div><div class="list">${q.trials.map(x => trialRow(x.k, x.done)).join("")}</div>` : ""}
@@ -700,7 +969,7 @@ function briefHtml() {
   const empty = d => !live("habitLog").some(h => h.date === d) && !live("tasks").some(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === d);
   const back = live("habitLog").length > 0 && empty(E.addDays(t, -1)) && empty(E.addDays(t, -2));
   const row = r => {
-    if (r.type === "gap") return `<div class="bl gap-l"><span class="mono">${span(r.s, r.e)}</span> <span class="muted">Gap</span>${r.fin && gi ? `<div class="small topic-l">${ic("target", "inl")} ${esc(gi.label)}: ${esc(gi.t)}</div>` : `<div class="small topic-l">${ic("target", "inl")} 日本語 · a few cards</div>`}</div>`;
+    if (r.type === "gap") return `<div class="bl gap-l"><span class="mono">${span(r.s, r.e)}</span> <span class="muted">Gap</span>${r.fin && gi ? `<div class="small topic-l">${ic("target", "inl")} ${esc(gi.label)}: ${esc(gi.t)}</div>` : `<div class="small topic-l">${ic("target", "inl")} Japanese · a few cards</div>`}</div>`;
     const b = r.b, subj = b.kind === "quest" && St.subjectOf(b), top = subj && St.current(subj), og = b.id === Dy.OUTREACH.id ? Dy.outreachGoals() : [];
     return `<div class="bl"><span class="mono">${span(r.s, r.e)}</span> <b>${esc(b.title)}</b>${b.room ? ` <span class="small muted">· ${esc(b.room)}</span>` : ""}${top ? `<div class="small topic-l">${ic("target", "inl")} ${esc(top.t)}</div>` : ""}${og.map(g => `<div class="small topic-l">${ic("target", "inl")} ${esc(g.t)}</div>`).join("")}</div>`;
   };
@@ -710,7 +979,7 @@ function briefHtml() {
     ${back ? `<p class="small">No penalties for the days away. Clear any one quest today for +${Sy.COMEBACK_XP} XP.</p>` : ""}
     ${pens.length ? `<div class="bsec bad-t">Penalty</div>${pens.map(p => `<div class="bl">${ic("lock", "inl")} ${penWhat(p)} · shop locked until done</div>`).join("")}` : ""}
     <div class="bsec">Schedule</div>${list.map(row).join("") || `<div class="bl muted">Nothing planned. A free day.</div>`}
-    ${Sy.has(NEEDS.jlpt) ? `<div class="bsec">日本語</div><div class="bl">${due} due · ${q.length - due} new${N2.ready() && N2.current() ? ` · grammar: ${esc(N2.current().g)}` : ""}</div>` : ""}
+    ${Sy.has(NEEDS.jlpt) ? `<div class="bsec">Japanese</div><div class="bl">${due} due · ${q.length - due} new${N2.ready() && N2.current() ? ` · grammar: ${esc(N2.current().g)}` : ""}</div>` : ""}
     <div class="btns"><button class="btn primary block" data-act="briefclose">Start the day</button></div></div>`;
 }
 
@@ -742,7 +1011,7 @@ function reportDueBox(fg) {
     `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="focus">Report now</button></div>`);
 }
 function vFocus() {
-  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  const g = St.focusGate(), back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>`;
   if (g.open) { const o = g.o, subj = St.subjectOf(o.b), top = subj && St.current(subj);
     return `${back}<header class="top"><div><div class="hdr">Dungeon · ${esc(o.b.title)} · ${span(o.s, o.e)}</div><h1>${esc(top ? top.t : o.b.title)}</h1></div></header>${focusBody(g)}`; }
   {
@@ -827,10 +1096,12 @@ function alertList() {
     pens.length && ["pen:" + pens.map(p => p.id).join(","), penaltyBox()],
     fg.open && fg.ended && ["report:" + St.occKey(fg.o), reportDueBox(fg)],
     wd && ["wind:" + t, sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.")],
+    ...Dl.active(t).map(k => { const nx = Dl.nextSession(k.id); return ["dl:" + k.id + ":" + Dl.daysLeft(k, t), sysBox(`<b>${esc(k.title)}</b> · ${dlLeft(k)}`, nx ? `Next: ${esc(Dl.sessionName(nx, k))}` : "", `<div class="btns"><button class="btn sm" data-act="sheet" data-id="deadline:${k.id}">Open</button></div>`)]; }),
+    ...Dl.unscored(t).map(d => ["examscore:" + d.id, sysBox(`${esc(d.title)}: how did it go?`, "Add the score and it goes on the Report Card.", `<div class="btns"><button class="btn sm" data-act="rcask" data-id="${d.id}">Add score</button></div>`)]),
     E.moneyDue() && ["money:" + E.weekStart(t), sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now"))],
     flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
     unplaced && ["unplaced:" + unplaced, sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan"))],
-    hasData && (expDays === null || expDays >= 7) && ["export:" + (lastExp || "never"), sysBox(expDays === null ? "You haven't exported yet." : `Last export ${expDays} days ago.`, "", btn("settings/sync", "Export now"))],
+    Sync.signedOut() && ["nosync:" + t, sysBox("Not synced · sign in with Google.", "Your data is only on this device until you sign in. Then it's saved to your Google account and kept in step on every device.", btn("settings/sync", "Sign in"))],
   ].filter(a => a && !gone[a[0]]).map(([k, h]) => `<div class="al" data-akey="${esc(k)}">${h.replace('<span class="tl"><i></i>', `<span class="tl"><button class="xdot" data-act="dismiss" data-id="${esc(k)}" aria-label="Dismiss"></button>`)}</div>`);
 }
 // Dismissed alerts (per phone). Old keys are pruned when the list grows.
@@ -843,7 +1114,7 @@ function dismiss(key) {
 }
 function vAlerts() {
   const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
-  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Notifications</h1>
+  return `<header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Notifications</h1></div></header>
   ${list.length ? `<p class="tiny muted" style="margin:10px 4px 0">Tap the red dot to dismiss an alert. It comes back if something changes.</p>` : ""}
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
 }
@@ -853,10 +1124,12 @@ function vAlerts() {
 function vProfile() {
   const xp = E.xpTotal(), nx = Sy.nextStage(), tl = Sy.has(5) ? Cl.titles() : [], eq = (S.settings.classes || {}).equipped;
   const ups = levelUps(), discs = Sy.has(3) ? Cl.all().filter(d => Cl.bossPassed(d.id) || Cl.active().includes(d.id)) : [];
-  return `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>
+  return `<button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button>
   <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
   ${profilePath()}
+  <button class="quiet-row" data-act="go" data-id="report"><span class="grow">Report Card${rcLine()}</span><span class="chev">${ic("right")}</span></button>
+  <button class="quiet-row" data-act="go" data-id="drill"><span class="grow">Mental math Drill${Dr.best("classic") != null ? ` · best ${Dr.best("classic")}` : ""}</span><span class="chev">${ic("right")}</span></button>
   ${sleepPanel()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
   <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
@@ -1338,7 +1611,7 @@ function vDiscQuiz(id, ch) {
         : `<div class="list">${q.opts.map((o, j) => `<button class="opt ${a === j ? "sel" : ""} ${r && j === q.a ? "ans" : ""}" data-act="dqpick" data-id="${i}:${j}" ${r ? "disabled" : ""}>${esc(o)}</button>`).join("")}</div>`}
       ${r ? `<div class="small" style="margin-top:8px">${ok ? ic("check", "inl") + " Right." : `Answer: <b>${esc(Cl.answerText(q))}</b>.`} <span class="muted">${esc(q.ex || "")}</span></div>` : ""}</div>`; };
   return head + (r ? sysBox(r.pass ? (boss ? `Boss cleared. Title earned: <b>${esc(d.title)}</b>.` : "Chapter cleared. The next one is open.") : `${r.ok}/${r.n}. Not yet.`, r.pass ? "" : "Your misses are now flashcards. Review them and retake when ready.",
-      `<div class="btns"><button class="btn sm primary" data-act="go" data-id="classes/d/${id}">Back to ${esc(d.name)}</button>${r.pass ? "" : `<button class="btn sm" data-act="dqretry">Retake</button>`}</div>`) : "")
+      `<div class="btns"><button class="btn sm primary" data-act="go" data-id="classes/d/${id}">Back to ${esc(d.name)}</button>${r.pass ? "" : `<button class="btn sm" data-act="dqretry">Retake</button>`}${rcBtn()}</div>`) : "")
     + dq.qs.map(qHtml).join("")
     + (r ? "" : `<div class="btns"><button class="btn go block" data-act="dqsubmit">Submit</button></div>`);
 }
@@ -1658,7 +1931,7 @@ function vExam(kind) {
       ${sysBox(esc(verdict), gains.length ? esc(gains.map(x => "+" + x.xp + " XP · " + x.label).join(", ")) : "")}
       <div class="panel">${rows}${kind === "place" ? Object.entries(g.per).map(([l, [o, n]]) => `<div class="row between small" style="margin-top:8px"><span>${l}</span><span>${o}/${n}</span></div>`).join("") : ""}</div>
       ${miss.length ? fold("exam-miss", `<b class="grow">Review mistakes</b><span class="small muted">${miss.length}</span>`, miss.map(x => `<div class="item small"><div class="ja">${stem(x.it.q)}</div><div><b class="ja">${stem(x.it.opts[x.it.a])}</b>${exam.ans[x.i] != null ? ` <span class="muted">· you chose ${stem(x.it.opts[exam.ans[x.i]])}</span>` : ""}</div><div class="muted">${esc(x.it.ex || "")}</div></div>`).join(""), true) : ""}
-      <div class="btns"><button class="btn primary" data-act="examquit">Done</button></div>`;
+      <div class="btns"><button class="btn primary" data-act="examquit">Done</button>${rcBtn()}</div>`;
   }
   const q = exam.qs[exam.i], it = J.bank(q.lvl).byId[q.id], answered = exam.ans.filter(x => x != null).length;
   return `${back}<header class="top"><div><div class="hdr">${title} · ${exam.i + 1} of ${exam.qs.length}</div><h1>${J.SECS.find(x => x[0] === it.sec)[1]}</h1></div><span class="small muted">${answered} answered</span></header>
@@ -1793,10 +2066,6 @@ function dlFold() {
     return `<button class="item row between tbtn" data-act="sheet" data-id="deadline:${k.id}"><span class="grow"><b class="small">${esc(k.title)}</b><div class="small muted">${dlWhen(k)} · ${dlLeft(k)}${ps.length ? ` · prep ${n}/${ps.length}` : ""}</div></span>${ic("right")}</button>`; }).join("")}</div>`);
 }
 // Home: one line per deadline, only from its start date.
-function dlHome() {
-  return Dl.active().slice(0, 2).map(k => { const nx = Dl.nextSession(k.id);
-    return `<button class="panel dlline" data-act="sheet" data-id="deadline:${k.id}">${px("flag")}<span class="grow"><b>${esc(k.title)}</b> · ${dlLeft(k)}${nx ? ` · next: ${esc(Dl.sessionName(nx, k))}` : ""}</span></button>`; }).join("");
-}
 function dlFormHtml() {
   return `<h3>Deadline</h3><div class="panel" id="dlForm">
     <label class="f">What<input data-f="title" placeholder="e.g. Social psych paper" enterkeyhint="next"></label>
@@ -2071,7 +2340,7 @@ function vTrainHome() {
   const recent = live("workouts").filter(x => x.date < t && (x.entries || []).some(e => e.sets.length)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
   const hasData = live("workouts").some(x => (x.entries || []).some(e => e.sets.length)) || live("runs").length > 0;
   // Gate closed: one card saying when, and today's session folded away instead of greyed-out rows.
-  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} System</button><h1>Workout</h1></div>${gear("body")}</header>
+  return `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} Quests</button><h1>Workout</h1></div>${gear("body")}</header>
   ${gate.open ? `<div class="hero">${session}</div>` : lockedHtml(gate) + fold("train-peek", `<b class="grow">Peek: ${esc(plan.name)}</b><span class="small muted">${plan.slots.length + plan.extra.length} exercises</span>`, session)}
   ${drawer ? sessionDrawer() : ""}
   <div class="quiet-links"><button data-act="go" data-id="train/runs">${ic("right", "inl")} Runs · longest ${Math.max(0, ...live("runs").map(r => r.km))}/${RUN_GOAL_KM} km</button><button data-act="go" data-id="train/pick/browse">${ic("right", "inl")} Exercise library</button></div>
@@ -2325,17 +2594,19 @@ function vSettings([sec] = []) {
     <label class="f" style="margin-top:8px">Pool<textarea data-ch="pool" rows="6">${esc((st.rewardPool || []).join("\n"))}</textarea></label>
     <details style="margin-top:8px"><summary>Reward history (${rh.length})</summary>${rh.slice(0, 50).map(r => `<div class="small item">${esc(r.reward)} <span class="muted">· ${E.fmtDate(E.ymd(new Date(r.ts)))}</span></div>`).join("") || `<p class="empty">None yet.</p>`}</details>`)}
   ${sx("report", "Weekly report", statusSettings())}
-  ${sx("archives", "System Archives", archivesHtml(), "", "")}
-  ${Up.available() ? sx("update", "App updates", `<p class="small muted">${Up.pending() ? `Build ${Up.pending().build} is ready to install.` : "The app checks once a day."} Web changes arrive on their own.</p>
-    <div class="btns">${Up.pending() ? `<button class="btn sm go" data-act="updgo">Update</button>` : `<button class="btn sm" data-act="updcheck">Check now</button>`}</div>`, Up.pending() ? "update ready" : "") : ""}
-  ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
+  ${sx("archives", "System Archives", `${archivesHtml()}
+    <p class="small muted" style="margin-top:14px">Your data saves to your Google account through Sync. Export is only a spare backup.</p>
     <h3 style="margin-top:14px">Export</h3>
     <p class="small muted">One JSON file, <code>export-YYYY-MM-DD.json</code>, for your /exports folder. Flashcard images and recordings are in the file; check-in photos and the copied text leave media out.${st.lastExportAt ? " Last export: " + E.fmtDate(st.lastExportAt.slice(0, 10)) + "." : ""}</p>
     <div class="btns"><button class="btn primary" data-act="export">Export file</button><button class="btn" data-act="exportcopy">Copy JSON</button></div>
     <div id="exportBox"></div>
     <h3 style="margin-top:14px">Import</h3>
     <p class="small muted">Merges an export into this device. Nothing is deleted; the newer copy of each record wins. A backup is kept first.</p>
-    <input type="file" accept="application/json,.json" data-ch="import">`)}
+    <input type="file" accept="application/json,.json" data-ch="import">`, "", "")}
+  ${Up.available() ? sx("update", "App updates", `<p class="small muted">${Up.pending() ? `Build ${Up.pending().build} is ready to install.` : "The app checks once a day."} Web changes arrive on their own.</p>
+    <div class="btns">${Up.pending() ? `<button class="btn sm go" data-act="updgo">Update</button>` : `<button class="btn sm" data-act="updcheck">Check now</button>`}</div>`, Up.pending() ? "update ready" : "") : ""}
+  ${sx("sync", "Sync and backup", `${Sync.panelHtml(esc)}
+`)}
   <p class="tiny muted" style="text-align:center;margin-top:16px">v${Up.APP_V} · data schema ${S.schemaVersion}</p>`;
 }
 
@@ -2653,8 +2924,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const g = N2.finish(id); if (!g) return; save();
       const p = N2.pos(), A = Pa.arc("n2");
       if (g.floor) toast(`+${g.xp} XP · Floor ${g.floor.n} open: ${g.floor.name}`, true);
-      else if (p % Pa.ARC === 0) toast(`+${g.xp} XP · 日本語: Arc ${A.n - 1} cleared.${N2.current()?.gate ? " A Gate Test stands before the next." : ""}`, true);
-      else announce([{ xp: g.xp, label: "日本語 · " + g.label }, g.habit]);
+      else if (p % Pa.ARC === 0) toast(`+${g.xp} XP · Japanese: Arc ${A.n - 1} cleared.${N2.current()?.gate ? " A Gate Test stands before the next." : ""}`, true);
+      else announce([{ xp: g.xp, label: "Japanese · " + g.label }, g.habit]);
       return render();
     }
     case "jpgo": return jpStart(+id);
@@ -2748,6 +3019,33 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return;
       if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); E.revokeXP("task:" + id + ":ahead"); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
+    case "drillgo": { const [m, sec] = id.split(":"); sheet = null; drillResult = null; Dr.start(m, +sec || Dr.SECS); } if (route()[0] !== "drill") location.hash = "drill"; drillTick(); return render();
+    case "drk": { const ok = Dr.key(id); drillPaint(ok); return; }
+    case "drskip": Dr.skip(); drillPaint(true); return;
+    case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
+    case "srgo": return srRun(srHits[+id]);
+    case "cmdapply": return cmdApply();
+    case "cmdedit": return cmdEdit();
+    case "cmdundo": if (srDone && srDone.undo) { srDone.undo(); save(); toast("Undone"); } srDone = null; return render();
+    case "lexfind": { const L = Lx.entry(id); if (!L) return; lx = { ...lx, type: L.type === "kanji" ? "kanji" : "vocab", level: null, st: "all", q: Lx.face(L), n: 60, sel: null, open: id }; return goR("lex"); }
+    case "rcadd": rcForm = true; rcPre = null; return goR("report");
+    case "rcper": rcPeriod = id; return render();
+    case "rcsub": rcSub = rcSub === id ? null : id; return render();
+    case "rcmode": rcMode = id; return render();
+    case "rcform": rcForm = !rcForm; rcPre = null; render(); if (rcForm) $("#rcForm input")?.focus(); return;
+    case "rcask": { const d = Dl.get(id); if (!d) return; rcPre = { name: d.title, subject: d.course, date: d.due, dl: d.id }; rcForm = true; rcSub = null; location.hash = "report"; return render(); }
+    case "rcsave": {
+      const f = readForm("#rcForm"), sc = Number(f.score), of = Number(f.of);
+      if (!f.name) return toast("Add a name");
+      if (f.score === "" || !isFinite(sc) || !(of > 0)) return toast("Add the score and what it's out of");
+      Rc.addExam({ name: f.name, subject: f.subject || "Other", date: f.date || E.today(), score: sc, of, passPct: f.pass === "" ? null : Number(f.pass), notes: f.notes });
+      if (rcPre?.dl) Dl.markScored(rcPre.dl);
+      rcForm = false; rcPre = null; save(); toast(`Saved · ${Math.round(sc / of * 100)}%`); return render();
+    }
+    case "rcdrop": if (!confirm("Delete this exam result?")) return; Rc.dropExam(id); save(); return render();
+    case "drlen": drLen = +id; return render();
+    case "drcards": { if (!drillResult) return; const n = Dr.toCards(drillResult.rec, K.newCard); drillResult.carded = true; save(); toast(n ? `${n} card${n === 1 ? "" : "s"} in Drill slow` : "Already in Drill slow"); return render(); }
+    case "drlog": { const k = mentalTask(); if (!k) return; const g = Pa.finish(k, "done", Dr.todayBest("classic")); save(); drillResult = null; announce([g]); return render(); }
     case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
     case "dlform": dlMove = null; sheet = "deadline"; render(); $("#dlForm input")?.focus(); return;
     case "dlsave": {
@@ -3105,6 +3403,12 @@ function renameStyle() {
   const usageTick = async () => { if (await Us.refresh()) { save(); render(); } };
   usageTick(); setInterval(usageTick, 5 * 60000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { usageTick(); pendingRoute(); } });
+  // v10: a hardware or Bluetooth keyboard works in the Drill too.
+  document.addEventListener("keydown", e => {
+    if (!Dr.running() || route()[0] !== "drill" || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key === "Backspace" ? "del" : e.key === "Enter" || e.key === " " ? null : /^[\d.-]$/.test(e.key) ? e.key : null;
+    if (!k) return; e.preventDefault(); drillPaint(Dr.key(k));
+  });
   pendingRoute();
   let alT = null; Al.init({ go, render }); onSave(() => { clearTimeout(alT); alT = setTimeout(Al.reschedule, 2000); });
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.

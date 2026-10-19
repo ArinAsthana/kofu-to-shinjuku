@@ -726,3 +726,57 @@ html.navy body::before{filter:hue-rotate(225deg) saturate(.7) brightness(.55)}
 .hilv b{font:800 13px var(--dot)}
 .hilv-bar{display:block;width:72px;height:4px;background:rgba(0,0,0,.35)}
 .hilv-bar i{display:block;height:100%;background:var(--fg)}
+/* v10.0 Drill */
+.drill-run{display:flex;flex-direction:column;min-height:calc(100vh - 140px);padding-top:8px}
+.dr-t{font-size:15px}.dr-t b{font:800 26px var(--dot)}
+.dr-score{margin-top:4px;font-size:13px;color:var(--soft)}.dr-score b{color:var(--fg);font-size:16px}
+.dr-q{margin:28px 0 8px;text-align:center;font:800 40px/1.15 var(--dot);color:var(--fg);word-break:break-word}
+.dr-q.hit{animation:drhit .18s ease-out}
+@keyframes drhit{from{opacity:.3;transform:translateY(6px)}to{opacity:1;transform:none}}
+.dr-in{min-height:52px;margin:0 auto 12px;padding:8px 16px;min-width:60%;text-align:center;font-size:34px;background:#000;color:var(--paper);border:1px solid rgba(242,239,232,.25)}
+.dr-pad{margin-top:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px}
+.dr-k{height:58px;border:0;background:#000;color:var(--paper);font:700 24px var(--mono);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.dr-k:active{background:#222}
+.dr-k.sm{font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.dr-k .ic{width:22px;height:22px;fill:currentColor}
+.dr-end{text-align:center}.dr-big{font:800 64px/1 var(--dot);margin:8px 0}
+body[data-tab="drill"] #fab{display:none}
+/* v10.1 Report Card */
+.rc-gpa{font-size:44px;text-align:left;margin:4px 0 0}.rc-gpa span{font-size:24px;color:var(--acc)}
+.rc-row .row{gap:10px;align-items:baseline}.rc-row .tiny{margin-top:3px}
+.rc-l{font:800 15px var(--dot);min-width:22px;text-align:center;border:1px solid var(--rule);padding:1px 4px}.rc-l.bad{color:var(--acc);border-color:var(--acc)}
+.rc-b{margin-bottom:10px}.rc-track{position:relative;height:10px;background:var(--rule);margin-top:4px}
+.rc-track i{position:absolute;left:0;top:0;bottom:0;background:var(--acc)}.rc-track b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg);transform:translateX(-1px)}
+/* v11: two tabs, search, quest list */
+nav .in{grid-template-columns:repeat(2,1fr)}
+nav button span{position:relative}
+.nbadge{position:absolute;top:-9px;right:-16px;min-width:17px;height:17px;padding:0 4px;background:#FF3B2F;color:#fff;font:700 11px/17px var(--mono);text-align:center}
+.srch{position:relative;margin:4px 0 14px;z-index:5}
+.srch-box{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--paper);padding:0 14px;min-height:54px;border:2px solid transparent;clip-path:polygon(0 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)}
+.srch:focus-within .srch-box{border-color:#FF3B2F}
+.srch-box .ic{width:20px;height:20px;flex:none;color:rgba(242,239,232,.6)}
+.srch-in{position:relative;flex:1;min-width:0}
+.srch-in input,.srch-ghost{font:500 17px var(--mono);letter-spacing:0;padding:14px 0;margin:0}
+.srch-in input{position:relative;width:100%;background:transparent;border:0;outline:0;color:var(--paper);min-height:0;box-shadow:none;border-radius:0}
+.srch-in input::placeholder{color:rgba(242,239,232,.45)}
+.srch-ghost{position:absolute;left:0;top:0;right:0;white-space:pre;overflow:hidden;color:rgba(242,239,232,.38);pointer-events:none}
+.srch-ghost .gh-t{color:transparent}
+.srch-list{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--ink);color:var(--paper);padding:4px 0;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.srch:focus-within .srch-list:not(:empty){display:block}
+.srch-h{font:600 11px var(--mono);text-transform:uppercase;letter-spacing:.1em;color:rgba(242,239,232,.5);padding:8px 14px 4px}
+.srch-h:empty{display:none}
+.srch-it{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;color:inherit;text-align:left;padding:10px 14px;font:15px var(--mono);min-height:46px}
+.srch-it .px{height:14px;flex:none}
+.srch-it b{font-weight:700}.srch-it .muted{color:rgba(242,239,232,.5)}
+.srch-it.sel,.srch-it:hover{background:rgba(255,59,47,.2)}
+.srch-it.lk{opacity:.55}
+.qlist .list{margin-top:8px}
+.qr .tbtn{min-height:44px}
+.qstreak{color:var(--acc);font-weight:700}.qstreak .px{height:11px;vertical-align:-1px}
+.dclear{margin:10px 0 2px;padding:10px;text-align:center;font:800 20px var(--dot);color:var(--acc);border:1px solid var(--acc);animation:dclear .8s ease-out}
+.dclear .px{height:16px}
+@keyframes dclear{0%{transform:scale(.8);opacity:0}60%{transform:scale(1.05);opacity:1}100%{transform:scale(1)}}
+/* v11 §4: desktop is a centred column */
+@media (min-width:900px){main,nav .in,.sheet,.dbar{max-width:640px}main{padding-top:40px}}
+.srch-cmd{margin:4px 8px 6px;padding:10px 12px;border:1px solid #FF3B2F;background:rgba(255,59,47,.12)}
+.srch-cmd .btns{margin-top:8px}

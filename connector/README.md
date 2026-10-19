@@ -4,8 +4,9 @@ Lets any Claude chat read and change the app's data, e.g. "log 2 onigiri for lun
 It's a small MCP server in `worker.js` that runs on Cloudflare Workers (free). It writes to the same Firebase data the app syncs,
 and the app shows the changes the next time it's opened while signed in.
 
-Tools: `get_day`, `get_store`, `log_food`, `log_weight`, `tick_habit`, `tick_care`, `add_task`, `complete_task`, `add_deadline`, `list_deadlines`, `move_deadline`, `add_block`, `move_block`, `add_wishlist_item`.
+Tools: `get_day`, `get_store`, `log_food`, `log_weight`, `tick_habit`, `tick_care`, `add_task`, `complete_task`, `add_deadline`, `list_deadlines`, `move_deadline`, `add_exam_result`, `add_block`, `move_block`, `add_wishlist_item`.
 `add_deadline` ("social psych paper due Nov 20") puts the deadline on the calendar and creates prep sessions the app places before it.
+`add_exam_result` ("I got 82 on the algebra midterm out of 100") puts a real exam on the Report Card.
 `get_store` is read-only: it returns one store's raw records (Lexicon progress, reviews, N2 plan items, workouts, money…), so a tutor chat can see real progress.
 `move_block` follows the app's edit lock (no changes from 15 min before a block until it ends). Workouts are still logged in the app.
 

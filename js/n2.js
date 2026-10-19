@@ -52,7 +52,7 @@ export function finish(result = "done", t = E.today()) {
   const f0 = floor();
   put("path", { id: "n2-" + c.idx, stream: ID, idx: c.idx, date: t, result, ahead, xp });
   const ref = "n2:" + c.idx;
-  if (!live("xpEvents").some(e => e.ref === ref)) put("xpEvents", { ts: Date.now(), type: "path", xp, ref, label: `日本語 · ${ahead ? "Ahead" : result === "partly" ? "Partly" : "Grammar"}` });
+  if (!live("xpEvents").some(e => e.ref === ref)) put("xpEvents", { ts: Date.now(), type: "path", xp, ref, label: `Japanese · ${ahead ? "Ahead" : result === "partly" ? "Partly" : "Grammar"}` });
   const f1 = floor();
   // It ticks the daily Japanese quest, like logging a workout ticks the gym one.
   let habit = null;
@@ -78,7 +78,7 @@ export function fluency(t = E.today()) {
 }
 export function fluencyDone(ref, on) {
   const ev = live("xpEvents").find(e => e.ref === ref);
-  if (on && !ev) { put("xpEvents", { ts: Date.now(), type: "path", xp: XP_FLUENCY, ref, label: "日本語 · Fluency" }); return XP_FLUENCY; }
+  if (on && !ev) { put("xpEvents", { ts: Date.now(), type: "path", xp: XP_FLUENCY, ref, label: "Japanese · Fluency" }); return XP_FLUENCY; }
   if (!on && ev) E.revokeXP(ref);
   return 0;
 }
