@@ -6,6 +6,7 @@
 const F = [
   ["Home", "search", "home", "start main", "eye"],
   ["Quests", "today's list", "quests", "today system list todo", "sword"],
+  ["Mined words", "Japanese you found yourself", "a:lexmined:", "mined mining sentences my words", "scroll"],
   ["Case", "Path stream", "path/s/case", "case interview consulting frameworks", "flag"],
   ["Aptitude", "Path stream", "path/s/aptitude", "aptitude spi tests logic", "flag"],
   ["Accounting", "Path stream", "path/s/accounting", "accounting boki finance", "flag"],

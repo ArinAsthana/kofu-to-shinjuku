@@ -25,7 +25,7 @@ const PREP = {
 // Mirrors js/store.js RECORD_STORES, plus settings. Keep in step.
 const STORES = ["habitLog", "xpEvents", "rewardHistory", "exercises", "areaState", "workouts", "runs", "bodyweight", "physique", "meals", "savedMeals",
   "money", "bills", "blocks", "tasks", "care", "careLog", "people", "hangouts", "wishlist", "blockLog", "penalties", "fieldNotes", "appraisals",
-  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "cards", "reviewDays", "settings"];
+  "jlptItems", "jlptExams", "discLog", "titles", "path", "applications", "mined", "cards", "reviewDays", "settings"];
 const KINDS = ["class", "work", "sleep", "nap", "quest", "club", "social", "other"];
 
 /* ---------- time ---------- */
@@ -159,8 +159,13 @@ const TOOLS = [
   { name: "move_block", description: "Move a timetable block. By default only that date moves; set every_week to change the weekly block. Today's block is locked from 15 min before it starts until it ends.",
     inputSchema: { type: "object", required: ["block", "start"], properties: { block: { type: "string", description: "Block name, e.g. 'gym', 'Lift', 'finance block'" }, date: { type: "string" },
       start: { type: "string", description: "New start HH:MM" }, end: { type: "string", description: "New end HH:MM (default keeps the length)" }, every_week: { type: "boolean" } } } },
-  { name: "get_store", description: "Read-only: raw records from one of the app's synced stores, newest first, deleted ones left out. Use for questions get_day doesn't cover (study progress, workouts, money, people). Stores: " + STORES.join(", ") + ". Japanese: cards (Lexicon progress by card id: lex v|k, off, stage mcq|flip, due, reps, lapses), reviewDays (reviews a day), path (stream \"n2\" = finished N2 plan items), jlptItems, jlptExams. settings is one object.",
+  { name: "get_store", description: "Read-only: raw records from one of the app's synced stores, newest first, deleted ones left out. Use for questions get_day doesn't cover (study progress, workouts, money, people). Stores: " + STORES.join(", ") + ". Japanese: mined (words and sentences Arin mined; link = the Lexicon card id when it's also in the JLPT deck, else the card is \"m-<id>\"), cards (progress by card id: lex v|k|m, off, stage mcq|flip, due, reps, lapses), reviewDays (reviews a day), path (stream \"n2\" = finished N2 plan items), jlptItems, jlptExams. settings is one object.",
     inputSchema: { type: "object", required: ["store"], properties: { store: { type: "string", enum: STORES }, limit: { type: "number", description: "Max records, default 300, max 2000" }, since: { type: "string", description: "Only records updated on or after this date (YYYY-MM-DD)" } } } },
+  { name: "add_mined", description: "Mine a Japanese word or sentence Arin found in real life (shift, class, anime, NHK, conversation) into the app's Mined list. Arin says e.g. 'mine 打ち合わせ' or 'mine 打ち合わせ: 明日の打ち合わせは10時からです' or 'mine sentence: 少々お待ちくださいませ'. Fill in the reading, the meaning and JLPT level, the sentence's reading and English, and 3 close wrong answers each for the reading and the meaning (vowel length, っ, dakuten, look-alike kanji; same part of speech). Rules: one new thing per sentence (list other unknown words as 'mine these too?' suggestions instead); keep sentences under about 25 characters, trimmed to the part that matters; tag business and keigo phrases 'keigo'. The app matches words against the JLPT deck on the phone: a match stays one card, and a switched-off match comes back on. Reply in one line, e.g. 'Mined 打ち合わせ (うちあわせ, meeting).' Mining the same word again updates it.",
+    inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["word", "sentence"], description: "default word" }, word: { type: "string", description: "Dictionary form as written, e.g. 打ち合わせ (required for a word)" }, reading: { type: "string", description: "Kana reading" }, meaning: { type: "string", description: "Short English meaning" },
+      sentence: { type: "string", description: "The sentence it was found in (required for a sentence card)" }, sentence_reading: { type: "string", description: "The sentence in kana" }, sentence_en: { type: "string", description: "English translation" }, note: { type: "string", description: "One-line grammar or usage note" },
+      level: { type: "string", enum: ["N5", "N4", "N3", "N2", "N1"] }, source: { type: "string", enum: ["shift", "class", "anime", "NHK", "conversation", "other"] }, tags: { type: "array", items: { type: "string" }, description: "e.g. ['keigo']" },
+      wrong_readings: { type: "array", items: { type: "string" }, description: "3 close wrong readings" }, wrong_meanings: { type: "array", items: { type: "string" }, description: "3 close wrong meanings" } } } },
   { name: "get_money", description: "Read Arin's money tracker (read-only): weekly bank and debt reports, pace to the savings and debt-free goal by graduation, bills, the Store fund and the wishlist. Use before giving money advice.",
     inputSchema: { type: "object", properties: {} } },
   { name: "add_wishlist_item", description: "Add a reward to the wishlist with its price in yen. The XP cost is set from the price.",
@@ -347,6 +352,21 @@ const handlers = {
       return `${b.title} now ${toHM(s)}–${toHM(e)}${(b.days || []).length ? " every " + b.days.map(d => DAY[d]).join("/") : " on " + b.date}.`;
     });
     return msg;
+  },
+  async add_mined(env, a) {
+    const kind = a.kind === "sentence" ? "sentence" : "word", str = v => String(v || "").trim(), list = v => (Array.isArray(v) ? v : []).map(str).filter(Boolean).slice(0, 6);
+    if (kind === "word" && !str(a.word)) throw new Error("word is required");
+    if (kind === "sentence" && !str(a.sentence)) throw new Error("sentence is required for a sentence card");
+    const rec = { kind, word: str(a.word), reading: str(a.reading), meaning: str(a.meaning), sentence: str(a.sentence), sentenceReading: str(a.sentence_reading), sentenceEn: str(a.sentence_en),
+      note: str(a.note), level: str(a.level) || null, source: str(a.source), tags: list(a.tags), dR: list(a.wrong_readings), dM: list(a.wrong_meanings) };
+    let again = false;
+    await changeStore(env, "mined", arr => {
+      const ex = live(arr).find(m => m.kind === kind && (kind === "word" ? m.word === rec.word : m.sentence === rec.sentence));
+      if (ex) { again = true; const keep = Object.fromEntries(Object.entries(rec).filter(([, v]) => v && (!Array.isArray(v) || v.length))); putRec(arr, { ...ex, ...keep }); }
+      else putRec(arr, { id: "mn-" + uid(), ...rec, source: rec.source || "other", link: null, checked: false, created: Date.now() });
+    });
+    const what = kind === "word" ? `${rec.word}${rec.reading ? ` (${rec.reading}${rec.meaning ? ", " + rec.meaning : ""})` : ""}` : `the sentence ${rec.sentence}`;
+    return `${again ? "Updated" : "Mined"} ${what}.${kind === "word" ? " The app matches it against the JLPT deck next time it opens." : ""} It goes first in the next batch of new cards.`;
   },
   async add_wishlist_item(env, a) {
     const price = Math.round(+a.price); if (!a.name || !(price >= 0)) throw new Error("name and price are required");

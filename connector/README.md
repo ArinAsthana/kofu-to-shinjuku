@@ -4,7 +4,7 @@ Lets any Claude chat read and change the app's data, e.g. "log 2 onigiri for lun
 It's a small MCP server in `worker.js` that runs on Cloudflare Workers (free). It writes to the same Firebase data the app syncs,
 and the app shows the changes the next time it's opened while signed in.
 
-Tools: `get_day`, `get_store`, `get_money`, `log_food`, `log_weight`, `tick_habit`, `tick_care`, `add_task`, `complete_task`, `add_deadline`, `list_deadlines`, `move_deadline`, `add_exam_result`, `add_block`, `move_block`, `add_wishlist_item`.
+Tools: `get_day`, `get_store`, `get_money`, `log_food`, `log_weight`, `tick_habit`, `tick_care`, `add_task`, `complete_task`, `add_deadline`, `list_deadlines`, `move_deadline`, `add_exam_result`, `add_block`, `move_block`, `add_wishlist_item`, `add_mined`.
 `add_deadline` ("social psych paper due Nov 20") puts the deadline on the calendar and creates prep sessions the app places before it.
 `add_exam_result` ("I got 82 on the algebra midterm out of 100") puts a real exam on the Report Card.
 `get_store` is read-only: it returns one store's raw records (Lexicon progress, reviews, N2 plan items, workouts, money…), so a tutor chat can see real progress.
@@ -36,3 +36,5 @@ Tools: `get_day`, `get_store`, `get_money`, `log_food`, `log_weight`, `tick_habi
 - The URL is the password: anyone with it can change your app data. Don't share it. To revoke, change `PATH_TOKEN`.
 - The Firebase key stays in Cloudflare's secret store, never in this public repo.
 - Every write is checked against the data's last-saved time, so a sync from your phone at the same moment is never overwritten.
+
+`add_mined` (v12) adds a word or sentence Arin mined to the app's Mined list (store `mined`). The app matches words against the JLPT deck on the phone, so a word that's also in the deck stays one card.

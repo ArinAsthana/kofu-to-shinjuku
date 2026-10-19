@@ -16,6 +16,7 @@ export const RECORD_STORES = [
   "jlptItems", "jlptExams", // schema 8: JLPT results, see jlpt.js (questions themselves are static files in data/jlpt)
   "discLog", "titles", // schema 10: class system, see classes.js
   "path", "applications", // schema 13: the Path (path.js), one record per finished item; job applications {firm, track, role, channel, deadline, status, contact, next, nextDate}
+  "mined", // schema 14: mined words and sentences (see mined.js), added by Claude through the connector
   "cards", "reviewDays", // schema 7: flashcards (see cards.js); reviewDays one record a day {id "rv-<date>", date, n, ok}. Card media stays in the photos store.
 ];
 
@@ -154,6 +155,8 @@ const MIGRATIONS = {
   11: s => { s.settings = s.settings || {}; if (!s.settings.usage) s.settings.usage = { ...USAGE, apps: USAGE.apps.slice(), days: {}, judged: {} }; return s; },
   // 12 -> 13: v6 the Path. Two new empty stores; nothing existing changes.
   12: s => { s.path = s.path || []; s.applications = s.applications || []; return s; },
+  // 13 -> 14: v12 mining. One new empty store; nothing existing changes.
+  13: s => { s.mined = s.mined || []; return s; },
   8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {

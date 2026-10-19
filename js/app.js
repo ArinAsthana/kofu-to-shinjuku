@@ -25,6 +25,7 @@ import * as Dl from "./deadlines.js";
 import * as Dr from "./drill.js";
 import * as Rc from "./report.js";
 import * as Sr from "./search.js";
+import * as Mi from "./mined.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -935,7 +936,7 @@ function dungeonSettings() {
   return `<h3>Pomodoro and penalties</h3><div class="grid">
     ${[["focus", "Focus (min)"], ["brk", "Break (min)"], ["long", "Long break (min)"], ["every", "Long break every (rounds)"], ["grace", "Time to report after a block (min)"], ["penaltyXp", "Penalty (XP)"]].map(([k, l]) => `<label class="f">${l}<input type="number" inputmode="numeric" data-ch="studynum" data-id="${k}" value="${sst[k]}"></label>`).join("")}</div>
     <p class="tiny muted">Every study and workout block is judged when it ends. Workout blocks count once a set or run is logged that day; study blocks once you report progress or finish a focus round.</p>
-    <h3>Flashcards</h3><div class="grid"><label class="f">New cards per day<input type="number" inputmode="numeric" data-ch="cardsnew" value="${S.settings.cards.newPerDay ?? 15}"></label></div>
+    <h3>Flashcards</h3><div class="grid"><label class="f">New cards per batch<input type="number" inputmode="numeric" data-ch="cardsnew" value="${S.settings.cards.batch ?? K.BATCH}"></label></div>
     <p class="tiny muted">How many unseen cards join the review pile each day. Reviews of cards you've seen are never capped.</p>`;
 }
 function bodySettings() {
@@ -1122,6 +1123,7 @@ function tickPomo() {
 }
 function runAssess() {
   if (Sy.ensureLoanBill()) save();
+  const back = Mi.match(); if (back.length) { save(); toast(`${back.join(", ")} ${back.length === 1 ? "was" : "were"} off. ${back.length === 1 ? "It's" : "They're"} back on because you mined ${back.length === 1 ? "it" : "them"}.`, true); }
   if (Pa.issue()) save();
   const fresh = [...(Sy.has(1) ? St.assess() : []), ...(Sy.has(4) ? Soc.assess() : [])];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
@@ -1709,7 +1711,7 @@ function vCards([sub, a]) {
   const head = `${back}<header class="top"><div><div class="hdr">Study</div><h1>Flashcards</h1></div>${gear("dungeon")}</header>`;
   const rev = `<div class="panel dgate ${g.open && q.length ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Due now</span><h3 style="margin:2px 0 4px">${q.length} card${q.length === 1 ? "" : "s"}</h3>
     <div class="small muted">${done.n ? `${done.n} reviewed today, ${Math.round(done.ok / done.n * 100)}% right` : "None reviewed today"}</div></div>
-    ${q.length ? `<button class="btn go" data-act="nav" data-id="cards/review">Review</button>` : `<button class="btn" data-act="learnmore">Learn 10 new</button>`}</div></div>`;
+    ${q.length ? `<button class="btn go" data-act="nav" data-id="cards/review">Review</button>` : `<button class="btn" data-act="learnmore">Continue · +10 cards</button>`}</div></div>`;
   const deckRows = decks.map(d => { const all = K.inDeck(d), due = K.dueCount(d);
     return `<button class="panel tbtn row between" style="width:100%;margin:0 0 8px" data-act="go" data-id="cards/deck/${encodeURIComponent(d)}"><span class="grow" style="text-align:left"><b>${esc(d)}</b><div class="small muted">${all.length} card${all.length === 1 ? "" : "s"}${K.flipOnly(d) ? " · flip only until it has 4" : ""}</div></span><span class="small ${due ? "" : "muted"}">${due} due</span></button>`; }).join("");
   const bulk = bulkOpen ? `<div class="panel" id="bulkForm"><h3>Bulk paste</h3><p class="tiny muted">One card per line: front | back. A tab works too, so you can paste two spreadsheet columns.</p>
@@ -1772,6 +1774,8 @@ function lexImportHtml() {
 function vLex() {
   const back = `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} Japanese</button>`;
   const head = `${back}<header class="top"><div><div class="hdr">Japanese</div><h1>Lexicon</h1></div>${Lx.ready() ? `<button class="btn sm" data-act="lexsel">${lx.sel ? "Done" : "Select"}</button>` : ""}</header>`;
+  const pills = `<div class="pills seg"><button class="pill" data-act="lextype" data-id="vocab" aria-pressed="${lx.type === "vocab"}">Vocabulary</button><button class="pill" data-act="lextype" data-id="kanji" aria-pressed="${lx.type === "kanji"}">Kanji</button><button class="pill" data-act="lextype" data-id="mined" aria-pressed="${lx.type === "mined"}">Mined</button></div>`;
+  if (lx.type === "mined") return head + pills + minedList();
   if (!Lx.ready()) return head + lexImportHtml();
   const m = Lx.recs(), lv = Lx.LEVELS[lx.type];
   if (lx.level && !lv.includes(lx.level)) lx.level = null;
@@ -1783,11 +1787,10 @@ function vLex() {
     return `<div class="lexrow ${off ? "is-off" : ""} ${sel ? "sel" : ""}">
       <button class="lexmain" data-act="${lx.sel ? "lexpick" : "lexopen"}" data-id="${e.id}"><span class="lw ja">${esc(Lx.face(e))}</span><span class="lr ja">${esc(Lx.reading(e))}</span><span class="lm">${esc(e.meaning || "")}</span></button>
       ${lx.sel ? `<span class="lexck">${sel ? ic("check") : ""}</span>` : `<button class="sw ${off ? "" : "on"}" role="switch" aria-checked="${!off}" aria-label="Study ${esc(Lx.face(e))}" data-act="lexoff" data-id="${e.id}"><i></i></button>`}
-      ${open ? `<div class="lexdet">${st !== "new" ? `<span class="tag">${st}</span> ` : ""}${e.type === "kanji" ? `${e.examples ? `<div class="ja small">${esc(e.examples).replace(/\n/g, "<br>")}</div>` : ""}` : `${e.ex ? `<div class="ja small">${esc(e.ex)}</div><div class="small muted">${esc(e.exEn || "")}</div>` : ""}`}
+      ${open ? `<div class="lexdet">${st !== "new" ? `<span class="tag">${st}</span> ` : ""}${e.type === "kanji" && Mi.seenIn(e.kanji).length ? `<div class="small">Seen in: <span class="ja">${esc(Mi.seenIn(e.kanji).join("、"))}</span></div>` : ""}${e.type === "kanji" ? `${e.examples ? `<div class="ja small">${esc(e.examples).replace(/\n/g, "<br>")}</div>` : ""}` : `${e.ex ? `<div class="ja small">${esc(e.ex)}</div><div class="small muted">${esc(e.exEn || "")}</div>` : ""}`}
         <div class="btns"><button class="btn sm" data-act="lexsay" data-id="${e.id}">${ic("sound")} Listen</button></div></div>` : ""}</div>`; };
   const cnt = Lx.counts(lx.type, lx.level, m);
-  return `${head}
-  <div class="pills seg"><button class="pill" data-act="lextype" data-id="vocab" aria-pressed="${lx.type === "vocab"}">Vocabulary</button><button class="pill" data-act="lextype" data-id="kanji" aria-pressed="${lx.type === "kanji"}">Kanji</button></div>
+  return `${head}${pills}
   <div class="lvchips">${[null, ...lv].map(chip).join("")}</div>
   <div class="panel lexbar">
     <div class="pills st">${LX_ST.map(([k, l]) => `<button class="pill" data-act="lexst" data-id="${k}" aria-pressed="${lx.st === k}">${l}${k !== "all" ? ` <span class="mono">${cnt[k]}</span>` : ""}</button>`).join("")}</div>
@@ -1797,6 +1800,22 @@ function vLex() {
   </div>
   <div class="lexlist">${shown.map(row).join("") || `<p class="empty">Nothing here.</p>`}</div>
   ${L.length > shown.length ? `<div class="btns"><button class="btn block" data-act="lexmore">Show more · ${L.length - shown.length} left</button></div>` : ""}`;
+}
+// v12: the Mined list, newest first. Source tag, status, and an N-level chip when the word is also in the deck.
+function minedList() {
+  const L = Mi.all(), m = Lx.recs(), w = Mi.week(), q = lx.q.trim().toLowerCase();
+  const rows = L.filter(x => !q || [x.word, x.reading, x.meaning, x.sentence, x.sentenceEn].some(v => (v || "").toLowerCase().includes(q)));
+  const row = x => { const cid = Mi.cardId(x), r = m.get(cid), st = Lx.status(r), off = st === "off", open = lx.open === cid, sent = x.kind === "sentence", lv = x.link && Lx.entry(x.link);
+    return `<div class="lexrow ${off ? "is-off" : ""}">
+      <button class="lexmain" data-act="lexopen" data-id="${cid}"><span class="lw ja">${esc(sent ? x.sentence : x.word)}</span><span class="lr ja">${esc(sent ? "" : x.reading || "")}</span><span class="lm">${esc(sent ? x.sentenceEn || "" : x.meaning || "")}</span></button>
+      <button class="sw ${off ? "" : "on"}" role="switch" aria-checked="${!off}" aria-label="Study ${esc(x.word || x.sentence)}" data-act="lexoff" data-id="${cid}"><i></i></button>
+      <div class="mn-tags">${sent ? `<span class="tag">sentence</span>` : ""}${x.source ? `<span class="tag">${esc(x.source)}</span>` : ""}${(x.tags || []).filter(t => t !== x.source).map(t => `<span class="tag">${esc(t)}</span>`).join("")}<span class="tag ${st === "known" ? "t-ahead" : ""}">${st}</span>${lv ? `<span class="tag t-lv">${esc(lv.level)}</span>` : ""}</div>
+      ${open ? `<div class="lexdet">${!sent && x.sentence ? `<div class="ja small">${hilite(x.sentence, x.word)}</div><div class="small muted">${esc(x.sentenceEn || "")}</div>` : sent ? `<div class="ja small muted">${esc(x.sentenceReading || "")}</div>` : ""}${x.note ? `<div class="small">${esc(x.note)}</div>` : ""}
+        <div class="tiny muted">Mined ${esc(E.fmtDate(E.ymd(new Date(x.created || Date.now()))))}${lv ? ` · same card as ${esc(lv.level)} in your deck` : ""}</div>
+        <div class="btns"><button class="btn sm" data-act="lexsay" data-id="${cid}">${ic("sound")} Listen</button></div></div>` : ""}</div>`; };
+  return `<div class="panel lexbar"><div class="small">${w.n ? `Mined this week: <b>${w.n}</b>${w.deck ? ` · ${w.deck} in your JLPT deck` : ""}` : "Nothing mined this week."} <span class="muted">· ${L.length} in all</span></div>
+    <input type="search" data-ch="lexq" placeholder="Search mined words" value="${esc(lx.q)}"></div>
+  <div class="lexlist">${rows.map(row).join("") || `<p class="empty">${L.length ? "Nothing found." : "No mined words yet. Send Claude \"mine 打ち合わせ\" (with the sentence you found it in) and it lands here."}</p>`}</div>`;
 }
 // Sort mode: one card at a time, word only. "I know it" turns it off; "Learn it" keeps it. Undo up to 10.
 let srt = null; // {type, level, ids, i, show, hist:[{id, off}]}
@@ -1821,7 +1840,25 @@ function sortPick(know) {
   srt.i++; srt.show = false; save(); render();
 }
 // v8: a Lexicon card. Front: the word or kanji. Back: reading, meaning, example (or on/kun and example words).
+// v12: a mined word carries the sentence it was found in, the word highlighted. A sentence card shows the sentence
+// with no furigana; once known (3 weeks+) it turns into a listening card: audio first, text on the back.
+const hilite = (sent, w) => w && sent.includes(w) ? esc(sent).split(esc(w)).join(`<mark>${esc(w)}</mark>`) : esc(sent);
+const listenCard = c => c.L.sent && (c.s || 0) >= 21;
+function minedFace(c, showBack, noSay) {
+  const L = c.L, say = `<button class="btn sm" data-act="say" data-id="${c.id}">${ic("sound")} Listen</button>`;
+  if (L.sent) {
+    const front = listenCard(c) && !showBack ? `<div class="k">Listening card: understand it without the text</div><div class="btns" style="justify-content:center"><button class="btn primary" data-act="say" data-id="${c.id}">${ic("sound")} Play</button></div>`
+      : `<div class="fc-front ja fc-sent">${esc(L.word)}</div>`;
+    return front + (!showBack ? (listenCard(c) || noSay ? "" : `<p class="tiny muted" style="text-align:center">Read it aloud, then check the whole thing.</p>`)
+      : `<div class="fc-read ja">${esc((L.readings || []).join(""))}</div><div class="fc-back">${esc(L.meaning || "")}</div>${L.note ? `<div class="small muted">${esc(L.note)}</div>` : ""}
+        <div class="row" style="gap:8px;margin-top:10px">${say}<button class="btn sm" data-act="shadow" data-id="${c.id}">${ic("mic")} Shadow</button></div>`);
+  }
+  return `<div class="fc-front ja">${esc(L.word)}</div>${L.ex ? `<div class="fc-ex ja">${hilite(L.ex, L.word)}</div>` : ""}
+    ${showBack ? `<div class="fc-read ja">${esc((L.readings || []).join("、"))}</div><div class="fc-back">${esc(L.meaning || "")}</div>${L.exR ? `<div class="small ja muted">${esc(L.exR)}</div>` : ""}${L.exEn ? `<div class="small muted">${esc(L.exEn)}</div>` : ""}` : ""}
+    ${noSay ? "" : `<div class="row" style="gap:8px;margin-top:10px">${say}</div>`}`;
+}
 function lexFace(c, showBack, noSay) {
+  if (c.L.mined) return minedFace(c, showBack, noSay);
   const L = c.L, k = L.type === "kanji";
   const back = !showBack ? "" : k
     ? `<div class="fc-read ja">${L.on && L.on.length ? `音 ${esc(L.on.join("、"))}` : ""}${L.kun && L.kun.length ? `${L.on && L.on.length ? "<br>" : ""}訓 ${esc(L.kun.join("、"))}` : ""}</div><div class="fc-back">${esc(L.meaning)}</div>${L.examples ? `<div class="fc-ex ja">${esc(L.examples).replace(/\n/g, "<br>")}</div>` : ""}`
@@ -1837,8 +1874,8 @@ function vReview() {
   if (!c || (rv.pick == null && !q.some(x => x.id === c.id))) { c = q[0]; rv = c ? { id: c.id, mode: K.mode(c), ask: K.mode(c) === "mcq" ? K.ask(c) : null, flip: false, pick: null } : null; }
   const head = `${back}<header class="top"><div><div class="hdr">Flashcards · ${q.length} left</div><h1>Flashcards</h1></div>${jpsOn() ? `<span class="row" style="gap:8px">${jpsTimer()}${jps.silent ? `<button class="btn sm" data-act="jpend">Back to class</button>` : ""}</span>` : `<span class="small muted">${done.n} today</span>`}</header>`;
   if (!c && jpsOn()) return `${head}${sysBox("Cards cleared.", "Next in this session: today's grammar item, then fluency.", `<div class="btns"><button class="btn sm go" data-act="nav" data-id="jlpt">Next</button><button class="btn sm" data-act="jpend">End session</button></div>`)}`;
-  if (!c) return `${head}${sysBox("Due pile cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
-    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm" data-act="learnmore">Learn 10 new</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
+  if (!c) return `${head}${sysBox("Batch cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}. Next: stage 3.`,
+    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm go" data-act="learnmore">Continue · +10 cards</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}`;
   const know = c.lex ? `<button class="link rvknow" data-act="rvknow" data-id="${c.id}">I know this · turn off</button>` : "";
   const tag = `${know}<div class="k">${esc(c.deck)} · ${rv.mode === "mcq" ? `Choice ${(c.mcqOk || []).length}/3${c.lex ? ` · ${rv.ask.q === "reading" ? "Reading?" : "Meaning?"}` : ""}` : c.s ? "Flip" : "Flip · new"}</div>`;
   if (rv.mode === "mcq") {
@@ -1849,7 +1886,7 @@ function vReview() {
   }
   if (!rv.flip) return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, false)}</div><div class="rv-dock"><button class="btn primary block" data-act="rvflip">Show answer</button></div></div>`;
   return `<div class="rv-page">${head}<div class="panel fc">${tag}${fcFace(c, true)}</div>
-    <div class="rv-dock grades">${[[1, "Again"], [2, "Hard"], [3, "Good"], [4, "Easy"]].map(([gr, l]) => `<button class="grade g${gr}" data-act="rvgrade" data-id="${gr}"><b>${l}</b><span>${K.preview(c, gr)}</span></button>`).join("")}</div></div>`;
+    <div class="rv-dock grades">${(c.L && c.L.sent ? [[1, "Again"], [3, "Good"]] : [[1, "Again"], [2, "Hard"], [3, "Good"], [4, "Easy"]]).map(([gr, l]) => `<button class="grade g${gr}" data-act="rvgrade" data-id="${gr}"><b>${l}</b><span>${K.preview(c, gr)}</span></button>`).join("")}</div></div>`;
 }
 async function recStart() {
   try {
@@ -1930,7 +1967,8 @@ function vJlpt([sub, a]) {
   const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res + `<div class="panel jpq">${jpQuick()}</div>` + n2Panel();
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
-  const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`;
+  const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`
+    + (() => { const w = Mi.week(), n = live("mined").length; return n ? `<button class="quiet-row" data-act="lexmined"><span class="grow">Mined this week: ${w.n}${w.deck ? ` · ${w.deck} in your JLPT deck` : ""}</span><span class="chev">${ic("right")}</span></button>` : ""; })();
   if (wait) return head + lexRow + ladder + wait;
   const st = J.stats(lvl), g = { open: true }, nl = J.nextLock(lvl), tl = J.titles(); // v8: Japanese runs any time
   const exams = live("jlptExams").sort((x, y) => y.date.localeCompare(x.date) || (y.u || 0) - (x.u || 0));
@@ -3087,6 +3125,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "cmdapply": return cmdApply();
     case "cmdedit": return cmdEdit();
     case "cmdundo": if (srDone && srDone.undo) { srDone.undo(); save(); toast("Undone"); } srDone = null; return render();
+    case "lexmined": lx = { ...lx, type: "mined", level: null, st: "all", q: "", n: 60, sel: null, open: null }; return goR("lex");
     case "lexfind": { const L = Lx.entry(id); if (!L) return; lx = { ...lx, type: L.type === "kanji" ? "kanji" : "vocab", level: null, st: "all", q: Lx.face(L), n: 60, sel: null, open: id }; return goR("lex"); }
     case "rcadd": rcForm = true; rcPre = null; return goR("report");
     case "rcper": rcPeriod = id; return render();
@@ -3218,7 +3257,8 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     case "lexmore": lx.n += 100; return render();
     case "lexopen": lx.open = lx.open === id ? null : id; return render();
     case "lexsay": if (jpsOn() && jps.silent) return toast("Silent in class");
-    { const e = Lx.entry(id); if (e && !K.speak(Lx.face(e))) toast("No Japanese voice on this phone"); return; }
+    { const e = Lx.entry(id) || Mi.entry(id); if (e && !K.speak(Lx.face(e))) toast("No Japanese voice on this phone"); return; }
+    case "shadow": { const c = K.get(id); if (!c) return; if (!K.speak(K.jaText(c), 0.75)) return toast("No Japanese voice on this phone"); return toast("Repeat it out loud, right after the voice"); }
     case "deckrestore": Dy.restoreDeck(id); save(); toast(id + " restored"); return render();
     case "rvknow": { K.setOff(id, true); rv = null; save(); toast("Turned off. It won't come back."); return render(); }
     case "lexoff": { const r = live("cards").find(x => x.id === id); K.setOff(id, !(r && r.off)); save(); return render(); }
@@ -3241,7 +3281,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       rv.pick = +id; announce(K.answerMcq(c, rv.ask.opts[+id] === rv.ask.ans)); save(); return render();
     }
     case "rvnext": rv = null; return render();
-    case "learnmore": { const n = K.learnMore(10); if (!n) return toast("No new cards left. Add some first"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
+    case "learnmore": { const n = K.learnMore(); if (!n) return toast("No new cards left. Mine some words or add a deck"); save(); toast(`${n} new card${n === 1 ? "" : "s"} ready`); rv = null; return go("cards/review"); }
     case "rvflip": if (rv) rv.flip = true; return render();
     case "rvgrade": {
       const c = rv && K.get(rv.id); if (!c) return;
@@ -3396,7 +3436,7 @@ document.addEventListener("change", async ev => {
   }
   if (k === "dqnum") { if (dq) dq.ans[+el.dataset.id] = el.value; return; }
   if (k === "profname") { S.settings.name = el.value.trim().slice(0, 24) || "Arin"; touchSettings(); save(); return; }
-  if (k === "cardsnew") { const v = num(el.value); if (v === null || v < 0 || v > 200) return render(); S.settings.cards.newPerDay = Math.round(v); touchSettings(); save(); return render(); }
+  if (k === "cardsnew") { const v = num(el.value); if (v === null || v < 1 || v > 50) return render(); S.settings.cards.batch = Math.round(v); touchSettings(); save(); return render(); }
   if (k === "cardimg") {
     const file = el.files[0]; if (!file || !cardForm) return; keepCardForm();
     const mid = "cm-" + cardForm.id; await photos.put(mid, await shrink(file)); cardForm.img = mid;

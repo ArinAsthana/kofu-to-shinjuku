@@ -825,3 +825,13 @@ nav button span{position:relative}
 .wg-key .k-sleep i{background:repeating-linear-gradient(135deg,rgba(255,255,255,.2) 0 2px,transparent 2px 4px);border:0}
 .wg-key .k-task i{border:1px dashed rgba(242,239,232,.7);background:none}
 .wg-s{font-size:10px}
+/* v12: mining. */
+.fc-sent{font-size:22px;line-height:1.5}
+.fc-ex mark,.lexdet mark{background:none;color:#FF3B2F;font-weight:700}
+.mn-tags{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px;padding:0 0 6px 10px}
+.mn-tags .tag{font-size:10px;padding:1px 5px}
+.tag.t-lv{border-color:var(--lime);color:var(--lime)}
+.lexrow .muted{color:rgba(242,239,232,.6)}
+.mn-tags .tag{color:rgba(242,239,232,.75);border-color:rgba(242,239,232,.25)}
+.mn-tags .tag.t-lv{border-color:var(--lime);color:var(--lime)}
+.pills.seg:has(> :nth-child(3)){grid-template-columns:repeat(3,1fr)}
