@@ -18,6 +18,7 @@ export const RECORD_STORES = [
   "path", "applications", // schema 13: the Path (path.js), one record per finished item; job applications {firm, track, role, channel, deadline, status, contact, next, nextDate}
   "mined", // schema 14: mined words and sentences (see mined.js), added by Claude through the connector
   "resumes", // schema 15: one CV per company and role, plus the transcript (see resume.js)
+  "passages", // schema 16: the daily reading passage, written by Claude through the connector (see passage.js)
   "cards", "reviewDays", // schema 7: flashcards (see cards.js); reviewDays one record a day {id "rv-<date>", date, n, ok}. Card media stays in the photos store.
 ];
 
@@ -160,6 +161,8 @@ const MIGRATIONS = {
   13: s => { s.mined = s.mined || []; return s; },
   // 14 -> 15: v13 resumes. One new empty store; nothing existing changes.
   14: s => { s.resumes = s.resumes || []; return s; },
+  // 15 -> 16: v13.2 daily passages. One new empty store; nothing existing changes.
+  15: s => { s.passages = s.passages || []; return s; },
   8: s => { s.fieldNotes = s.fieldNotes || []; s.appraisals = s.appraisals || []; s.settings = s.settings || {}; s.settings.social = { ...(s.settings.social || {}), v25: !!(s.settings.social || {}).v25 }; return s; },
 };
 function seedCare(s) {

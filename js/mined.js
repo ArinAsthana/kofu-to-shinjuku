@@ -20,7 +20,7 @@ export function entry(cid) {
   const m = String(cid).startsWith("m-") && byId(cid.slice(2)); if (!m) return null;
   const sent = m.kind === "sentence";
   return { id: cid, type: "vocab", mined: m.id, sent, level: m.level || null, word: sent ? m.sentence : m.word, readings: [sent ? m.sentenceReading : m.reading].filter(Boolean),
-    meaning: sent ? m.sentenceEn : m.meaning, dR: m.dR || [], dM: m.dM || [], ex: sent ? "" : m.sentence || "", exR: sent ? "" : m.sentenceReading || "", exEn: sent ? "" : m.sentenceEn || "", note: m.note || "", tags: m.tags || [] };
+    meaning: sent ? m.sentenceEn : m.meaning, pos: sent ? "" : m.pos || "", dR: m.dR || [], dM: m.dM || [], ex: sent ? "" : m.sentence || "", exR: sent ? "" : m.sentenceReading || "", exEn: sent ? "" : m.sentenceEn || "", note: m.note || "", tags: m.tags || [] };
 }
 
 // Matches new mined words against the Lexicon (only on a phone with the decks imported). A match switched off

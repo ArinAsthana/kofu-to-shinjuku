@@ -855,3 +855,14 @@ nav button span{position:relative}
 .cv-new{font-size:13px}
 .cv-er,.cv-em{margin:4px 0}
 .cv-er input,.cv-em input{flex:1;min-width:0}
+/* v13.2: thin progress bar (no numbers), option notes, part of speech, example sentence */
+.pbar{position:sticky;top:0;z-index:6;height:4px;background:var(--track);margin:0 0 10px}
+.pbar i{display:block;height:100%;background:var(--acc);transition:width .3s}
+.optn{display:block;font-size:12px;line-height:1.3;color:var(--soft);margin-top:4px}
+.fc-pos{margin-top:8px}
+.fc-exb .fc-ex{display:block;background:none;border:0;padding:0;color:inherit;text-align:left;font:inherit;font-size:16px;line-height:1.6;margin-top:10px}
+.fc-exb .exr{margin-top:2px}
+.ptext .pw{display:inline;background:none;border:0;padding:0;margin:0;font:inherit;color:#FF3B2F;font-weight:700;border-bottom:1px dotted currentColor;cursor:pointer}
+.ptext .pw.on{background:color-mix(in srgb,#FF3B2F 22%,transparent)}
+.pword-note{margin-top:10px;padding-top:8px;border-top:1px solid var(--rule);font-size:15px}
+.rv-dock.done{position:static}

@@ -17,6 +17,8 @@ import * as Mi from "./mined.js";
 /* ---------- FSRS-4.5 ---------- */
 const W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
 const DECAY = -0.5, FACTOR = 19 / 81; // at 90% retention the interval equals the stability
+// v13.2: desired retention is a setting (settings.cards.retention, default 85%). Lower retention, longer intervals.
+export const retention = () => { const r = S.settings.cards && S.settings.cards.retention; return r >= 0.7 && r <= 0.97 ? r : 0.85; };
 const clampD = d => Math.min(10, Math.max(1, d));
 const d0 = g => clampD(W[4] - (g - 3) * W[5]);
 export const retrievability = (days, s) => Math.pow(1 + FACTOR * days / s, DECAY);
@@ -30,7 +32,7 @@ export function nextState(c, g, now = Date.now()) {
   else s = c.s * (Math.exp(W[8]) * (11 - D) * Math.pow(c.s, -W[9]) * (Math.exp(W[10] * (1 - R)) - 1) * (g === 2 ? W[15] : 1) * (g === 4 ? W[16] : 1) + 1);
   return { s, d };
 }
-export const intervalDays = s => Math.min(365, Math.max(1, Math.round(s)));
+export const intervalDays = s => Math.min(365, Math.max(1, Math.round(s / FACTOR * (Math.pow(retention(), 1 / DECAY) - 1))));
 const dayStart = date => E.parse(date).getTime();
 // Shown on the grade buttons: "10m", "3d", "2mo".
 export function preview(c, g) {
@@ -119,9 +121,45 @@ export function options(c) {
   const pick = others.map(b => [rnd(), b]).sort((a, b) => a[0] - b[0]).slice(0, 3).map(x => x[1]);
   return [c.back.trim(), ...pick].map(b => [rnd(), b]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
 }
+// v13.2: kana spelling twins, for the trap options: dakuten, vowel length, small っ, small ゃゅょ.
+const DK = "かがきぎくぐけげこごさざしじすずせぜそぞただちぢつづてでとどはばひびふぶへべほぼ", SM = "ゃやゅゆょよ";
+const toH = s => s.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+const toK = s => s.replace(/[ぁ-ゖ]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+const VOW = { a: "かさたなはまやらわがざだばぱあ", i: "きしちにひみりぎじぢびぴい", u: "くすつぬふむゆるぐずづぶぷう", e: "けせてねへめれげぜでべぺえ", o: "こそとのほもよろごぞどぼぽお" };
+const vowel = ch => Object.keys(VOW).find(v => VOW[v].includes(ch));
+export function twin(word, rnd, not = []) {
+  const kata = /^[ァ-ヶー・]+$/.test(word), h = toH(word), ops = [];
+  [...h].forEach((ch, i) => {
+    const d = DK.indexOf(ch); if (d >= 0) ops.push(() => h.slice(0, i) + DK[d % 2 ? d - 1 : d + 1] + h.slice(i + 1));
+    const m = SM.indexOf(ch); if (m >= 0) ops.push(() => h.slice(0, i) + SM[m % 2 ? m - 1 : m + 1] + h.slice(i + 1));
+    if (ch === "っ") ops.push(() => h.slice(0, i) + h.slice(i + 1));
+    else if (i > 0 && /[かきくけこさしすせそたちつてとぱぴぷぺぽ]/.test(ch) && !"っんうーい".includes(h[i - 1])) ops.push(() => h.slice(0, i) + "っ" + h.slice(i));
+    const v = vowel(ch), nx = h[i + 1];
+    if ((ch === "う" && i > 0 && "uo".includes(vowel(h[i - 1]) || "")) || (ch === "い" && i > 0 && "ei".includes(vowel(h[i - 1]) || ""))) ops.push(() => h.slice(0, i) + h.slice(i + 1));
+    else if ((v === "o" || v === "u") && nx !== "う" && i < h.length) ops.push(() => h.slice(0, i + 1) + "う" + h.slice(i + 1));
+  });
+  for (let k = 0; k < 12 && ops.length; k++) {
+    const t = ops[Math.floor(rnd() * ops.length)]();
+    const out = kata ? toK(t) : t;
+    if (out !== word && !not.includes(out)) return out;
+  }
+  return null;
+}
+// What a wrong meaning really is, for the note after answering (dM options are other deck words' meanings).
+let MEAN = null;
+const byMeaning = (m, type) => { if (!MEAN) { MEAN = new Map(); for (const t of ["vocab", "kanji"]) for (const x of Lx.all(t)) if (!MEAN.has(t + x.meaning)) MEAN.set(t + x.meaning, x); } return MEAN.get(type + m) || null; };
+// The note under each option once answered: "しゅみ = 趣味, hobby", "しゅめ: not a word (twin of しゅみ)".
+export function optNote(a, i) {
+  const x = a.info && a.info[i]; if (!x || x.kind === "ans") return "";
+  if (x.kind === "twin") return (a.kanji ? "not a reading" : "not a word") + (x.of ? ` (twin of ${x.of})` : "");
+  if (!x.w) return "";
+  return a.q === "reading" ? `${x.w}, ${String(x.m || "").split(/;\s*/).slice(0, 2).join("; ")}` : `${x.w}${x.r && x.r !== x.w ? " (" + x.r + ")" : ""}`;
+}
 // v8: the question for a choice card. Lexicon vocabulary alternates reading and meaning (kana-only words: meaning only);
-// kanji alternates on-reading and meaning. Wrong options are the deck's close ones (dR / dM), topped up from the same level.
-// Returns {q: "reading"|"meaning", ans, opts}. Stable until the card is answered (it turns on reps).
+// kanji alternates on-reading and meaning. Returns {q: "reading"|"meaning", ans, opts, info}, stable until answered.
+// v13.2: wrong options are real deck words first (dW: shared kanji, sound, level). A spelling twin never points to the
+// answer: a reading question is (a) the answer and a real word, each with its twin, (b) 3 real words and a twin of a
+// wrong one, or (c) 4 real words. Old decks without dW fall back to the close answers (dR / dM).
 export function ask(c) {
   if (!c.lex) return { q: "meaning", ans: c.back.trim(), opts: options(c) };
   const L = c.L, kanji = L.type === "kanji";
@@ -131,15 +169,52 @@ export function ask(c) {
   const ans = q === "reading" ? rd : L.meaning;
   let seed = [...(c.id + E.today() + (c.reps || 0))].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
-  const wrong = [...new Set((q === "reading" ? L.dR : L.dM) || [])].filter(x => x && x !== ans).slice(0, 3);
-  if (wrong.length < 3) { // top up from the same level (and part of speech when known)
-    const pool = Lx.all(L.type).filter(x => x.level === L.level && x.id !== L.id && (!L.pos || !x.pos || x.pos === L.pos));
-    for (let i = 0; i < 40 && wrong.length < 3 && pool.length; i++) {
-      const x = pool[Math.floor(rnd() * pool.length)], v = q === "reading" ? (kanji ? (x.on || [])[0] : (x.readings || [])[0]) : x.meaning;
-      if (v && v !== ans && !wrong.includes(v)) wrong.push(v);
-    }
+  const mix = L => L.map(b => [rnd(), b]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+  const own = [...(L.readings || []), ...(L.on || []), ...(L.kun || [])];
+  const used = new Set([ans]);
+  const real = mix((L.dW || []).slice(0, 5)).map(x => ({ kind: "real", w: x.w, r: x.r, m: x.m, o: q === "reading" ? x.r : x.m }))
+    .filter(x => x.o && !used.has(x.o) && !(q === "reading" && own.includes(x.o)) && (used.add(x.o), true));
+  let out = null;
+  if (real.length && q === "reading") {
+    const n = Math.min(real.length, 3), lay = ["a", "b", "c"].slice(0, n)[Math.floor(rnd() * n)]; // b needs 2 real words, c needs 3
+    const tw = (of, pre) => { const t = (pre || []).find(x => x && !used.has(x) && x.length > 0) || twin(of, rnd, [...used]); if (!t) return null; used.add(t); return { kind: "twin", o: t, of }; };
+    if (lay === "a") { const t1 = tw(ans, L.dR), t2 = t1 && tw(real[0].o); if (t1 && t2) out = [{ kind: "ans", o: ans }, t1, real[0], t2]; }
+    else if (lay === "b") { const t = tw(real[0].o); if (t) out = [{ kind: "ans", o: ans }, real[0], real[1], t]; }
+    if (!out && real.length >= 3) out = [{ kind: "ans", o: ans }, ...real.slice(0, 3)];
+  } else if (real.length && q === "meaning") {
+    // Two look-alike words' meanings plus a near-synonym from the deck's close meanings.
+    const syn = [...new Set(L.dM || [])].filter(x => x && !used.has(x)).slice(0, 1).map(m => { used.add(m); const e = byMeaning(m, L.type); return { kind: "real", o: m, w: e ? Lx.face(e) : "", r: e ? Lx.reading(e) : "", m }; });
+    const ws = [...real.slice(0, 3 - syn.length), ...syn, ...real.slice(3 - syn.length)].slice(0, 3);
+    if (ws.length === 3) out = [{ kind: "ans", o: ans }, ...ws];
   }
-  return { q, ans, opts: [ans, ...wrong].map(b => [rnd(), b]).sort((a, b) => a[0] - b[0]).map(x => x[1]) };
+  if (!out) { // fallback: the close answers, topped up from the same level (and part of speech when known)
+    const wrong = [...new Set((q === "reading" ? L.dR : L.dM) || [])].filter(x => x && x !== ans).slice(0, 3);
+    if (wrong.length < 3) {
+      const pool = Lx.all(L.type).filter(x => x.level === L.level && x.id !== L.id && (!L.pos || !x.pos || x.pos === L.pos));
+      for (let i = 0; i < 40 && wrong.length < 3 && pool.length; i++) {
+        const x = pool[Math.floor(rnd() * pool.length)], v = q === "reading" ? (kanji ? (x.on || [])[0] : (x.readings || [])[0]) : x.meaning;
+        if (v && v !== ans && !wrong.includes(v)) wrong.push(v);
+      }
+    }
+    out = [{ kind: "ans", o: ans }, ...wrong.map(o => { const e = q === "meaning" ? byMeaning(o, L.type) : null; return e ? { kind: "real", o, w: Lx.face(e), r: Lx.reading(e), m: o } : { kind: q === "reading" ? "twin" : "other", o, of: q === "reading" ? ans : "" }; })];
+    if (q === "reading") out.forEach(x => { if (x.kind === "twin") x.of = ""; }); // old decks: don't say whose twin
+  }
+  const sh = mix(out);
+  return { q, ans, opts: sh.map(x => x.o), info: sh, kanji };
+}
+// v13.2: the part-of-speech tag after answering, from JMdict codes ("n,vs", "v5,vt", "adj-na,n").
+export function posLabel(pos) {
+  const p = String(pos || "").split(",").filter(Boolean); if (!p.length) return "";
+  const has = k => p.includes(k), out = [];
+  if (has("v5") || has("v1") || has("vk") || has("vt") || has("vi")) out.push([has("v5") ? "godan verb" : has("v1") ? "ichidan verb" : has("vk") ? "くる verb" : "verb", has("vt") && has("vi") ? "transitive and intransitive" : has("vt") ? "transitive" : has("vi") ? "intransitive" : ""].filter(Boolean).join(", "));
+  if (has("adj-i")) out.push("い-adjective");
+  if (has("adj-na")) out.push("な-adjective");
+  if (has("n") || has("n-t") || has("n-adv")) out.push(has("vs") ? "noun, する-verb" : "noun");
+  else if (has("vs")) out.push("する-verb");
+  if (has("adv") || has("adv-to")) out.push(has("adv-to") ? "adverb (と)" : "adverb");
+  const rest = { exp: "expression", int: "interjection", conj: "conjunction", pn: "pronoun", ctr: "counter", prt: "particle", suf: "suffix", "n-suf": "suffix", pref: "prefix", "n-pref": "prefix", "adj-pn": "pre-noun adjective", "adj-no": "の-adjective", "adj-t": "たる-adjective", num: "number", "aux-v": "auxiliary verb" };
+  for (const k of p) if (rest[k] && !out.includes(rest[k]) && (k !== "adj-no" || !out.length)) out.push(rest[k]);
+  return out.slice(0, 3).join(" · ");
 }
 export const stageLabel = c => mode(c) === "mcq" ? `Choice · ${(c.mcqOk || []).length}/3` : c.s ? "Flip · due " + (c.due <= Date.now() ? "now" : E.fmtDate(E.ymd(new Date(c.due)))) : "Flip · new";
 
@@ -192,6 +267,17 @@ export function answerFlip(c, g, now = Date.now()) {
   } else { c.lapseRun = 0; c.due = dayStart(E.addDays(t, intervalDays(st.s))); }
   store(c);
   return logReview(g > 1, null);
+}
+
+// v13.2: a target word read in the daily passage counts as a Good review when the card is in flip stage, due today or
+// tomorrow, wasn't learned today and wasn't credited today. No review XP: it's a bonus exposure. Returns true if credited.
+export function creditPassage(id, now = Date.now()) {
+  const r = live("cards").find(x => x.id === id); if (!r || r.off || r.stage !== "flip" || !r.s) return false;
+  const t = E.today(); const c = get(id);
+  if (c.intro === t || c.cred === t || (c.due || 0) >= dayStart(E.addDays(t, 2))) return false;
+  const st = nextState(c, 3, now);
+  Object.assign(c, { s: st.s, d: st.d, last: now, reps: (c.reps || 0) + 1, lapseRun: 0, cred: t, src: "passage", due: dayStart(E.addDays(t, intervalDays(st.s))) });
+  store(c); return true;
 }
 
 const XP_CAP = 50; // 1 XP per review, up to 50 a day
