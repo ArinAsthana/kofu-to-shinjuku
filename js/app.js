@@ -2227,14 +2227,23 @@ function blockFormHtml(b) {
 }
 
 // Week as a time grid: Mon–Sun columns, 24 hours tall. Blocks sit at their real times; planned tasks are dashed.
+// v11.5: short labels so a narrow week column stays readable. Wide screens show the full title.
+function wgShort(b) {
+  const t = b.title || "";
+  if (b.kind === "work" && /shift/i.test(t)) return "Shift";
+  if (P.isWorkout(b)) return /run\b/i.test(t) ? "Run" : "Gym";
+  if (/financ/i.test(t)) return "Fin";
+  if (b.kind === "class") { const w = t.replace(/[:,&]/g, " ").split(/\s+/).filter(x => /^[A-Z]/.test(x)); return w.length > 1 ? w.map(x => x[0]).join("").slice(0, 4) : t.slice(0, 5); }
+  return t.split(/[\s:·(]/)[0].slice(0, 6);
+}
 function weekGrid() {
   const H = 26, t = E.today(), days = E.weekDays(t), p = P.plan(), n = new Date(), nm = n.getHours() * 60 + n.getMinutes();
   const px = m => (m / 60 * H).toFixed(1);
   const col = d => {
-    const blocks = P.segments(d).map(g => { const K = P.KINDS[g.b.kind] || P.KINDS.other, h = (g.e - g.s) / 60 * H;
-      return `<button class="wg-b k-${esc(g.b.kind)}" style="top:${px(g.s)}px;height:${Math.max(12, h - 1).toFixed(1)}px;--c:var(--${K.c})" data-act="blockform" data-id="${g.b.id}" aria-label="${esc(g.b.title)} ${P.toHM(g.s)} to ${P.toHM(g.e)}">${h >= 18 ? `<span>${esc(g.b.title)}</span>` : ""}${h >= 34 ? `<i>${P.toHM(g.tail ? 0 : g.s)}</i>` : ""}</button>`; }).join("");
+    const blocks = P.segments(d).map(g => { const K = P.KINDS[g.b.kind] || P.KINDS.other, h = (g.e - g.s) / 60 * H, rest = g.b.kind === "sleep" || g.b.kind === "nap";
+      return `<button class="wg-b k-${esc(g.b.kind)}" style="top:${px(g.s)}px;height:${Math.max(10, h - 2).toFixed(1)}px;--c:var(--${K.c})" data-act="blockform" data-id="${g.b.id}" aria-label="${esc(g.b.title)} ${P.toHM(g.s)} to ${P.toHM(g.e)}">${rest ? (h >= 30 ? `<i class="wg-z">${esc(K.label)}</i>` : "") : h >= 14 ? `<span class="wg-s">${esc(wgShort(g.b))}</span><span class="wg-l">${esc(g.b.title)}</span>` : ""}${!rest && h >= 40 ? `<i>${P.toHM(g.tail ? 0 : g.s)}</i>` : ""}</button>`; }).join("");
     const tasks = live("tasks").filter(k => !k.done).map(k => ({ k, at: p.at.get(k.id) })).filter(x => x.at && x.at.date === d)
-      .map(({ k, at }) => `<button class="wg-b wg-task" style="top:${px(at.s)}px;height:${Math.max(12, (at.e - at.s) / 60 * H - 1).toFixed(1)}px" data-act="sheet" data-id="task:${k.id}" aria-label="Task ${esc(k.title)}"><span>${esc(k.title)}</span></button>`).join("");
+      .map(({ k, at }) => `<button class="wg-b wg-task ${k.penalty ? "pen" : ""}" style="top:${px(at.s)}px;height:${Math.max(10, (at.e - at.s) / 60 * H - 2).toFixed(1)}px" data-act="sheet" data-id="task:${k.id}" aria-label="Task ${esc(k.title)}"><span class="wg-s">${k.penalty ? "!" : "Task"}</span><span class="wg-l">${esc(k.title)}</span></button>`).join("");
     return `<div class="wg-col ${d === t ? "today" : ""}" data-act="newblockat" data-id="${d}">${blocks}${tasks}${d === t ? `<div class="wg-now" style="top:${px(nm)}px"></div>` : ""}</div>`;
   };
   return `<div class="wgrid panel">
@@ -2242,9 +2251,13 @@ function weekGrid() {
     <div class="wg-body" style="height:${24 * H}px;--h:${H}px">
       <div class="wg-times">${[...Array(24)].map((_, h) => `<span style="top:${h * H}px">${h % 3 === 0 ? E.pad(h) : ""}</span>`).join("")}</div>
       ${days.map(col).join("")}
-    </div></div>`;
+    </div>${wgLegend(days)}</div>`;
 }
 
+function wgLegend(days) {
+  const ks = [...new Set(days.flatMap(d => P.segments(d).map(g => g.b.kind)))].filter(k => k !== "nap");
+  return `<div class="wg-key">${ks.map(k => { const K = P.KINDS[k] || P.KINDS.other; return `<span class="k-${esc(k)}" style="--c:var(--${K.c})"><i></i>${esc(K.label)}</span>`; }).join("")}<span class="k-task"><i></i>Task</span></div>`;
+}
 function vWeek() {
   return `${weekGrid()}${tip("plan-week", "Tap an empty slot to add a block at that time. Tap a block to edit it.")}`;
 }

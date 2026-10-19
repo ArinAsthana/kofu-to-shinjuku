@@ -125,6 +125,10 @@ function tooTired(date, s, e) {
   return segments(date).some(g => g.b.kind === "work" && g.tail && s < g.e + 8 * 60);
 }
 const snap = m => Math.ceil(m / 15) * 15;
+// v11.5: a workout task (a skipped Lift's penalty quest, say) only fits while the gym is open, never in Night watch.
+export const GYM = [9 * 60, 20 * 60];
+const gymTask = k => isWorkout(k);
+const gymFree = L => L.map(([s, e]) => [Math.max(s, GYM[0]), Math.min(e, GYM[1])]).filter(([s, e]) => e - s >= 15);
 
 const order = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (b.prio || 2) - (a.prio || 2) || (a.created || 0) - (b.created || 0);
 
@@ -142,7 +146,8 @@ export function plan() {
     for (let i = 0; i < 14 && !spot; i++) {
       const date = E.addDays(t, i);
       if (k.after && date < k.after) continue; // v9.2: a prep session waits for its start day
-      for (const [fs, fe] of [...(watchTask(k) ? watchFree(date, taken, i === 0 ? n : 0) : []), ...freeOn(date, taken, i === 0 ? n : 0)]) {
+      const gym = gymTask(k), slots = [...(watchTask(k) && !gym ? watchFree(date, taken, i === 0 ? n : 0) : []), ...freeOn(date, taken, i === 0 ? n : 0)];
+      for (const [fs, fe] of gym ? gymFree(slots) : slots) {
         let s = snap(fs);
         while (s + k.mins <= fe) { if (k.energy !== "high" || !tooTired(date, s, s + k.mins)) { spot = { date, s, e: s + k.mins }; break; } s += 15; }
         if (spot) break;
