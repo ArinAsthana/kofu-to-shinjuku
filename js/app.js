@@ -22,6 +22,7 @@ import * as Lx from "./lexicon.js";
 import * as N2 from "./n2.js";
 import * as Dy from "./day.js";
 import * as Dl from "./deadlines.js";
+import * as Dr from "./drill.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -91,15 +92,15 @@ const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study:
 // v6: flashcards open at any stage and outside blocks.
 const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 0, people: 4 }; // v9.4: Japanese is open from day one
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { lex: "scroll", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
-const TAB_OF = { lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
+const HEAD_PX = { lex: "scroll", drill: "sword", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { drill: "home", lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
   if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, drill: vDrill, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   const fresh = Sy.pendingUnlock();
   $("#nav").innerHTML = TABS.map(([k, l, icon, n]) => Sy.has(n) ? `<button data-act="nav" data-id="${k}" class="${fresh && fresh.tab === k ? "pulse" : ""}" ${(TAB_OF[tab] || "home") === k ? 'aria-current="page"' : ""}>${px(icon)}<span>${l}</span></button>` : `<span class="slot0" aria-hidden="true"></span>`).join("");
@@ -115,7 +116,8 @@ function render() {
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
-  const cer = !sheet ? ceremony() : null, brief = briefOpen && !cer && !sheet;
+  const inDrill = tab === "drill" && Dr.running(); // v10: nothing pops over a running Drill
+  const cer = !sheet && !inDrill ? ceremony() : null, brief = briefOpen && !cer && !sheet && !inDrill;
   $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.update ? updateWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people", "home"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
   document.body.classList.toggle("modal-open", !!(brief || sheet || cer));
@@ -356,9 +358,65 @@ function pathDoneHtml(id) {
   const ahead = !k.path.sun && E.today() < Pa.schedDate(k.path.idx);
   return `<div class="hdr">${px("flag")} Path · ${esc(Pa.stream(k.path.stream).label)}</div><h3 style="margin:6px 0">${esc(pathText(k))}</h3>
     ${ahead ? `<p class="small good-t">Ahead of schedule: +50% XP if it's Done.</p>` : ""}
-    ${k.path.stream === "mental" && !k.path.sun ? `<label class="f">Zetamac score (best of the two runs)<input id="zetIn" type="number" inputmode="numeric" placeholder="${Pa.zetamac()?.last ?? ""}"></label>` : ""}
+    ${k.path.stream === "mental" && !k.path.sun ? (() => { const tb = Dr.todayBest("classic"), n = Dr.todayRuns("classic").length;
+      return `<div class="panel" style="margin:8px 0"><div class="small">${n ? `Drill today: ${n} run${n === 1 ? "" : "s"} · best <b class="mono">${tb}</b>` : "Two Classic Drill runs, 2 min each. The best one is logged."}</div>
+        <div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">${n ? "Run again" : "Start Drill"}</button></div></div>
+        <label class="f">Score${tb != null ? "" : " (if you ran Zetamac outside the app)"}<input id="zetIn" type="number" inputmode="numeric" value="${tb ?? ""}" placeholder="${Pa.zetamac()?.last ?? ""}"></label>`; })() : ""}
     <div class="btns"><button class="btn go" data-act="pathfin" data-id="${k.id}|done">Done</button><button class="btn" data-act="pathfin" data-id="${k.id}|partly">Partly</button></div>
     <p class="tiny muted">Partly: half XP, and the stream still moves on. Not done: leave it. It waits for tomorrow and nothing else piles up.</p>`;
+}
+/* ---------- v10.0: Drill ---------- */
+let drillT = null, drillResult = null; // timer, and the last run's result for the end screen
+const mentalTask = () => Pa.ready() && Pa.started() ? live("tasks").find(k => k.path && k.path.stream === "mental" && !k.path.sun && !k.done && k.due <= E.today()) : null;
+function drillTick() {
+  clearInterval(drillT);
+  drillT = setInterval(() => {
+    if (Dr.running()) { const el = $("#drT"); if (el) el.textContent = Dr.left(); return; }
+    clearInterval(drillT); if (!Dr.current()) return;
+    drillResult = Dr.finish();
+    // Path: the 2nd Classic run of the day logs the best score to the open Mental Math item by itself.
+    const k = drillResult && drillResult.rec.mode === "classic" && Dr.todayRuns("classic").length >= 2 ? mentalTask() : null;
+    if (k) { const g = Pa.finish(k, "done", Dr.todayBest("classic")); drillResult.logged = g; }
+    save();
+    if (drillResult && drillResult.pb) setTimeout(() => toast(`New best · ${Dr.mode(drillResult.rec.mode).name} ${drillResult.rec.score}`, true), 400);
+    if (route()[0] === "drill") render();
+  }, 250);
+}
+const PAD = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "-", "0", "."];
+function drillRunHtml() {
+  const r = Dr.current();
+  return `<div class="drill-run" id="drillRun"><div class="row between"><span class="hdr">${esc(Dr.mode(r.mode).name)}</span><span class="mono dr-t"><b id="drT">${Dr.left()}</b> s</span></div>
+    <div class="dr-score mono">Score <b id="drS">${r.score}</b></div>
+    <div class="dr-q" id="drQ">${esc(r.p.q)}</div><div class="dr-in mono" id="drIn">${esc(r.input) || "&nbsp;"}</div>
+    <div class="dr-pad">${PAD.map(k => `<button class="dr-k" data-act="drk" data-id="${k}">${k === "-" ? "±" : k}</button>`).join("")}
+      <button class="dr-k sm" data-act="drskip">Skip</button><button class="dr-k sm" data-act="drquit">Stop</button><button class="dr-k" data-act="drk" data-id="del" aria-label="Delete">${ic("left")}</button></div></div>`;
+}
+// Updates the run in place (no full render while typing). ok = the problem changed.
+function drillPaint(ok) {
+  const r = Dr.current(); if (!r || !$("#drillRun")) return;
+  $("#drIn").innerHTML = esc(r.input) || "&nbsp;"; $("#drS").textContent = r.score;
+  if (ok) { const q = $("#drQ"); q.textContent = r.p.q; q.classList.remove("hit"); void q.offsetWidth; q.classList.add("hit"); }
+}
+const sgn = n => (n > 0 ? "+" : "") + n;
+function vDrill() {
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
+  if (Dr.running()) return drillRunHtml();
+  const head = `${back}<header class="top"><div><div class="hdr">Mental math</div><h1>Drill</h1></div></header>`;
+  let end = "";
+  if (drillResult) {
+    const { rec, xp, pb, avg7 } = drillResult, b = Dr.best(rec.mode), k = mentalTask();
+    const slow = rec.slow || [];
+    end = `<div class="panel dr-end"><div class="hdr">${esc(Dr.mode(rec.mode).name)} · ${rec.secs} s</div>
+      <div class="dr-big mono">${rec.score}</div>
+      <div class="small mono">best ${b ?? rec.score}${avg7 != null ? ` · ${sgn(Math.round(rec.score - avg7))} vs 7-day avg` : ""}${xp ? ` · +${xp} XP` : ""}${pb ? " · new best" : ""}</div>
+      ${drillResult.logged ? `<div class="small good-t" style="margin-top:6px">Logged to the Path: best ${Dr.todayBest("classic")}.</div>` : k && rec.mode === "classic" ? `<div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">Run 2</button><button class="btn" data-act="drlog">Log ${Dr.todayBest("classic")} to the Path</button></div>` : ""}
+      ${slow.length ? `<details class="key" style="margin-top:8px"><summary>Slow or skipped · ${slow.length}</summary>${slow.map(x => `<div class="row between small mono"><span>${esc(x.q)} = ${esc(Dr.answerText(x.a))}</span><span class="muted">${x.skipped ? "skipped" : x.s + " s"}</span></div>`).join("")}</details>` : ""}</div>`;
+  }
+  const rows = Dr.MODES.map(m => { const b = Dr.best(m.id), tb = Dr.todayBest(m.id), a = Dr.avg7(m.id);
+    return `<div class="panel row between"><div class="grow"><b>${esc(m.name)}</b><div class="tiny muted">${esc(m.note)}</div>
+      <div class="tiny mono" style="margin-top:4px">${b != null ? `best ${b}${a != null ? ` · 7-day ${Math.round(a)}` : ""}${tb != null ? ` · today ${tb}` : ""}` : "no runs yet"}</div></div>
+      <button class="btn sm go" data-act="drillgo" data-id="${m.id}">${ic("play", "inl")} 2 min</button></div>`; }).join("");
+  return `${head}${end}${rows}<p class="tiny muted">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p>`;
 }
 function vPath() {
   const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
@@ -376,7 +434,7 @@ function vPath() {
     return `<div class="panel pstream"><div class="row between"><b>${esc(s.label)}</b><span class="row" style="gap:6px">${badge}<span class="small muted">${P.dur(s.mins)}</span></span></div>
       <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : gt ? "Gate Test before Arc " + Pa.arc(s.id).n + "." : "Stream complete."}</div>
       ${gt ? "" : fold("arc-" + s.id, `<span class="grow tiny mono">Arc ${A.n} · ${A.done}/${A.size}</span>`, list, false, "arcf")}
-      ${s.id === "mental" && z ? `<div class="tiny muted" style="margin-bottom:6px">Zetamac best ${z.best} · average ${z.avg}</div>` : ""}
+      ${s.id === "mental" ? `<div class="row between tiny muted" style="margin-bottom:6px"><span>${Dr.best("classic") != null ? `Drill best ${Dr.best("classic")}` : z ? `Zetamac best ${z.best} · average ${z.avg}` : "Classic Drill: 2 min"}</span><button class="btn sm" data-act="go" data-id="drill">Drill</button></div>` : ""}
       ${gt ? gateBox(gt) : k ? `<div class="btns"><button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button></div>` : it ? `<div class="btns"><button class="btn sm" data-act="pathahead" data-id="${s.id}">Go ahead</button></div>` : ""}</div>`;
   }).join("");
   const due = K.dueCount(), c = Pa.cfg(), tdy = E.today();
@@ -857,6 +915,7 @@ function vProfile() {
   <header class="top"><div><div class="hdr">${Cl.identity() ? esc(Cl.identity()) : "Player"} · stage ${Sy.stage()} · ${esc(Sy.STAGES[Sy.stage()].name)}</div><h1>${esc(S.settings.name || "Arin")}</h1></div>${gear("status")}</header>
   ${actPanel()}
   ${profilePath()}
+  <button class="quiet-row" data-act="go" data-id="drill"><span class="grow">Mental math Drill${Dr.best("classic") != null ? ` · best ${Dr.best("classic")}` : ""}</span><span class="chev">${ic("right")}</span></button>
   ${sleepPanel()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
   <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
@@ -2748,6 +2807,11 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return;
       if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); E.revokeXP("task:" + id + ":ahead"); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
+    case "drillgo": sheet = null; drillResult = null; Dr.start(id); if (route()[0] !== "drill") location.hash = "drill"; drillTick(); return render();
+    case "drk": { const ok = Dr.key(id); drillPaint(ok); return; }
+    case "drskip": Dr.skip(); drillPaint(true); return;
+    case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
+    case "drlog": { const k = mentalTask(); if (!k) return; const g = Pa.finish(k, "done", Dr.todayBest("classic")); save(); drillResult = null; announce([g]); return render(); }
     case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
     case "dlform": dlMove = null; sheet = "deadline"; render(); $("#dlForm input")?.focus(); return;
     case "dlsave": {
@@ -3105,6 +3169,12 @@ function renameStyle() {
   const usageTick = async () => { if (await Us.refresh()) { save(); render(); } };
   usageTick(); setInterval(usageTick, 5 * 60000);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { usageTick(); pendingRoute(); } });
+  // v10: a hardware or Bluetooth keyboard works in the Drill too.
+  document.addEventListener("keydown", e => {
+    if (!Dr.running() || route()[0] !== "drill" || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key === "Backspace" ? "del" : e.key === "Enter" || e.key === " " ? null : /^[\d.-]$/.test(e.key) ? e.key : null;
+    if (!k) return; e.preventDefault(); drillPaint(Dr.key(k));
+  });
   pendingRoute();
   let alT = null; Al.init({ go, render }); onSave(() => { clearTimeout(alT); alT = setTimeout(Al.reschedule, 2000); });
   // Keep "now" and the wind-down banner current, without wiping a form being filled in.

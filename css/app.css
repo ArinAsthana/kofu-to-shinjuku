@@ -726,3 +726,18 @@ html.navy body::before{filter:hue-rotate(225deg) saturate(.7) brightness(.55)}
 .hilv b{font:800 13px var(--dot)}
 .hilv-bar{display:block;width:72px;height:4px;background:rgba(0,0,0,.35)}
 .hilv-bar i{display:block;height:100%;background:var(--fg)}
+/* v10.0 Drill */
+.drill-run{display:flex;flex-direction:column;min-height:calc(100vh - 140px);padding-top:8px}
+.dr-t{font-size:15px}.dr-t b{font:800 26px var(--dot)}
+.dr-score{margin-top:4px;font-size:13px;color:var(--soft)}.dr-score b{color:var(--fg);font-size:16px}
+.dr-q{margin:28px 0 8px;text-align:center;font:800 40px/1.15 var(--dot);color:var(--fg);word-break:break-word}
+.dr-q.hit{animation:drhit .18s ease-out}
+@keyframes drhit{from{opacity:.3;transform:translateY(6px)}to{opacity:1;transform:none}}
+.dr-in{min-height:52px;margin:0 auto 12px;padding:8px 16px;min-width:60%;text-align:center;font-size:34px;background:#000;color:var(--paper);border:1px solid rgba(242,239,232,.25)}
+.dr-pad{margin-top:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-bottom:8px}
+.dr-k{height:58px;border:0;background:#000;color:var(--paper);font:700 24px var(--mono);touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.dr-k:active{background:#222}
+.dr-k.sm{font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+.dr-k .ic{width:22px;height:22px;fill:currentColor}
+.dr-end{text-align:center}.dr-big{font:800 64px/1 var(--dot);margin:8px 0}
+body[data-tab="drill"] #fab{display:none}
