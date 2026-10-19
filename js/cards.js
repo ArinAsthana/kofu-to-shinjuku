@@ -5,7 +5,9 @@
 //
 // card: {deck, front, back, ja, img, aud, stage "mcq"|"flip", mcqOk:[dates], intro: date first shown,
 //        due ms, s stability (days), d difficulty 1-10, last ms, reps, lapses, lapseRun, created}
-// reviewDays: one record a day {id "rv-YYYY-MM-DD", date, n, ok}, so the log stays small enough to sync.
+// reviewDays: one record a day {id "rv-YYYY-MM-DD", date, n, ok, nw new cards}, so the log stays small enough to sync.
+// v13.3: pri (Arin's priority star: first in the queue, 92% retention), mcqConf (last rating after a right choice:
+// guess|unsure|knew), gN (Guessed count), sugg (suggest the star: 2 Guessed or 2 lapses in a row), suggNo (dismissed).
 
 import { S, live, put, remove, photos } from "./store.js";
 import { HABITS } from "./data.js";
@@ -32,12 +34,13 @@ export function nextState(c, g, now = Date.now()) {
   else s = c.s * (Math.exp(W[8]) * (11 - D) * Math.pow(c.s, -W[9]) * (Math.exp(W[10] * (1 - R)) - 1) * (g === 2 ? W[15] : 1) * (g === 4 ? W[16] : 1) + 1);
   return { s, d };
 }
-export const intervalDays = s => Math.min(365, Math.max(1, Math.round(s / FACTOR * (Math.pow(retention(), 1 / DECAY) - 1))));
+export const PRI_RET = 0.92; // v13.3: starred cards come back more often
+export const intervalDays = (s, pri) => Math.min(365, Math.max(1, Math.round(s / FACTOR * (Math.pow(pri ? Math.max(PRI_RET, retention()) : retention(), 1 / DECAY) - 1))));
 const dayStart = date => E.parse(date).getTime();
 // Shown on the grade buttons: "10m", "3d", "2mo".
 export function preview(c, g) {
   if (g === 1) return "10m";
-  const n = intervalDays(nextState(c, g).s);
+  const n = intervalDays(nextState(c, g).s, c.pri);
   return n < 30 ? n + "d" : n < 365 ? Math.round(n / 30) + "mo" : "1y";
 }
 
@@ -77,6 +80,24 @@ export function setOff(id, off) {
   else if (off) put("cards", { id, lex: lexKind(L), off: true });
 }
 const lexSeen = () => live("cards").filter(c => c.lex && c.intro && !c.off).map(hyd).filter(Boolean);
+// v13.3: the priority star. Starring a card not yet seen keeps a progress record for it.
+export function setPri(id, pri) {
+  const c = live("cards").find(x => x.id === id), L = c && !c.lex ? null : lexEntry(id);
+  if (c) { const r = { ...c, pri }; if (pri) delete r.sugg; return put("cards", r); }
+  if (pri && L) put("cards", { id, lex: lexKind(L), pri: true });
+}
+export const unsugg = id => { const c = live("cards").find(x => x.id === id); if (c) put("cards", { ...c, suggNo: true }); };
+// A look-alike to star with it: the first real-word option (dW) that shares a kanji and is a Lexicon card not starred.
+export function pairOf(c) {
+  if (!c || !c.L || !c.L.dW) return null;
+  const ks = [...Lx.face(c.L)].filter(ch => /[一-龯々]/.test(ch)); if (!ks.length) return null;
+  for (const x of c.L.dW) {
+    if (!x.w || ![...x.w].some(ch => ks.includes(ch))) continue;
+    const e = Lx.byWord(x.w, c.L.type); if (!e || e.id === c.id) continue;
+    const r = live("cards").find(y => y.id === e.id); if (!(r && (r.pri || r.off))) return e;
+  }
+  return null;
+}
 // Today's new Lexicon cards: vocabulary N5 → N2 and kanji N3 → N2, skipping off and started cards.
 // v8.1: the pace is the N2 plan row's (a ceiling, not a duty); settings.jp overrides it.
 export const jp = () => ({ ...N2.pace(), ...(S.settings.jp || {}) });
@@ -91,6 +112,7 @@ const batch = () => S.settings.cards?.batch || BATCH;
 function freshPool(t) {
   const m = Lx.recs(), out = [], seen = new Set();
   const add = c => { if (c && !seen.has(c.id)) { seen.add(c.id); out.push(c); } };
+  for (const r of m.values()) if (r.pri && !r.off && !r.intro) add(get(r.id)); // v13.3: starred, not yet seen
   for (const id of Mi.freshIds(m)) { const r = m.get(id); add(r ? hyd(r) : get(id)); }
   if (Lx.ready()) {
     const cfg = jp(), kr = (cfg.newKanji || 0) / Math.max(1, (cfg.newWords || 0) + (cfg.newKanji || 0));
@@ -103,7 +125,7 @@ function freshPool(t) {
     }
   }
   cards().filter(c => !c.intro).sort((a, b) => (a.created || 0) - (b.created || 0)).forEach(add);
-  return out;
+  return [...out.filter(c => c.pri), ...out.filter(c => !c.pri)];
 }
 const introToday = t => live("cards").filter(c => c.intro === t && !c.off).length;
 export const deckNames = () => [...new Set(cards().map(c => c.deck))].sort((a, b) => a.localeCompare(b, "ja"));
@@ -237,36 +259,42 @@ export function queue(now = Date.now()) {
   const lim = (heavy(due.length) ? 0 : batch()) + extraToday() - introToday(t);
   const fresh = lim > 0 ? freshPool(t).slice(0, lim) : [];
   if (!due.length && !fresh.length) due = seen.filter(c => (c.due || 0) <= now + AHEAD);
-  return [...due.sort((a, b) => (a.due || 0) - (b.due || 0)), ...fresh];
+  return [...due.sort((a, b) => (b.pri ? 1 : 0) - (a.pri ? 1 : 0) || (a.due || 0) - (b.due || 0)), ...fresh];
 }
 export const dueCount = deck => queue().filter(c => !deck || c.deck === deck).length;
 
 /* ---------- answering ---------- */
 // ok: a multiple-choice answer was right. Returns the XP/quest gains to announce.
-export function answerMcq(c, ok, now = Date.now()) {
-  const t = E.today();
+// v13.3: conf is the rating after a right answer. Guessed counts as wrong (it comes back in this session); Unsure
+// counts as right but comes back once more in this session; Knew it is a plain right answer.
+export function answerMcq(c, ok, now = Date.now(), conf = null) {
+  const t = E.today(), isNew = !c.intro;
   c.intro = c.intro || t; c.reps = (c.reps || 0) + 1; c.last = now;
+  if (conf) c.mcqConf = conf;
+  if (conf === "guess") { ok = false; c.gN = (c.gN || 0) + 1; if (c.gN >= 2 && !c.pri) c.sugg = true; }
   if (ok) {
     c.mcqOk = [...(c.mcqOk || []), t];
     if (c.mcqOk.length >= 3 && new Set(c.mcqOk).size >= 2) {
       // Graduates as if graded Good on its first flip review.
       const st = nextState({}, 3);
-      Object.assign(c, { stage: "flip", s: st.s, d: st.d, lapseRun: 0, due: dayStart(E.addDays(t, intervalDays(st.s))), grad: t });
+      Object.assign(c, { stage: "flip", s: st.s, d: st.d, lapseRun: 0, due: dayStart(E.addDays(t, intervalDays(st.s, c.pri))), grad: t });
     } else c.due = c.mcqOk.filter(d => d === t).length >= 2 ? dayStart(E.addDays(t, 1)) : now + 10 * 60000;
+    if (conf === "unsure") c.due = Math.min(c.due, now + 3 * 60000);
   } else c.due = now + 60000;
   store(c);
-  return logReview(ok, c.stage === "flip" && c.grad === t ? "Card graduated" : null);
+  return logReview(ok, c.stage === "flip" && c.grad === t ? "Card graduated" : null, isNew);
 }
 export function answerFlip(c, g, now = Date.now()) {
-  const t = E.today(), st = nextState(c, g, now);
+  const t = E.today(), st = nextState(c, g, now), isNew = !c.intro;
   Object.assign(c, { s: st.s, d: st.d, last: now, intro: c.intro || t, reps: (c.reps || 0) + 1, stage: "flip" });
   if (g === 1) {
     c.lapses = (c.lapses || 0) + 1; c.lapseRun = (c.lapseRun || 0) + 1; c.due = now + 10 * 60000;
+    if (c.lapseRun >= 2 && !c.pri) c.sugg = true;
     // Two lapses in a row: back to multiple choice to rebuild it (unless the deck is too small for choices).
     if (c.lapseRun >= 2 && canChoose(c)) Object.assign(c, { stage: "mcq", mcqOk: [], lapseRun: 0, s: null, d: null });
-  } else { c.lapseRun = 0; c.due = dayStart(E.addDays(t, intervalDays(st.s))); }
+  } else { c.lapseRun = 0; c.due = dayStart(E.addDays(t, intervalDays(st.s, c.pri))); }
   store(c);
-  return logReview(g > 1, null);
+  return logReview(g > 1, null, isNew);
 }
 
 // v13.2: a target word read in the daily passage counts as a Good review when the card is in flip stage, due today or
@@ -276,15 +304,15 @@ export function creditPassage(id, now = Date.now()) {
   const t = E.today(); const c = get(id);
   if (c.intro === t || c.cred === t || (c.due || 0) >= dayStart(E.addDays(t, 2))) return false;
   const st = nextState(c, 3, now);
-  Object.assign(c, { s: st.s, d: st.d, last: now, reps: (c.reps || 0) + 1, lapseRun: 0, cred: t, src: "passage", due: dayStart(E.addDays(t, intervalDays(st.s))) });
+  Object.assign(c, { s: st.s, d: st.d, last: now, reps: (c.reps || 0) + 1, lapseRun: 0, cred: t, src: "passage", due: dayStart(E.addDays(t, intervalDays(st.s, c.pri))) });
   store(c); return true;
 }
 
 const XP_CAP = 50; // 1 XP per review, up to 50 a day
-function logReview(ok, note) {
+function logReview(ok, note, isNew) {
   const t = E.today(), id = "rv-" + t, gains = [];
   const r = live("reviewDays").find(x => x.id === id) || { id, date: t, n: 0, ok: 0 };
-  r.n++; if (ok) r.ok++; put("reviewDays", r);
+  r.n++; if (ok) r.ok++; if (isNew) r.nw = (r.nw || 0) + 1; put("reviewDays", r);
   const ref = "rev:" + t, ev = live("xpEvents").find(e => e.ref === ref), xp = Math.min(r.n, XP_CAP);
   if (ev) { if (ev.xp !== xp) put("xpEvents", { ...ev, xp }); }
   else put("xpEvents", { ts: Date.now(), type: "review", xp, ref, label: "Flashcard reviews" });
@@ -297,6 +325,14 @@ function logReview(ok, note) {
   return gains;
 }
 export const reviewedToday = () => (live("reviewDays").find(x => x.id === "rv-" + E.today()) || { n: 0, ok: 0 });
+// v13.3: today against every other day studied. rank 1 = best day; best is the top other day (null on the first day).
+export function dayStats() {
+  const t = E.today(), days = live("reviewDays").filter(x => x.n > 0), T = reviewedToday();
+  const others = days.filter(x => x.date !== t), best = others.reduce((b, x) => !b || x.n > b.n ? x : b, null);
+  const rank = T.n ? others.filter(x => x.n > T.n).length + 1 : null;
+  const last14 = Array.from({ length: 14 }, (_, i) => { const d = E.addDays(t, i - 13), r = days.find(x => x.date === d); return { date: d, n: r ? r.n : 0 }; });
+  return { n: T.n, nw: T.nw || 0, ok: T.ok, rank, days: others.length + (T.n ? 1 : 0), best, record: !!(best && T.n > best.n), last14 };
+}
 
 /* ---------- adding ---------- */
 // Adds cards, skipping any whose front is already in that deck. ids lets starter decks use fixed ids so two phones don't double them.

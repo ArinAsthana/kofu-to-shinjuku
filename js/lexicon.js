@@ -13,7 +13,7 @@ export const LATEST = 2; // v13.2: real-word options, part of speech and example
 function set(d) {
   VER = d.version || 1;
   V = (d.vocab || []).filter(x => x && x.id); KJ = (d.kanji || []).filter(x => x && x.id);
-  BY = new Map([...V, ...KJ].map(x => [x.id, x]));
+  BY = new Map([...V, ...KJ].map(x => [x.id, x])); WORD = null;
   // New cards come level by level (N5 → N2), in deck order within a level.
   const by = (L, lv) => lv.flatMap(l => L.filter(x => x.level === l));
   ORDER = { vocab: by(V, LEVELS.vocab).filter(x => !x.ref), kanji: by(KJ, LEVELS.kanji) };
@@ -28,6 +28,9 @@ export async function importText(text) {
 export const ready = () => BY.size > 0;
 export const version = () => VER;
 export const entry = id => BY.get(id) || null;
+// v13.3: a deck entry by its written word (look-alike pairs from dW).
+let WORD = null;
+export function byWord(w, type) { if (!WORD) { WORD = new Map(); for (const x of [...V, ...KJ]) { const k = x.type + "|" + face(x); if (!WORD.has(k)) WORD.set(k, x); } } return WORD.get((type || "vocab") + "|" + w) || null; }
 export const all = type => type === "kanji" ? KJ : V;
 export const order = type => ORDER[type];
 export const face = L => L.type === "kanji" ? L.kanji : L.word;
@@ -44,13 +47,13 @@ export function status(rec) {
   return rec.intro ? "learning" : "new";
 }
 export function counts(type, level, m = recs()) {
-  const o = { all: 0, new: 0, learning: 0, known: 0, off: 0 };
-  for (const L of all(type)) if (!level || L.level === level) { o.all++; o[status(m.get(L.id))]++; }
+  const o = { all: 0, new: 0, learning: 0, known: 0, off: 0, pri: 0 };
+  for (const L of all(type)) if (!level || L.level === level) { const r = m.get(L.id); o.all++; o[status(r)]++; if (r && r.pri) o.pri++; }
   return o;
 }
 // The rows the Lexicon shows for a type, level, status filter and search text.
 export function rows(type, level, st = "all", q = "", m = recs()) {
   q = String(q || "").trim().toLowerCase();
-  return all(type).filter(L => (!level || L.level === level) && (st === "all" || status(m.get(L.id)) === st)
+  return all(type).filter(L => (!level || L.level === level) && (st === "all" || (st === "pri" ? !!(m.get(L.id) || {}).pri : status(m.get(L.id)) === st))
     && (!q || face(L).includes(q) || reading(L).includes(q) || (L.meaning || "").toLowerCase().includes(q)));
 }

@@ -4,7 +4,7 @@
 import { isNative } from "./sync.js";
 import * as E from "./engine.js";
 
-export const APP_V = "13.2.2";
+export const APP_V = "13.3";
 const REPO = "ArinAsthana/kofu-to-shinjuku", SEEN_V = "kts-ver", CHECKED = "kts-upd-check", LATER = "kts-upd-later", FOUND = "kts-upd-found";
 const ls = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
 const plug = () => window.Capacitor.Plugins.Updater || window.Capacitor.registerPlugin("Updater");

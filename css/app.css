@@ -866,3 +866,22 @@ nav button span{position:relative}
 .ptext .pw.on{background:color-mix(in srgb,#FF3B2F 22%,transparent)}
 .pword-note{margin-top:10px;padding-top:8px;border-top:1px solid var(--rule);font-size:15px}
 .rv-dock.done{position:static}
+
+/* v13.3: day tracker, confidence rating, priority star */
+.dtrack .dtbars{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;align-items:end;height:36px;margin-top:8px}
+.dtbars i{display:block;background:var(--track);min-height:2px}
+.dtbars i:not(.z){background:color-mix(in srgb,var(--fg) 45%,transparent)}
+.dtbars i.on{background:var(--acc)}
+.dtbars i.z{height:2px!important}
+.grades.conf{grid-template-columns:repeat(3,1fr)}
+.star{border:0;background:none;color:var(--soft);width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0;cursor:pointer}
+.star svg{width:20px;height:20px}
+.star.on{color:#FFC93C}
+.star.on svg{fill:currentColor}
+.star.pulse{color:#FFC93C;animation:starp 1.1s ease-in-out infinite}
+@keyframes starp{50%{transform:scale(1.25)}}
+@media (prefers-reduced-motion:reduce){.star.pulse{animation:none}}
+.rvstar{margin-top:10px;align-items:center}
+.lexctl{display:inline-flex;align-items:center;gap:2px}
+.lexrow .star{color:rgba(242,239,232,.45)}
+.lexrow .star.on{color:#FFC93C}
