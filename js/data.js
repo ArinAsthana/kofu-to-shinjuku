@@ -1,7 +1,7 @@
 // Static content. Only Arin's records are stored; everything here lives in code.
 
 export const APP_ID = "kofu-to-shinjuku";
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const DATES = { start: "2026-10-01", jlpt: "2027-07-04", classesEnd: "2027-07-20", graduation: "2027-08-31" };
 
@@ -23,7 +23,7 @@ export const HABITS = HABIT_DEFS.filter(h => !h.retired);
 
 export const XP = {
   habit: 10, topic: 25, genki: 25, grammar: 15, test: 50, outreach: 15, reply: 20,
-  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15, task: 10, social: 15,
+  followup: 5, appAdded: 20, appStage: 30, workout: 20, pr: 40, money: 15, task: 10, social: 15, cv: 50,
 };
 export const LEVEL_XP = 250;
 
