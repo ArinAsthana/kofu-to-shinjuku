@@ -47,6 +47,7 @@ function resolveDate(v) {
   throw new Error(`Couldn't read the date "${v}". Use YYYY-MM-DD, today, tomorrow or a weekday.`);
 }
 const diffDays = (a, b) => Math.round((parseD(b) - parseD(a)) / 864e5);
+const weekDaysOf = s => { const st = addDays(s, -((dow(s) + 6) % 7)); return [...Array(7)].map((_, i) => addDays(st, i)); }; // Monday–Sunday
 // Spreads the prep sessions over start..(due − 1): `after` = earliest day, `due` = latest day. An exam's last review is the day before.
 function prepSessions(kind, due, start, t) {
   const p = PREP[kind] || PREP.other, last = addDays(due, -1) < t ? t : addDays(due, -1);
@@ -151,6 +152,8 @@ const TOOLS = [
   { name: "move_block", description: "Move a timetable block. By default only that date moves; set every_week to change the weekly block. Today's block is locked from 15 min before it starts until it ends.",
     inputSchema: { type: "object", required: ["block", "start"], properties: { block: { type: "string", description: "Block name, e.g. 'gym', 'Lift', 'finance block'" }, date: { type: "string" },
       start: { type: "string", description: "New start HH:MM" }, end: { type: "string", description: "New end HH:MM (default keeps the length)" }, every_week: { type: "boolean" } } } },
+  { name: "get_money", description: "Read Arin's money tracker (read-only): weekly bank and debt reports, pace to the savings and debt-free goal by graduation, bills, the Store fund and the wishlist. Use before giving money advice.",
+    inputSchema: { type: "object", properties: {} } },
   { name: "add_wishlist_item", description: "Add a reward to the wishlist with its price in yen. The XP cost is set from the price.",
     inputSchema: { type: "object", required: ["name", "price"], properties: { name: { type: "string" }, price: { type: "number" }, kind: { type: "string", enum: ["item", "trip", "exp"] }, link: { type: "string" } } } },
 ];
@@ -174,8 +177,41 @@ async function getDay(env, a) {
   return lines.join("\n");
 }
 
+// Mirrors js/engine.js moneyPlan, paceAt and funBudget (keep in step).
+async function getMoney(env) {
+  const [money, bills, wishlist, settings] = await Promise.all(["money", "bills", "wishlist", "settings"].map(s => readStore(env, s).then(x => x.data)));
+  const t = nowTokyo().date, m = { goal: 500000, debtStart: 142000, ...(settings.money || {}) }, grad = settings.dates?.graduation || "2027-08-31";
+  const fun = { monthly: 5000, ...(settings.fun || {}) }, y = n => "¥" + Math.round(n).toLocaleString("en-US");
+  const reps = live(money).sort((a, b) => a.date.localeCompare(b.date) || a.u - b.u), first = reps[0], last = reps[reps.length - 1];
+  const pace = r => { if (!first || !r) return { ok: true, behind: 0 };
+    const frac = Math.max(0, Math.min(1, diffDays(first.date, r.date) / (diffDays(first.date, grad) || 1)));
+    const want = ((m.goal - first.bank) + first.debt) * frac, made = (r.bank - first.bank) + (first.debt - r.debt);
+    return { ok: made >= want * 0.95, behind: Math.max(0, Math.round(want - made)) }; };
+  const weeks = Math.max(1, diffDays(t, grad) / 7), bank = last ? last.bank : 0, debt = last ? last.debt : m.debtStart;
+  const lines = [`Today ${t}. Goal: ${y(m.goal)} saved and debt-free by graduation ${grad} (${Math.round(weeks)} weeks left).`, "", "Reports (date: bank / debt):",
+    ...(reps.length ? reps.map(r => `- ${r.date}: ${y(r.bank)} / ${y(r.debt)}`) : ["- none"])];
+  const pc = pace(last), wk = weekDaysOf(t);
+  lines.push("", `Now: bank ${y(bank)} (${Math.round(100 * bank / m.goal)}% of goal), debt ${y(debt)} (${Math.round(100 * (1 - debt / (m.debtStart || 1)))}% paid).`,
+    `Pace: ${pc.ok ? "on pace" : "behind by " + y(pc.behind)}. Needed from now: save ${y(Math.max(0, m.goal - bank) / weeks)}/week and pay ${y(Math.max(0, debt) / weeks)}/week of debt.`,
+    `This week's report: ${reps.some(r => wk.includes(r.date)) ? "done" : "not yet"}.`);
+  const mk = t.slice(0, 7), bl = live(bills);
+  lines.push("", "Bills:", ...(bl.length ? bl.map(b => `- ${b.name} (${b.kind || "bill"}): ${b.amount == null ? "amount not set" : y(b.amount) + "/" + (b.freq || "month")}${b.paid?.[mk] ? ", paid this month" : ""}`) : ["- none"]));
+  let [yy, mo] = (fun.start || mk).split("-").map(Number), prevOk = true, paid = 0; const months = [];
+  for (let i = 0; i < 120; i++) { const k = yy + "-" + pad(mo), inM = reps.filter(r => r.date.slice(0, 7) === k), lr = inM[inM.length - 1];
+    const ok = lr ? pace(lr).ok : k === mk ? prevOk : prevOk && !reps.length; months.push(`${k} ${ok ? "paid" : "paused"}`); if (ok) paid++; prevOk = ok;
+    if (k === mk) break; mo++; if (mo > 12) { mo = 1; yy++; } }
+  const wl = live(wishlist), spent = wl.filter(w => w.bought).reduce((a, w) => a + (w.bought.yen || 0), 0);
+  lines.push("", `Store fund: ${y(paid * fun.monthly - spent)} left (${y(fun.monthly)}/month while on pace; ${y(spent)} spent). Months: ${months.join(", ")}.`, "Wishlist (top first):");
+  const open = wl.filter(w => !w.bought).sort((a, b) => (a.order ?? 1e9) - (b.order ?? 1e9) || (a.u || 0) - (b.u || 0));
+  lines.push(...(open.length ? open.map(w => `- ${w.name}: ${y(w.price || 0)}, ${w.xp || 0} XP`) : ["- none"]));
+  const bought = wl.filter(w => w.bought);
+  if (bought.length) lines.push("Bought:", ...bought.map(w => `- ${w.name}: ${y(w.bought.yen || 0)} on ${w.bought.date}`));
+  return lines.join("\n");
+}
+
 const handlers = {
   get_day: getDay,
+  get_money: getMoney,
   async log_food(env, a) {
     const date = resolveDate(a.date), meal = String(a.meal || "").toLowerCase();
     if (!MEALS.includes(meal)) throw new Error("meal must be breakfast, lunch, dinner or snack");
