@@ -66,3 +66,6 @@ export function drop(id) {
 // A prep session done before its own due date is ahead: +50% XP.
 export const AHEAD = 0.5;
 export const aheadOf = (k, t = E.today()) => !!k.dl && !!k.due && t < k.due;
+// v10.2: exams that have passed (last 14 days) with no score yet. The app asks once for each.
+export const unscored = (t = E.today()) => live("tasks").filter(k => isDeadline(k) && k.dlKind === "exam" && !k.scored && k.due < t && k.due >= E.addDays(t, -14));
+export const markScored = id => { const d = get(id); if (d) put("tasks", { ...d, scored: true }); };

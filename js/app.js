@@ -399,6 +399,7 @@ function drillPaint(ok) {
   if (ok) { const q = $("#drQ"); q.textContent = r.p.q; q.classList.remove("hit"); void q.offsetWidth; q.classList.add("hit"); }
 }
 const sgn = n => (n > 0 ? "+" : "") + n;
+let drLen = 120;
 function vDrill() {
   const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} System</button>`;
   if (Dr.running()) return drillRunHtml();
@@ -412,16 +413,18 @@ function vDrill() {
       <div class="small mono">best ${b ?? rec.score}${avg7 != null ? ` · ${sgn(Math.round(rec.score - avg7))} vs 7-day avg` : ""}${xp ? ` · +${xp} XP` : ""}${pb ? " · new best" : ""}</div>
       ${drillResult.logged ? `<div class="small good-t" style="margin-top:6px">Logged to the Path: best ${Dr.todayBest("classic")}.</div>` : k && rec.mode === "classic" ? `<div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">Run 2</button><button class="btn" data-act="drlog">Log ${Dr.todayBest("classic")} to the Path</button></div>` : ""}
       <div class="btns"><button class="btn sm" data-act="go" data-id="report">Full history</button></div>
-      ${slow.length ? `<details class="key" style="margin-top:8px"><summary>Slow or skipped · ${slow.length}</summary>${slow.map(x => `<div class="row between small mono"><span>${esc(x.q)} = ${esc(Dr.answerText(x.a))}</span><span class="muted">${x.skipped ? "skipped" : x.s + " s"}</span></div>`).join("")}</details>` : ""}</div>`;
+      ${slow.length ? `<details class="key" style="margin-top:8px"><summary>Slow or skipped · ${slow.length}</summary>${slow.map(x => `<div class="row between small mono"><span>${esc(x.q)} = ${esc(Dr.answerText(x.a))}</span><span class="muted">${x.skipped ? "skipped" : x.s + " s"}</span></div>`).join("")}
+        <div class="btns"><button class="btn sm" data-act="drcards" ${drillResult.carded ? "disabled" : ""}>${drillResult.carded ? "In Drill slow" : "Make flashcards"}</button></div></details>` : ""}</div>`;
   }
   const rows = Dr.MODES.map(m => { const b = Dr.best(m.id), tb = Dr.todayBest(m.id), a = Dr.avg7(m.id);
     return `<div class="panel row between"><div class="grow"><b>${esc(m.name)}</b><div class="tiny muted">${esc(m.note)}</div>
       <div class="tiny mono" style="margin-top:4px">${b != null ? `best ${b}${a != null ? ` · 7-day ${Math.round(a)}` : ""}${tb != null ? ` · today ${tb}` : ""}` : "no runs yet"}</div></div>
-      <button class="btn sm go" data-act="drillgo" data-id="${m.id}">${ic("play", "inl")} 2 min</button></div>`; }).join("");
-  return `${head}${end}${rows}<p class="tiny muted">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p>`;
+      <button class="btn sm go" data-act="drillgo" data-id="${m.id}${drLen === Dr.SECS ? "" : ":" + drLen}">${ic("play", "inl")} ${drLen < 120 ? drLen + " s" : drLen / 60 + " min"}</button></div>`; }).join("");
+  const lens = `<div class="seg" style="margin-bottom:8px">${Dr.LENGTHS.map(n => `<button data-act="drlen" data-id="${n}" aria-pressed="${n === drLen}">${n < 120 ? n + " s" : n / 60 + " min"}</button>`).join("")}</div>${drLen === Dr.SECS ? "" : `<p class="tiny muted">Custom length: saved, but kept off the best and the graph.</p>`}`;
+  return `${head}${end}${lens}${rows}<p class="tiny muted">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p>`;
 }
 /* ================= REPORT CARD (v10.1) ================= */
-let rcPeriod = "all", rcSub = null, rcForm = false, rcMode = "classic";
+let rcPeriod = "all", rcSub = null, rcForm = false, rcMode = "classic", rcPre = null; // rcPre: an exam deadline being scored
 const pc = p => Math.round(p * 100) + "%", pts = d => sgn(Math.round(d * 100)) + " pts";
 const rcBtn = () => `<button class="btn sm" data-act="go" data-id="report">See report card</button>`;
 function rcLine() { const s = Rc.summary(Rc.tests()); return s.gpa != null ? ` · ${s.gpa.toFixed(1)} ${s.letter}` : ""; }
@@ -437,7 +440,7 @@ function rcRow(x) {
 }
 function rcDrill() {
   const st = Rc.drill(rcMode, rcPeriod), man = rcMode === "classic" ? Rc.manualZetamac() : [];
-  const chips = `<div class="seg">${Dr.MODES.map(m => `<button data-act="rcmode" data-id="${m.id}" aria-pressed="${m.id === rcMode}">${esc(m.name)}</button>`).join("")}</div>`;
+  const chips = `<div class="chips">${Dr.MODES.map(m => `<button class="chip" data-act="rcmode" data-id="${m.id}" aria-pressed="${m.id === rcMode}">${esc(m.name)}</button>`).join("")}</div>`;
   if (!st && !man.length) return `<h2>Mental math</h2>${chips}<div class="panel"><p class="small muted">No ${esc(Dr.mode(rcMode).name)} runs yet.</p><div class="btns"><button class="btn sm go" data-act="drillgo" data-id="${rcMode}">Start a Drill</button></div></div>`;
   const s = Rc.drillSeries(rcMode, 30), hi = Math.max(10, ...s.best.filter(v => v != null)), max = Math.ceil(hi / 10) * 10;
   const line = s.best.some(v => v != null) ? Ch.lines([{ d: s.avg, c: "dim", w: 1.5, dots: false }, { d: s.best, c: "acc", w: 2.5, r: 3 }],
@@ -451,9 +454,9 @@ function rcDrill() {
 function rcExamForm() {
   if (!rcForm) return `<div class="btns"><button class="btn sm" data-act="rcform">+ Exam result</button></div>`;
   return `<div class="panel"><h3>Exam result</h3><div class="grid" id="rcForm">
-    <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Algebra midterm"></label>
-    <label class="f">Subject<input data-f="subject" list="rcSubs" placeholder="e.g. Math"></label><datalist id="rcSubs">${Rc.subjectNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist>
-    <label class="f">Date<input type="date" data-f="date" value="${E.today()}"></label>
+    <label class="f" style="flex-basis:100%">Name<input data-f="name" placeholder="e.g. Algebra midterm" value="${esc(rcPre?.name || "")}"></label>
+    <label class="f">Subject<input data-f="subject" list="rcSubs" placeholder="e.g. Math" value="${esc(rcPre?.subject || "")}"></label><datalist id="rcSubs">${Rc.subjectNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist>
+    <label class="f">Date<input type="date" data-f="date" value="${rcPre?.date || E.today()}"></label>
     <label class="f">Score<input type="number" inputmode="decimal" data-f="score"></label>
     <label class="f">Out of<input type="number" inputmode="decimal" data-f="of" value="100"></label>
     <label class="f">Pass mark % (optional)<input type="number" inputmode="decimal" data-f="pass"></label>
@@ -947,6 +950,7 @@ function alertList() {
     pens.length && ["pen:" + pens.map(p => p.id).join(","), penaltyBox()],
     fg.open && fg.ended && ["report:" + St.occKey(fg.o), reportDueBox(fg)],
     wd && ["wind:" + t, sysBox(`Wind-down time. Bed at ${P.toHM(wd.bed)}.`, "Screens off, shower, set out tomorrow's clothes. The day is done.")],
+    ...Dl.unscored(t).map(d => ["examscore:" + d.id, sysBox(`${esc(d.title)}: how did it go?`, "Add the score and it goes on the Report Card.", `<div class="btns"><button class="btn sm" data-act="rcask" data-id="${d.id}">Add score</button></div>`)]),
     E.moneyDue() && ["money:" + E.weekStart(t), sysBox("Weekly money report is due.", "Bank balance and debt left. Takes 20 seconds.", btn("money", "Report now"))],
     flags.length && ["pain:" + flags.join("|"), sysBox(`<span class="warn">Pain check.</span> ${flags.map(esc).join(" ")}`, "Deload or swap the exercise. Never train through sharp pain; if it keeps coming back, see a physio.")],
     unplaced && ["unplaced:" + unplaced, sysBox(`${unplaced} task${unplaced === 1 ? "" : "s"} didn't fit in the next 2 weeks.`, "Shorten them, split them, or move a block.", btn("plan", "Open plan"))],
@@ -2870,22 +2874,26 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return;
       if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); E.revokeXP("task:" + id + ":ahead"); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
-    case "drillgo": sheet = null; drillResult = null; Dr.start(id); if (route()[0] !== "drill") location.hash = "drill"; drillTick(); return render();
+    case "drillgo": { const [m, sec] = id.split(":"); sheet = null; drillResult = null; Dr.start(m, +sec || Dr.SECS); } if (route()[0] !== "drill") location.hash = "drill"; drillTick(); return render();
     case "drk": { const ok = Dr.key(id); drillPaint(ok); return; }
     case "drskip": Dr.skip(); drillPaint(true); return;
     case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
     case "rcper": rcPeriod = id; return render();
     case "rcsub": rcSub = rcSub === id ? null : id; return render();
     case "rcmode": rcMode = id; return render();
-    case "rcform": rcForm = !rcForm; render(); if (rcForm) $("#rcForm input")?.focus(); return;
+    case "rcform": rcForm = !rcForm; rcPre = null; render(); if (rcForm) $("#rcForm input")?.focus(); return;
+    case "rcask": { const d = Dl.get(id); if (!d) return; rcPre = { name: d.title, subject: d.course, date: d.due, dl: d.id }; rcForm = true; rcSub = null; location.hash = "report"; return render(); }
     case "rcsave": {
       const f = readForm("#rcForm"), sc = Number(f.score), of = Number(f.of);
       if (!f.name) return toast("Add a name");
       if (f.score === "" || !isFinite(sc) || !(of > 0)) return toast("Add the score and what it's out of");
       Rc.addExam({ name: f.name, subject: f.subject || "Other", date: f.date || E.today(), score: sc, of, passPct: f.pass === "" ? null : Number(f.pass), notes: f.notes });
-      rcForm = false; save(); toast(`Saved · ${Math.round(sc / of * 100)}%`); return render();
+      if (rcPre?.dl) Dl.markScored(rcPre.dl);
+      rcForm = false; rcPre = null; save(); toast(`Saved · ${Math.round(sc / of * 100)}%`); return render();
     }
     case "rcdrop": if (!confirm("Delete this exam result?")) return; Rc.dropExam(id); save(); return render();
+    case "drlen": drLen = +id; return render();
+    case "drcards": { if (!drillResult) return; const n = Dr.toCards(drillResult.rec, K.newCard); drillResult.carded = true; save(); toast(n ? `${n} card${n === 1 ? "" : "s"} in Drill slow` : "Already in Drill slow"); return render(); }
     case "drlog": { const k = mentalTask(); if (!k) return; const g = Pa.finish(k, "done", Dr.todayBest("classic")); save(); drillResult = null; announce([g]); return render(); }
     case "newtask": taskForm = "new"; sheet = "task"; render(); $("#taskForm input")?.focus(); return;
     case "dlform": dlMove = null; sheet = "deadline"; render(); $("#dlForm input")?.focus(); return;

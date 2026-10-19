@@ -11,7 +11,7 @@ const dec1 = x => Math.abs(x * 10 - Math.round(x * 10)) < 1e-9; // at most one d
 const fmt = n => (Math.round(n * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /* ---------- modes ---------- */
-// Each problem: {q, a, tol}. tol is absolute (answers match to 1 decimal place).
+// Each problem: {q, a, tol}. tol is absolute; without one, answers match to 1 decimal place.
 function classic() {
   const op = pick(["+", "−", "×", "÷"]);
   if (op === "+" || op === "−") { const a = ri(2, 100), b = ri(2, 100); return op === "+" ? { q: `${a} + ${b}`, a: a + b } : { q: `${a + b} − ${a}`, a: b }; }
@@ -36,11 +36,38 @@ function multiply() {
   if (t === "x125") { const n = ri(2, 40) * 2; return { q: `${n} × 125`, a: n * 125 }; }
   const a = ri(11, 99), b = ri(11, 99); return { q: `${a} × ${b}`, a: a * b };
 }
+function growth() {
+  const t = pick(["cagr", "cagr", "comp", "double"]);
+  if (t === "double") { const r = pick([2, 3, 4, 6, 8, 9, 12, 18, 24]); return { q: `Doubling time at ${r}% a year (years)?`, a: 72 / r, tol: 0.5 }; }
+  if (t === "comp") { const p = pick([100, 200, 500, 1000]), r = ri(2, 12), n = ri(2, 10), a = p * (1 + r / 100) ** n; return { q: `${p} at ${r}% for ${n} years ≈ ?`, a: Math.round(a), tol: Math.max(1, a * 0.02) }; }
+  const r = ri(2, 20), n = ri(2, 10), s0 = pick([100, 200, 500, 1000]), e = Math.round(s0 * (1 + r / 100) ** n);
+  return { q: `${s0} → ${e} in ${n} years: CAGR %?`, a: r, tol: 0.5 };
+}
+function fractions() {
+  let d = ri(2, 16), n = ri(1, d - 1); const g = (a, b) => b ? g(b, a % b) : a, k = g(n, d); n /= k; d /= k;
+  const t = pick(["pct", "pct", "dec", "back"]), pct = Math.round(n / d * 1000) / 10;
+  if (t === "dec") return { q: `${n}/${d} as a decimal`, a: Math.round(n / d * 1000) / 1000, tol: 0.0006 };
+  if (t === "back" && Number.isInteger(pct * 10) && Math.abs(pct - n / d * 100) < 1e-9) return { q: `${fmt(pct)}% = ?/${d}`, a: n };
+  return { q: `${n}/${d} as %`, a: pct, tol: 0.06 };
+}
+// Answers within ±5%. Big numbers are asked in millions so the pad stays short.
+function estimate() {
+  const t = pick(["mul", "mul", "div", "fx"]), sig = () => ri(11, 99) / 10;
+  if (t === "fx") { const r = pick([140, 145, 150, 155, 160]), y = ri(2, 90) * 1e5; return { q: `¥${fmt(y / 1e6)}M at ¥${r}/$ = $? (thousands)`, a: y / r / 1000, tol: y / r / 1000 * 0.05 }; }
+  if (t === "div") { const a = sig() * 10 ** ri(2, 3), b = ri(12, 95); return { q: `${fmt(a)}M ÷ ${b} = ?M`, a: a / b, tol: a / b * 0.05 }; }
+  const a = sig(), b = ri(12, 950), x = a * b; return { q: `${fmt(a)}M × ${b} = ?M`, a: x, tol: x * 0.05 };
+}
+function mixed() { return pick(MODES.filter(m => m.id !== "mixed")).gen(); }
 export const MODES = [
   { id: "classic", name: "Classic", note: "+ − × ÷, Zetamac defaults", gen: classic },
   { id: "percent", name: "Percent", note: "% of, % change, tax, discounts", gen: percent },
   { id: "multiply", name: "Multiply+", note: "2-digit × 2-digit, squares, ×25, ×125", gen: multiply },
+  { id: "growth", name: "Growth", note: "CAGR, compounding, doubling time. ±0.5 pts", gen: growth },
+  { id: "fractions", name: "Fractions", note: "fraction ↔ decimal ↔ %", gen: fractions },
+  { id: "estimate", name: "Estimate", note: "big products and divisions, ¥ → $. ±5%", gen: estimate },
+  { id: "mixed", name: "Mixed", note: "all of the above, interview day", gen: mixed },
 ];
+export const LENGTHS = [60, 120, 300];
 export const mode = id => MODES.find(m => m.id === id) || MODES[0];
 export const SECS = 120, SLOW_MS = 10000, XP_PB = 20, XP_CAP = 100;
 
@@ -60,7 +87,7 @@ export function key(k) {
   else if (k === "." ) { if (!run.input.includes(".")) run.input += "."; }
   else if (/^\d$/.test(k)) { if (run.input.replace(/\D/g, "").length < 9) run.input += k; }
   const v = parseFloat(run.input);
-  if (!isNaN(v) && Math.abs(v - run.p.a) < 0.05 + (run.p.tol || 0) && !run.input.endsWith(".")) { noteSlow(false); run.score++; next(); return true; }
+  if (!isNaN(v) && Math.abs(v - run.p.a) <= (run.p.tol ?? 0.05) + 1e-9 && !run.input.endsWith(".")) { noteSlow(false); run.score++; next(); return true; }
   return false;
 }
 export function skip() { if (!running()) return; noteSlow(true); run.skipped++; next(); }
@@ -81,6 +108,12 @@ export function finish() {
 export function quit() { run = null; }
 
 /* ---------- history ---------- */
+// Slow or skipped problems from a run become flashcards in "Drill slow". Card ids are fixed, so a second tap adds nothing.
+export function toCards(rec, newCard) {
+  let n = 0;
+  (rec.slow || []).forEach((x, i) => { const id = `dr-${rec.id}-${i}`; if (live("cards").some(c => c.id === id)) return; put("cards", newCard({ id, deck: "Drill slow", front: x.q, back: fmt(x.a) })); n++; });
+  return n;
+}
 export const runs = (m = null) => live("path").filter(r => r.kind === "drill" && (!m || r.mode === m)).sort((a, b) => a.at - b.at);
 const main = m => runs(m).filter(r => !r.custom);
 export const best = m => { const L = main(m); return L.length ? Math.max(...L.map(r => r.score)) : null; };

@@ -141,6 +141,9 @@ const TOOLS = [
   { name: "add_deadline", description: "Add a deadline (paper, exam, presentation or other). It shows on the app's calendar on the due date, and prep sessions are created and auto-placed before it: paper = Research 60, Outline 45, Draft 2×90, Edit 45 from 10 days before; exam = 4×45 review from 7 days before, the last on the day before; presentation = Slides 90, Rehearse 2×30 from 7 days before; other = 1×60 from 3 days before. A start date replaces the default. Reply with the due date, the start date and the sessions.",
     inputSchema: { type: "object", required: ["title", "due"], properties: { title: { type: "string", description: "e.g. 'Social psych paper'" }, course: { type: "string" }, due: { type: "string", description: "YYYY-MM-DD, tomorrow or a weekday" },
       time: { type: "string", description: "HH:MM, optional" }, kind: { type: "string", enum: DL_KINDS }, size: { type: "string", description: "e.g. '2,000 words'" }, start: { type: "string", description: "Optional start/reminder date" } } } },
+  { name: "add_exam_result", description: "Add a real exam or test result to the app's Report Card (class exams, papers, Boki, JLPT, certifications). Example: 'I got 82 on the algebra midterm out of 100'. Reply with the % and whether it passed.",
+    inputSchema: { type: "object", required: ["name", "score"], properties: { name: { type: "string", description: "e.g. 'Algebra midterm'" }, subject: { type: "string", description: "e.g. 'Math'; the course name if there is one" },
+      score: { type: "number" }, out_of: { type: "number", description: "default 100" }, pass_mark: { type: "number", description: "Pass mark in %, optional" }, date: { type: "string", description: "YYYY-MM-DD, today, yesterday or a weekday (the past one); default today" }, notes: { type: "string" } } } },
   { name: "list_deadlines", description: "List upcoming deadlines with their prep sessions (done or not). Use for 'what's due?'.",
     inputSchema: { type: "object", properties: {} } },
   { name: "move_deadline", description: "Move a deadline to a new due date. Its open prep sessions shift by the same number of days. Matches by title.",
@@ -230,6 +233,17 @@ const handlers = {
       for (const s of ss) putRec(arr, { title: `${title}: ${s.name}`, mins: s.mins, prio: 3, energy: "high", due: s.due, after: s.after, dl: d.id, done: false, created: now, pin: null });
     });
     return `Added ${title}, due ${due}${a.time ? " " + a.time : ""}. Start ${start || ss[0].after}. Prep sessions (placed in free time, focus): ${ss.map(s => `${s.name} ${s.mins} min between ${s.after} and ${s.due}`).join("; ")}. Reminders on the start day and the day before.`;
+  },
+  async add_exam_result(env, a) {
+    if (!a.name || a.score == null || isNaN(+a.score)) throw new Error("name and score are required");
+    const t = nowTokyo().date, of = a.out_of ? +a.out_of : 100; if (!(of > 0)) throw new Error("out_of must be above 0");
+    let date = resolveDate(a.date); if (date > t) date = addDays(date, -7); // a weekday means the last one
+    const pass = a.pass_mark == null || a.pass_mark === "" ? null : +a.pass_mark, pct = +a.score / of * 100;
+    await changeStore(env, "path", arr => { putRec(arr, { id: "exam-" + Date.now().toString(36), kind: "exam", name: String(a.name), subject: String(a.subject || "Other"), date, score: +a.score, of, passPct: pass, notes: String(a.notes || ""), at: Date.now() }); });
+    // The app asks for the score of a past exam deadline once; this answers it.
+    const q = norm(a.name);
+    await changeStore(env, "tasks", arr => { const d = live(arr).find(k => k.kind === "deadline" && k.dlKind === "exam" && !k.scored && k.due <= t && q && (norm(k.title).includes(q) || q.includes(norm(k.title)))); if (d) putRec(arr, { ...d, scored: true }); });
+    return `Saved ${a.name}: ${a.score}/${of} · ${Math.round(pct)}%${pass != null ? ` · ${pct >= pass ? "passed" : "not passed"} (pass ${pass}%)` : ""}, ${date}. It's on the Report Card in Profile.`;
   },
   async list_deadlines(env) {
     const t = nowTokyo().date, tasks = live((await readStore(env, "tasks")).data);
