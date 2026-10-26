@@ -19,6 +19,8 @@ export const dur = m => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? " " + (m % 6
 const dow = date => E.parse(date).getDay();
 const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 
+// Workout blocks open the workout log. Matched by title so renamed or added gym blocks still count.
+export const isWorkout = b => /lift|calisth|gym|workout|train|run\b/i.test(b.title || "");
 // `skip` lists dates a weekly block is off (a one-day move puts a dated copy elsewhere).
 const blockOn = (b, date) => b.date ? b.date === date : (b.days || []).includes(dow(date)) && !(b.skip || []).includes(date);
 
@@ -26,6 +28,7 @@ const blockOn = (b, date) => b.date ? b.date === date : (b.days || []).includes(
 export function segments(date) {
   const out = [], prev = E.addDays(date, -1);
   for (const b of live("blocks")) {
+    if (isWorkout(b) && E.trainPaused(date)) continue; // v14: paused workout blocks free their time
     const s = toMin(b.start), e = toMin(b.end), over = e <= s;
     if (blockOn(b, date)) out.push({ b, s, e: over ? 1440 : e, cont: over });
     if (over && e > 0 && blockOn(b, prev)) out.push({ b, s: 0, e, tail: true });
@@ -34,8 +37,6 @@ export function segments(date) {
 }
 
 /* ---------- block gates ---------- */
-// Workout blocks open the workout log. Matched by title so renamed or added gym blocks still count.
-export const isWorkout = b => /lift|calisth|gym|workout|train|run\b/i.test(b.title || "");
 // Today's occurrences of a block (a one-day moved copy counts for its original).
 const occToday = b => segments(E.today()).filter(g => !g.tail && (g.b.id === b.id || g.b.from === b.id || (b.from && g.b.id === b.from)));
 // A block can't be changed from lockMins before today's start until it ends, so the schedule can't dodge a session.

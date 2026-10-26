@@ -168,6 +168,18 @@ export function clearDropped() {
   return n > 0;
 }
 
+// v14: while workout is paused, an open workout make-up quest is cleared with no penalty (its XP comes back).
+export function clearPausedWorkout() {
+  if (!E.trainPaused()) return false;
+  let n = 0;
+  for (const p of openPenalties()) {
+    const b = live("blocks").find(x => x.id === p.block), k = penTask(p);
+    if (!k || !P.isWorkout(b || { title: p.title })) continue;
+    remove("tasks", k.id); put("penalties", { ...p, xp: 0, waived: true, cleared: "pause" }); n++;
+  }
+  return n > 0;
+}
+
 /* ---------- pomodoro ---------- */
 // Kept on this phone only (localStorage). Runs on timestamps, so it stays right while the screen is off.
 const PK = "kts-pomo";

@@ -120,6 +120,7 @@ const REVEALS = [
   { id: "loot", text: "Blocks can drop loot.", sub: "Finish the block. Sometimes there's more than the base XP." },
   { id: "comeback", text: "Missed a day? The next one starts with a comeback quest.", sub: "Clear any one quest for a bonus. No pile-up." },
   { id: "gates", text: "Locked gates have appeared on Status.", sub: "They open in order. Only the current Act matters." },
+  { id: "trainback", when: () => { const u = S.settings.train && S.settings.train.pauseUntil; return !!u && E.today() >= u; }, text: "Training resumes today.", sub: "Workout blocks, the Workout quest and the gym log are back." },
   { id: "loan", when: () => loanLive(), text: "New area unlocked: Treasury.", sub: "Your education loan is yours now: one fixed monthly bill, paid before anything goes to the Store." },
 ];
 export function revealToday(t = E.today()) {

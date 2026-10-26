@@ -107,7 +107,7 @@ function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
-  if (NEEDS[tab] && !Sy.has(NEEDS[tab])) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
+  if ((NEEDS[tab] && !Sy.has(NEEDS[tab])) || (tab === "train" && E.trainPaused())) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
   const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "s" ? vStream(r[1]) : r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "cv" ? vCv(r[1], r[2]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, quests: vQuests, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   const si = $("#srch"), keepS = si && document.activeElement === si ? { v: si.value, p: si.selectionStart } : null; // v11: typing survives a re-render
   $("#app").innerHTML = (views[tab] || vHome)(rest);
@@ -180,7 +180,7 @@ function todayQuests(t = E.today()) {
   const trials = [...Soc.openTrials().filter(k => p.at.get(k.id)?.date === t || (k.due && k.due <= t)).map(k => ({ k })),
     ...Soc.trials().filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }))];
   const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
-  const habits = HABITS.map(h => ({ h, on: !!E.habitDone(h.id, t) }));
+  const habits = E.dailyHabits(t).map(h => ({ h, on: !!E.habitDone(h.id, t) }));
   const call = live("xpEvents").some(e => e.ref === "call" && E.ymd(new Date(e.ts)) === t);
   // v8.1: the N2 plan's open grammar item, any time of day (no block). Done once any item is finished today.
   // It used to be the "jp" daily quest (retired in v13.1; finishing an item still ticks it for the stat radar).
@@ -357,7 +357,7 @@ function srSuggest() {
 function srUpdate() {
   const inp = $("#srch"), list = $("#srchList"), gh = $("#srchGhost"); if (!inp || !list) return;
   const v = inp.value; srCmd = v.trim() ? Sr.command(v, E.today()) : null;
-  srHits = v.trim() ? [...Sr.find(v, 6, srThings()), ...srWords(v)].slice(0, 8) : srSuggest(); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
+  srHits = (v.trim() ? [...Sr.find(v, 6, srThings()), ...srWords(v)] : srSuggest()).filter(it => !(E.trainPaused() && /^train\b/.test(it.route || ""))).slice(0, 8); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
   const rest = v ? Sr.complete(v, srHits[0]) : "";
   gh.innerHTML = rest ? `<span class="gh-t">${esc(v)}</span>${esc(rest)}` : "";
   list.innerHTML = srCmdHtml() + (v.trim() ? "" : `<div class="srch-h">${srHits.length ? "Suggested" : ""}</div>`) + (srHits.map((it, i) => { const nd = srNeed(it), lk = nd && !Sy.has(nd);
@@ -1283,7 +1283,7 @@ function dismiss(key) {
   try { localStorage.setItem(DISMISS_KEY, JSON.stringify(Object.fromEntries(keys.map(k => [k, d[k]])))); } catch (e) {}
 }
 function vAlerts() {
-  const list = alertList(), t = E.today(), left = HABITS.filter(h => !E.habitDone(h.id, t)).length;
+  const list = alertList(), t = E.today(), left = E.dailyHabits(t).filter(h => !E.habitDone(h.id, t)).length;
   return `<button class="back" data-act="nav" data-id="home">${ic("left")} Home</button><header class="top"><div><div class="hdr">${E.fmtDate(t)}</div><h1>Notifications</h1></div></header>
   ${list.length ? `<p class="tiny muted" style="margin:10px 4px 0">Tap the red dot to dismiss an alert. It comes back if something changes.</p>` : ""}
   <div class="stack" style="margin-top:12px">${list.join("") || sysBox(left ? "Nothing needs you." : "All daily quests cleared.", left ? `${left} daily quest${left === 1 ? "" : "s"} left today.` : "Rest is part of training.")}</div>`;
@@ -2864,6 +2864,7 @@ function vSettings([sec] = []) {
   ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"], [1, "lex", "Japanese decks (Lexicon)"], [1, "path/cv", "Resumes"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}
     <label class="quiet-row" style="margin-top:0"><span class="grow">Import transcript${Rs.transcript() ? ` · GPA ${Rs.transcript().gpaCumulative}, ${Rs.transcript().courses.length} courses` : ""}</span><input type="file" accept="application/json,.json" data-ch="cvtranscript" hidden><span class="chev">${ic("right")}</span></label></div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
+  ${S.settings.train && S.settings.train.pauseUntil ? sx("trainpause", "Workout", E.trainPaused() ? `<p class="small">Paused until ${esc(E.fmtDate(S.settings.train.pauseUntil))}. No workout blocks, Workout quest or workout penalties until then. Your workout data is kept.</p><div class="btns"><button class="btn sm" data-act="trainresume">Resume now</button></div>` : `<p class="small muted">Training is on.</p>`, E.trainPaused() ? "paused" : "on") : ""}
   ${sx("money", "Money and Store", moneySettings())}
   ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
     <label class="f">Chance (%)<input type="number" min="0" max="100" data-ch="chance" value="${Math.round((st.rewardChance ?? 0.18) * 100)}"></label>
@@ -3495,6 +3496,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const p = on && K.pairOf(c); if (p && confirm(`Star its look-alike ${Lx.face(p)} too?`)) K.setPri(p.id, true);
       save(); toast(on ? "Priority: first in the queue, back more often" : "Priority removed"); return render();
     }
+    case "trainresume": if (!confirm("Resume workout now? Lift and Calisthenics blocks and the Workout quest come back today.")) return; S.settings.train = { ...S.settings.train, pauseUntil: E.today() }; touchSettings(); save(); toast("Training resumes today"); return render();
     case "rvsugno": K.unsugg(id); save(); return render();
     case "rvnext": rv = null; return render();
     case "pword": { pr.open = pr.open === +id ? -1 : +id; const p = Ps.byId(pr.id); if (p && pr.open >= 0) { Ps.tap(p, +id); save(); } return render(); }
@@ -3716,6 +3718,7 @@ function renameStyle() {
   await Lx.load();
   cvTick();
   if (St.clearDropped()) save();
+  if (St.clearPausedWorkout()) save();
   renameStyle();
   if (Soc.migrateTraits()) save();
   // First 60 seconds: one quest is already done, so the bar has moved before anything else happens.

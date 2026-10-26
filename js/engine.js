@@ -42,7 +42,12 @@ export function revokeXP(ref) { live("xpEvents").filter(e => e.ref === ref).forE
 /* ---------- habits ---------- */
 export const habitDone = (habit, date) => live("habitLog").find(h => h.habit === habit && h.date === date);
 export const habitWeekCount = (habit, s = today()) => { const w = weekDays(s); return live("habitLog").filter(h => h.habit === habit && w.includes(h.date)).length; };
-export const habitTarget = id => S.settings.habitTargets[id] ?? HABITS.find(h => h.id === id)?.target;
+export const habitTarget = id => id === "gym" && trainPaused() ? 0 : S.settings.habitTargets[id] ?? HABITS.find(h => h.id === id)?.target;
+// v14: workout can be paused (settings.train.pauseUntil, a date). While paused, workout blocks, the Workout quest,
+// workout penalties and the Workout page are hidden; the data stays. It resumes by itself on that date.
+export const trainPaused = (d = today()) => { const u = S.settings.train && S.settings.train.pauseUntil; return !!u && d < u; };
+// The daily quests in play today (the Workout quest sits out a pause).
+export const dailyHabits = (d = today()) => HABITS.filter(h => !(h.id === "gym" && trainPaused(d)));
 
 // Logging any workout or run ticks the Workout habit and gives workout XP, once per day.
 export function markWorkoutDay(date) {
