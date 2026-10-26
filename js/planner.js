@@ -28,7 +28,7 @@ const blockOn = (b, date) => b.date ? b.date === date : (b.days || []).includes(
 export function segments(date) {
   const out = [], prev = E.addDays(date, -1);
   for (const b of live("blocks")) {
-    if (isWorkout(b) && E.trainPaused(date)) continue; // v14: paused workout blocks free their time
+    if (isWorkout(b) && E.trainOff(date)) continue; // v14: paused or hidden workout blocks free their time
     const s = toMin(b.start), e = toMin(b.end), over = e <= s;
     if (blockOn(b, date)) out.push({ b, s, e: over ? 1440 : e, cont: over });
     if (over && e > 0 && blockOn(b, prev)) out.push({ b, s: 0, e, tail: true });
@@ -138,7 +138,7 @@ const order = (a, b) => (a.due || "9999").localeCompare(b.due || "9999") || (b.p
 export function plan() {
   const t = E.today(), n = snap(nowMin() + 5), taken = {}, out = new Map(), unplaced = [];
   // v9.2: a deadline is a marker, not work. v13.1: the Path's Mental Math item has no slot either: two Classic Drill runs tick it.
-  const open = live("tasks").filter(x => !x.done && x.kind !== "deadline" && !(x.path && x.path.stream === "mental"));
+  const open = live("tasks").filter(x => !x.done && x.kind !== "deadline" && !(x.path && x.path.stream === "mental") && !(x.trial && E.hidden("people")));
   for (const k of open.filter(x => x.pin && x.pin.date >= t)) {
     const s = toMin(k.pin.start); (taken[k.pin.date] = taken[k.pin.date] || []).push([s, s + k.mins]);
     out.set(k.id, { date: k.pin.date, s, e: s + k.mins, pinned: true, late: k.due && k.pin.date > k.due });

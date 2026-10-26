@@ -190,9 +190,9 @@ export function line(src) {
   }
   if (k === "stat" && id === "zetamac") {
     const b = zetamac(), text = `Mental arithmetic: Zetamac best ${b ?? "—"} (120 s)`;
-    if (b != null && b >= ZM_SHOW) return { state: "earned", text, go: "drill" };
-    if (b != null && b >= ZM_GREY) return { state: "prog", text, pct: b / ZM_SHOW, cond: `shows at ${ZM_SHOW}+`, go: "drill" };
-    return { state: "off", text, cond: `Zetamac ${ZM_SHOW}+`, go: "drill" };
+    if (b != null && b >= ZM_SHOW) return { state: "earned", text, go: "zetamac" };
+    if (b != null && b >= ZM_GREY) return { state: "prog", text, pct: b / ZM_SHOW, cond: `shows at ${ZM_SHOW}+`, go: "zetamac" };
+    return { state: "off", text, cond: `Zetamac ${ZM_SHOW}+`, go: "zetamac" };
   }
   if (k === "gpa") {
     const g = gpa(), T = transcript() || {}, base = `BA, ${T.major || "Global Business & Economics"}`;
