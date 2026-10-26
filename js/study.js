@@ -170,7 +170,7 @@ export function clearDropped() {
 
 // v14: while workout is paused, an open workout make-up quest is cleared with no penalty (its XP comes back).
 export function clearPausedWorkout() {
-  if (!E.trainPaused()) return false;
+  if (!E.trainOff()) return false;
   let n = 0;
   for (const p of openPenalties()) {
     const b = live("blocks").find(x => x.id === p.block), k = penTask(p);

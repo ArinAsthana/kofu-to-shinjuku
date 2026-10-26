@@ -885,3 +885,5 @@ nav button span{position:relative}
 .lexctl{display:inline-flex;align-items:center;gap:2px}
 .lexrow .star{color:rgba(242,239,232,.45)}
 .lexrow .star.on{color:#FFC93C}
+/* v14: Do / Library / Report sections on subject pages */
+.qsec.subj{margin-top:18px}

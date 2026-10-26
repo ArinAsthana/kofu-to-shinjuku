@@ -80,7 +80,7 @@ export function outreachGoals() {
     const k = Pa.openTask("apps"), it = !k && !Pa.gate("apps") ? Pa.item("apps", Pa.pos("apps")) : null;
     if (k || it) out.push({ kind: "apps", k, t: k ? k.title.slice(Pa.stream("apps").label.length + 3) : it.t, done: k ? !!k.done : false });
   }
-  const tr = Soc.openTrials()[0]; if (tr) out.push({ kind: "trial", k: tr, t: tr.title, done: false });
+  const tr = !E.hidden("people") && Soc.openTrials()[0]; if (tr) out.push({ kind: "trial", k: tr, t: tr.title, done: false });
   return out;
 }
 export const outreachNow = (now = new Date()) => { const m = now.getHours() * 60 + now.getMinutes(); return segs(E.ymd(now)).find(g => g.b.id === OUTREACH.id && m >= g.s && m < g.e) || null; };

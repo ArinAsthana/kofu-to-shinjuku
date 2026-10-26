@@ -95,20 +95,20 @@ window.addEventListener("hashchange", () => { if (location.hash === "#plan/peopl
 const TABS = [["home", "Home", "eye", 0], ["quests", "Quests", "sword", 0], ["plan", "Plan", "cal", 0]];
 const openTabs = () => TABS.filter(t => Sy.has(t[3]));
 // Old links still land somewhere: the Dungeon is a Home state, Status is Profile, topics live in Study, People is a tab.
-const REDIRECT = { dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
+const REDIRECT = { drill: "zetamac", japanese: "jlpt", dungeon: "home", status: "profile", skills: "profile", study: "classes", social: "people", more: "settings" };
 // The stage each area needs. Locked areas are invisible, so a link to one lands on Home.
 // v6: flashcards open at any stage and outside blocks.
 const NEEDS = { focus: 1, train: 1, money: 2, classes: 3, jlpt: 0, people: 4 }; // v9.4: Japanese is open from day one
 // The pixel icon in front of each screen's title.
-const HEAD_PX = { quests: "sword", lex: "scroll", drill: "sword", report: "star", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
-const TAB_OF = { quests: "quests", drill: "home", report: "home", lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
+const HEAD_PX = { finance: "coin", quests: "sword", lex: "scroll", zetamac: "sword", report: "star", path: "flag", home: "eye", alerts: "bell", settings: "gear", profile: "star", focus: "sword", cards: "scroll", jlpt: "flag", classes: "scroll", train: "sword", body: "flame", plan: "cal", people: "people", money: "coin" };
+const TAB_OF = { quests: "quests", zetamac: "home", report: "home", lex: "classes", path: "home", home: "home", alerts: "home", settings: "home", profile: "home", focus: "home", train: "home", body: "home", cards: "classes", jlpt: "classes", classes: "classes", plan: "plan", people: "people", money: "money" };
 let entering = false, popId = null; // animation flags: page entrance, and the box just ticked
 function render() {
   if (Sy.checkStage()) save();
   let [tab, ...rest] = route();
   if (REDIRECT[tab]) { tab = REDIRECT[tab]; history.replaceState(null, "", "#" + [tab, ...rest].join("/")); }
-  if ((NEEDS[tab] && !Sy.has(NEEDS[tab])) || (tab === "train" && E.trainPaused())) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
-  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "s" ? vStream(r[1]) : r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "cv" ? vCv(r[1], r[2]) : r[0] === "res" ? vRes() : vPath(),  home: vHome, quests: vQuests, drill: vDrill, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
+  if ((NEEDS[tab] && !Sy.has(NEEDS[tab])) || (tab === "train" && E.trainOff()) || (tab === "people" && E.hidden("people"))) { tab = "home"; rest = []; history.replaceState(null, "", "#home"); }
+  const views = { lex: r => r[0] === "sort" ? vSort(r[1], r[2]) : vLex(), path: r => r[0] === "s" ? (r[1] === "mental" ? (history.replaceState(null, "", "#zetamac"), vZetamac()) : r[1] === "apps" ? (history.replaceState(null, "", "#path/apps"), vApps(null)) : vStream(r[1])) : r[0] === "gate" ? vGate(r[1]) : r[0] === "apps" ? vApps(r[1]) : r[0] === "cv" ? vCv(r[1], r[2]) : r[0] === "res" ? (history.replaceState(null, "", "#path"), vPath()) : vPath(),  home: vHome, quests: vQuests, zetamac: vZetamac, finance: vFinance, report: vReport, focus: vFocus, cards: vCards, jlpt: vJlpt, classes: vClasses, alerts: vAlerts, profile: vProfile, plan: vPlan, people: vSocial, train: vTrain, money: vMoney, settings: vSettings };
   const si = $("#srch"), keepS = si && document.activeElement === si ? { v: si.value, p: si.selectionStart } : null; // v11: typing survives a re-render
   $("#app").innerHTML = (views[tab] || vHome)(rest);
   if (keepS && $("#srch")) { const n = $("#srch"); n.value = keepS.v; n.focus(); try { n.setSelectionRange(keepS.p, keepS.p); } catch (e) {} srUpdate(); }
@@ -128,7 +128,7 @@ function render() {
   else app.classList.remove("enter");
   if (popId) { document.querySelectorAll(`.bx[data-id="${CSS.escape(popId)}"]`).forEach(b => b.classList.add("pop")); popId = null; }
   // Window queue: at most one ceremony (unlock or milestone) per open, then the brief. Never over a sheet.
-  const inDrill = tab === "drill" && Dr.running(); // v10: nothing pops over a running Drill
+  const inDrill = tab === "zetamac" && Dr.running(); // v10: nothing pops over a running Drill
   const cer = !sheet && !inDrill ? ceremony() : null, brief = briefOpen && !cer && !sheet && !inDrill;
   $("#overlay").innerHTML = (brief ? briefHtml() : "") + (sheet ? sheetHtml(sheet) : "") + (cer ? (cer.unlock ? unlockHtml(cer.unlock) : cer.money ? moneyWinHtml() : cer.alarms ? alarmWinHtml() : cer.usage ? usageWinHtml() : cer.update ? updateWinHtml() : cer.awake ? awakeHtml() : cer.floor ? floorHtml(cer.floor) : cer.risk ? riskHtml(cer.risk) : milestoneHtml(cer.ms)) : "");
   $("#fab").innerHTML = ["plan", "people"].includes(tab) || (tab === "classes" && !rest.length) || (tab === "money" && !rest.length) ? `<button class="fab" data-act="sheet" data-id="add" aria-label="Add">${ic("plus")}</button>` : "";
@@ -177,7 +177,7 @@ function todayQuests(t = E.today()) {
   const doneT = live("tasks").filter(k => k.done && !k.trial && !k.path && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }));
   const path = Pa.today(t); // v6: the Path's items, shown as their own line
   // Trials: placed today or due by today, plus any cleared today. They get their own section at the top.
-  const trials = [...Soc.openTrials().filter(k => p.at.get(k.id)?.date === t || (k.due && k.due <= t)).map(k => ({ k })),
+  const trials = E.hidden("people") ? [] : [...Soc.openTrials().filter(k => p.at.get(k.id)?.date === t || (k.due && k.due <= t)).map(k => ({ k })),
     ...Soc.trials().filter(k => k.done && k.doneAt && E.ymd(new Date(k.doneAt)) === t).map(k => ({ k, done: true }))];
   const events = [...open.sort((a, b) => (!!b.k.penalty - !!a.k.penalty) || a.at.s - b.at.s), ...doneT];
   const habits = E.dailyHabits(t).map(h => ({ h, on: !!E.habitDone(h.id, t) }));
@@ -345,19 +345,21 @@ function cmdEdit() {
 const ACT_NEEDS = { moment: 4 };
 function srNeed(it) { if (!it.route.startsWith("a:")) return NEEDS[it.route.split("/")[0]] || 0; return ACT_NEEDS[it.route.split(":")[1]] || 0; }
 // Before typing: what fits now (a class gap, the Mental Math item, the next deadline step), then recent searches.
+// v14: search never offers a hidden area (Workout also while paused).
+const hiddenRoute = r => { r = String(r || ""); return (E.trainOff() && /^(train|a:(drill)?log|a:run)/.test(r)) || (E.hidden("people") && /^(people|a:(trial|moment|battle|weeklytrial))/.test(r)) || (E.hidden("body") && /^(body|a:(food|weight|meal))/.test(r)); };
 function srSuggest() {
   const out = [], add = it => { if (it && !out.some(x => x.route === it.route) && !(srNeed(it) && !Sy.has(srNeed(it)))) out.push(it); };
   if (Dy.gapNow()) add(Sr.byRoute("a:jpgo:5"));
   if (Pa.started() && (Pa.today().list || []).some(k => k.path.stream === "mental" && !k.done)) add(Sr.byRoute("a:drillgo:classic"));
   const d = Dl.active()[0], nx = d && Dl.nextSession(d.id); if (nx) add({ name: `${d.title}: ${Dl.sessionName(nx, d)}`, hint: "next step", route: "a:sheet:deadline:" + d.id, icon: "flag" });
   Sr.recent().slice(0, 2).forEach(r => add(Sr.byRoute(r)));
-  ["a:jpgo:5", "drill", "plan", "report"].forEach(r => out.length < 4 && add(Sr.byRoute(r)));
+  ["a:jpgo:5", "zetamac", "plan", "report"].forEach(r => out.length < 4 && add(Sr.byRoute(r)));
   return out.slice(0, 4);
 }
 function srUpdate() {
   const inp = $("#srch"), list = $("#srchList"), gh = $("#srchGhost"); if (!inp || !list) return;
   const v = inp.value; srCmd = v.trim() ? Sr.command(v, E.today()) : null;
-  srHits = (v.trim() ? [...Sr.find(v, 6, srThings()), ...srWords(v)] : srSuggest()).filter(it => !(E.trainPaused() && /^train\b/.test(it.route || ""))).slice(0, 8); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
+  srHits = (v.trim() ? [...Sr.find(v, 6, srThings()), ...srWords(v)] : srSuggest()).filter(it => !hiddenRoute(it.route)).slice(0, 8); srSel = Math.min(srSel, Math.max(0, srHits.length - 1));
   const rest = v ? Sr.complete(v, srHits[0]) : "";
   gh.innerHTML = rest ? `<span class="gh-t">${esc(v)}</span>${esc(rest)}` : "";
   list.innerHTML = srCmdHtml() + (v.trim() ? "" : `<div class="srch-h">${srHits.length ? "Suggested" : ""}</div>`) + (srHits.map((it, i) => { const nd = srNeed(it), lk = nd && !Sy.has(nd);
@@ -379,7 +381,7 @@ document.addEventListener("keydown", e => {
   const inp = e.target.id === "srch" ? e.target : null;
   if (!inp) {
     const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || "") || document.activeElement?.isContentEditable;
-    if (!typing && !document.body.classList.contains("modal-open") && !(Dr.running() && route()[0] === "drill") && (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"))) { e.preventDefault(); srFocus(); }
+    if (!typing && !document.body.classList.contains("modal-open") && !(Dr.running() && route()[0] === "zetamac") && (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"))) { e.preventDefault(); srFocus(); }
     return;
   }
   const rest = inp.value ? Sr.complete(inp.value, srHits[0]) : "";
@@ -395,7 +397,7 @@ function habitStreak(id) {
   let n = 0; while (E.habitDone(id, d) && n < 999) { n++; d = E.addDays(d, -1); }
   return n;
 }
-const HABIT_GO = { anki: "cards/review", jp: "jlpt", fin: () => Sy.has(NEEDS.classes) ? "classes" : "path/s/accounting", math: "path/s/mental", case: "path/s/case", gym: () => Sy.has(NEEDS.train) ? "train" : null };
+const HABIT_GO = { anki: "cards/review", jp: "jlpt", fin: "finance", math: "zetamac", case: "path/s/case", gym: () => Sy.has(NEEDS.train) ? "train" : null };
 const qRow = ({ done, box, title, sub, right, act, id, cls = "" }) => `<div class="q qr ${done ? "done" : ""} ${cls}">${box}
   ${act ? `<button class="grow tbtn" data-act="${act}" data-id="${esc(id)}"><div class="t">${title}</div>${sub ? `<div class="small muted">${sub}</div>` : ""}</button>` : `<div class="grow"><div class="t">${title}</div>${sub ? `<div class="small muted">${sub}</div>` : ""}</div>`}
   <div class="xp">${right}</div></div>`;
@@ -551,7 +553,7 @@ function drillTick() {
     if (drillResult && drillResult.rec.mode === "classic") { const g = mentalAuto(false); if (g) drillResult.logged = g; }
     save();
     if (drillResult && drillResult.pb) setTimeout(() => toast(`New best · ${Dr.mode(drillResult.rec.mode).name} ${drillResult.rec.score}`, true), 400);
-    if (route()[0] === "drill") render();
+    if (route()[0] === "zetamac") render();
   }, 250);
 }
 const PAD = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "-", "0", "."];
@@ -571,10 +573,19 @@ function drillPaint(ok) {
 }
 const sgn = n => (n > 0 ? "+" : "") + n;
 let drLen = 120;
-function vDrill() {
+// v14: the Resources page is gone; each subject page lists its own books and links under Library.
+const RES_OF = { mental: ["Mental math"], case: ["Cases"], aptitude: ["Aptitude"], accounting: ["Accounting", "Excel/PPT"], sapmurex: ["SAP", "Murex"], apps: ["Jobs"], jp: ["Japanese"] };
+function resHtml(id) {
+  const R = Pa.ready() ? Pa.resources().filter(r => (RES_OF[id] || []).includes(r.stream)) : [];
+  return R.length ? fold("res-" + id, `<b class="grow">Books and links</b><span class="small muted">${R.length}</span>`, R.map(r => `<div class="item"><b class="small">${esc(r.resource)}</b><div class="tiny muted">${esc(r.usedFor)} · ${esc(r.where)}</div></div>`).join("")) : "";
+}
+// v14: one page per subject, top to bottom: Do (today and the start buttons), Library (decks and lists), Report.
+const subjSec = (l, body) => body ? `<div class="qsec subj">${l}</div>${body}` : "";
+// v14: Zetamac is the whole of maths: the Drill, the Mental Math Path stream and its report, on one page.
+function vZetamac() {
   const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Home</button>`;
   if (Dr.running()) return drillRunHtml();
-  const head = `${back}<header class="top"><div><div class="hdr">Mental math</div><h1>Drill</h1></div></header>`;
+  const head = `${back}<header class="top"><div><div class="hdr">Mental math</div><h1>Zetamac</h1></div></header>`;
   let end = "";
   if (drillResult) {
     const { rec, xp, pb, avg7 } = drillResult, b = Dr.best(rec.mode), k = mentalTask();
@@ -583,16 +594,27 @@ function vDrill() {
       <div class="dr-big mono">${rec.score}</div>
       <div class="small mono">best ${b ?? rec.score}${avg7 != null ? ` · ${sgn(Math.round(rec.score - avg7))} vs 7-day avg` : ""}${xp ? ` · +${xp} XP` : ""}${pb ? " · new best" : ""}</div>
       ${drillResult.logged ? `<div class="small good-t" style="margin-top:6px">Logged to the Path: best ${Dr.todayBest("classic")}.</div>` : k && rec.mode === "classic" ? `<div class="btns"><button class="btn go" data-act="drillgo" data-id="classic">Run 2</button><button class="btn" data-act="drlog">Log ${Dr.todayBest("classic")} to the Path</button></div>` : ""}
-      <div class="btns"><button class="btn sm" data-act="go" data-id="report">Full history</button></div>
       ${slow.length ? `<details class="key" style="margin-top:8px"><summary>Slow or skipped · ${slow.length}</summary>${slow.map(x => `<div class="row between small mono"><span>${esc(x.q)} = ${esc(Dr.answerText(x.a))}</span><span class="muted">${x.skipped ? "skipped" : x.s + " s"}</span></div>`).join("")}
         <div class="btns"><button class="btn sm" data-act="drcards" ${drillResult.carded ? "disabled" : ""}>${drillResult.carded ? "In Drill slow" : "Make flashcards"}</button></div></details>` : ""}</div>`;
   }
-  const rows = Dr.MODES.map(m => { const b = Dr.best(m.id), tb = Dr.todayBest(m.id), a = Dr.avg7(m.id);
-    return `<div class="panel row between"><div class="grow"><b>${esc(m.name)}</b><div class="tiny muted">${esc(m.note)}</div>
-      <div class="tiny mono" style="margin-top:4px">${b != null ? `best ${b}${a != null ? ` · 7-day ${Math.round(a)}` : ""}${tb != null ? ` · today ${tb}` : ""}` : "no runs yet"}</div></div>
-      <button class="btn sm go" data-act="drillgo" data-id="${m.id}${drLen === Dr.SECS ? "" : ":" + drLen}">${ic("play", "inl")} ${drLen < 120 ? drLen + " s" : drLen / 60 + " min"}</button></div>`; }).join("");
-  const lens = `<div class="seg" style="margin-bottom:8px">${Dr.LENGTHS.map(n => `<button data-act="drlen" data-id="${n}" aria-pressed="${n === drLen}">${n < 120 ? n + " s" : n / 60 + " min"}</button>`).join("")}</div>${drLen === Dr.SECS ? "" : `<p class="tiny muted">Custom length: saved, but kept off the best and the graph.</p>`}`;
-  return `${head}${end}${lens}${rows}<p class="tiny muted">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p>`;
+  const lenId = drLen === Dr.SECS ? "" : ":" + drLen, lenL = drLen < 120 ? drLen + " s" : drLen / 60 + " min";
+  const rows = Dr.MODES.filter(m => m.id !== "classic").map(m => { const b = Dr.best(m.id), tb = Dr.todayBest(m.id);
+    return `<div class="item row between"><div class="grow"><b class="small">${esc(m.name)}</b><div class="tiny muted">${esc(m.note)}${b != null ? ` · best ${b}${tb != null ? `, today ${tb}` : ""}` : ""}</div></div>
+      <button class="btn sm" data-act="drillgo" data-id="${m.id}${lenId}">${ic("play", "inl")} ${lenL}</button></div>`; }).join("");
+  const lens = `<div class="seg" style="margin:10px 0 8px">${Dr.LENGTHS.map(n => `<button data-act="drlen" data-id="${n}" aria-pressed="${n === drLen}">${n < 120 ? n + " s" : n / 60 + " min"}</button>`).join("")}</div>${drLen === Dr.SECS ? "" : `<p class="tiny muted">Custom length: saved, but kept off the best and the graph.</p>`}`;
+  // Today's Mental Math Path item: 2 Classic runs tick it.
+  const id = "mental", ok = Pa.ready() && Pa.length(id), k = ok && Pa.openTask(id), gt = ok && Pa.gate(id), it = !ok || gt ? null : k ? { t: pathText(k) } : Pa.item(id, Pa.pos(id)), runs = Dr.todayRuns("classic").length;
+  const today = ok ? `<div class="panel"><div class="row between"><b class="small">Today</b><span class="tag">Runs today ${Math.min(runs, 2)}/2</span></div>
+    <div class="small ${it ? "" : "muted"}" style="margin:4px 0 0">${it ? esc(it.t) : gt ? "Gate Test first." : "Stream complete."}</div>${gt ? gateBox(gt) : ""}
+    ${it && mentalMode(it.t) ? `<div class="btns"><button class="btn sm" data-act="drillgo" data-id="${mentalMode(it.t)}">10 problems · ${esc(Dr.mode(mentalMode(it.t)).name)}</button></div>` : ""}</div>` : "";
+  const cb = Dr.best("classic"), ctb = Dr.todayBest("classic");
+  const start = `<button class="btn go block big rvbig" data-act="drillgo" data-id="classic${lenId}">${ic("play", "inl")} Start Classic · ${lenL}</button>
+    <div class="tiny mono muted" style="text-align:center;margin:4px 0 0">${cb != null ? `best ${cb}${ctb != null ? ` · today ${ctb}` : ""}` : "no Classic runs yet"}</div>`;
+  const slow = K.inDeck("Drill slow").length;
+  const lib = slow ? `<button class="quiet-row" data-act="go" data-id="cards/deck/${encodeURIComponent("Drill slow")}"><span class="grow">Drill slow deck · ${slow} card${slow === 1 ? "" : "s"}</span><span class="chev">${ic("right")}</span></button>` : "";
+  return `${head}${subjSec("Do", `${end}${today}${start}${lens}<div class="panel"><div class="list">${rows}</div><p class="tiny muted" style="margin:8px 0 0">Type the answer; it's taken the moment it's right. 1 XP per answer, +${Dr.XP_PB} for a new best, up to ${Dr.XP_CAP} XP a day.</p></div>`)}
+    ${subjSec("Library", lib + resHtml("mental"))}
+    ${subjSec("Report", rcDrill() + (ok ? streamCard(id) : ""))}`;
 }
 /* ================= REPORT CARD (v10.1) ================= */
 let rcPeriod = "all", rcSub = null, rcForm = false, rcMode = "classic", rcPre = null; // rcPre: an exam deadline being scored
@@ -652,7 +674,7 @@ function vReport() {
   const secs = RC_SECS.map(([name, f]) => { const L = ts.filter(f); return L.length ? fold("rc-" + name, `<b class="grow">${name}</b><span class="small muted">${L.length}</span>`, L.map(rcRow).join(""), true) : ""; }).join("");
   const other = ts.filter(x => !RC_SECS.some(([, f]) => f(x)));
   const empty = !all.length ? `<div class="panel"><p class="small muted">No tests in ${rcPeriod === "all" ? "the app yet" : "this period"}. Gate Tests, class quizzes, JLPT exams and real exams you add land here.</p></div>` : "";
-  return `${head}${filt}${sumHtml}${empty}${bars}${secs}${other.length ? fold("rc-other", `<b class="grow">Other</b>`, other.map(rcRow).join(""), true) : ""}${rcExamForm()}${rcSub ? "" : rcDrill()}`;
+  return `${head}${filt}${sumHtml}${empty}${bars}${secs}${other.length ? fold("rc-other", `<b class="grow">Other</b>`, other.map(rcRow).join(""), true) : ""}${rcExamForm()}${rcSub ? "" : `<button class="quiet-row" data-act="go" data-id="zetamac"><span class="grow">Mental math is on the Zetamac page</span><span class="chev">${ic("right")}</span></button>`}`;
 }
 // v11.2: one page per Path stream, with its own report card.
 function vStream(id) {
@@ -672,7 +694,9 @@ function vStream(id) {
     <div class="row between small" style="margin-top:10px"><span>Arc ${A.n}</span><span class="mono">${A.done}/${A.size}</span></div>${bar(A.size ? A.done / A.size : 0, "var(--lime)")}
     <div style="margin-top:8px">${list}</div>
     ${Pa.FIXED.filter(m => m.stream === id).map(m => { const pr = Pa.projection(m); return `<div class="row between small item"><span>${esc(m.name)} · ${esc(E.fmtDate(m.date))}</span><span class="mono ${pr.ok ? "good-t" : "bad-t"}">${pr.ok ? "on track" : pr.late + " days late"}</span></div>`; }).join("")}</div>`;
-  return head + now + prog + streamCard(id);
+  const mist = K.deckNames().filter(d => d.startsWith(s.label) && /mistakes/i.test(d));
+  const lib = resHtml(id) + mist.map(d => `<button class="quiet-row" data-act="go" data-id="cards/deck/${encodeURIComponent(d)}"><span class="grow">${esc(d)} · ${K.inDeck(d).length}</span><span class="chev">${ic("right")}</span></button>`).join("");
+  return head + subjSec("Do", now) + subjSec("Library", lib) + subjSec("Report", prog + streamCard(id));
 }
 // The stream's report card: what's done, how steadily, and every Gate Test.
 function streamCard(id) {
@@ -692,7 +716,6 @@ function streamCard(id) {
     <div class="tiny muted" style="margin-top:8px">Last 7 days</div>${dots}
     ${chart ? `<div style="margin-top:8px">${chart}</div>` : ""}</div>
     ${gates.length ? `<h2>Gate Tests</h2><div class="panel">${gates.map(rcRow).join("")}</div>` : ""}
-    ${id === "mental" ? rcDrill() : ""}
     ${hist ? fold("s-hist-" + id, `<b class="grow">History</b><span class="small muted">${L.length}</span>`, hist, true) : ""}`;
 }
 function vPath() {
@@ -720,7 +743,7 @@ function vPath() {
   const nApp = live("applications").filter(a => !Ap.closed(a)).length;
   return `${head}${intro}${raidsPanel()}${tokens}${rows}
     <button class="quiet-row" data-act="go" data-id="path/apps"><span class="grow">Applications${nApp ? ` · ${nApp} active` : ""}</span><span class="chev">${ic("right")}</span></button>
-    <button class="quiet-row" data-act="go" data-id="cards"><span class="grow">Flashcard decks${due ? ` · ${due} due` : ""}</span><span class="chev">${ic("right")}</span></button>`;
+    <button class="quiet-row" data-act="go" data-id="jlpt"><span class="grow">Japanese and decks${due ? ` · ${due} due` : ""}</span><span class="chev">${ic("right")}</span></button>`;
 }
 /* ---------- v6.2: Raids, Applications, Resources ---------- */
 // An Offer logs the offer for Act I, as "I got an offer" does.
@@ -763,10 +786,19 @@ function vApps(id) {
       <div class="small muted">${[a.role, a.track].filter(Boolean).map(esc).join(" · ")}</div>
       ${w ? `<div class="small ${d <= 2 ? "bad-t" : ""}" style="margin-top:4px">${esc(a.nextDate ? a.next || "Next step" : "Deadline")} · ${esc(E.fmtDate(w))} · ${inDays(d)}</div>` : ""}
       <div class="btns">${Ap.closed(a) ? "" : `<button class="btn sm go" data-act="appnext" data-id="${a.id}">${esc(nx === "Rejected" ? "Offer" : nx)}</button><button class="btn sm" data-act="apprej" data-id="${a.id}">Rejected</button>`}<button class="btn sm" data-act="go" data-id="path/apps/${a.id}">Edit</button><button class="btn sm" data-act="cvfor" data-id="${a.id}">CV</button></div></div>`; };
+  // v14: Do (today's Path item, + Application) → Library (the tracker by deadline, Resumes) → Report.
+  const sid = "apps", ok = Pa.ready() && Pa.length(sid), k = ok && Pa.openTask(sid), gt = ok && Pa.gate(sid), it = !ok || gt ? null : k ? { t: pathText(k) } : Pa.item(sid, Pa.pos(sid)), sd = ok && Pa.standing(sid);
+  const today = ok ? `<div class="panel"><div class="row between"><b class="small">Today</b>${sd.behind ? `<span class="tag t-pen">${sd.behind} behind</span>` : sd.ahead ? `<span class="tag t-ahead">+${sd.ahead} ahead</span>` : ""}</div>
+    <div class="small ${it ? "" : "muted"}" style="margin:4px 0 8px">${it ? esc(it.t) : gt ? "Gate Test first." : "Stream complete."}</div>${gt ? gateBox(gt) : ""}
+    <div class="btns">${gt ? "" : k ? `<button class="btn sm go" data-act="taskdone" data-id="${k.id}">Report</button>` : it ? `<button class="btn sm" data-act="pathahead" data-id="${sid}">Go ahead</button>` : ""}</div></div>` : "";
+  const byDl = (a, b) => (Ap.when(a) || "9").localeCompare(Ap.when(b) || "9");
+  const stages = Ap.STATUSES.map(st => [st, L.filter(a => a.status === st).length]).filter(([, n]) => n);
   return `${back}<header class="top"><div><div class="hdr">Job hunt</div><h1>Applications</h1></div></header>
-  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/apps/new">${ic("plus")} New application</button><button class="btn" data-act="go" data-id="path/cv">Resumes</button></div>
-  ${open.length ? open.map(row).join("") : `<p class="empty">None yet. Add each firm as you find it; dates within 7 days become Raids on Home.</p>`}
-  ${done.length ? fold("apps-closed", `<b class="grow">Closed</b><span class="small muted">${done.length}</span>`, done.map(row).join("")) : ""}`;
+  ${subjSec("Do", `${today}<div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/apps/new">${ic("plus")} Application</button></div>`)}
+  ${subjSec("Library", `${open.length ? open.sort(byDl).map(row).join("") : `<p class="empty">None yet. Add each firm as you find it; dates within 7 days become Raids on Home.</p>`}
+  ${done.length ? fold("apps-closed", `<b class="grow">Closed</b><span class="small muted">${done.length}</span>`, done.map(row).join("")) : ""}
+  ${fold("apps-cv", `<b class="grow">Resumes</b><span class="small muted">${Rs.all().length}</span>`, cvList(), !Rs.all().length)}${resHtml("apps")}`)}
+  ${subjSec("Report", `${stages.length ? `<div class="panel">${stages.map(([st, n]) => `<div class="row between small"><span>${esc(st)}</span><span class="mono">${n}</span></div>`).join("")}</div>` : ""}${ok ? streamCard(sid) : ""}`)}`;
 }
 /* ---------- v13: Resumes ---------- */
 let cvEdit = null, cvDraft = null, cvGrey = false; // CV being edited and its unsaved copy; print grey lines as "in progress"
@@ -794,7 +826,7 @@ function cvPaper(cv) {
     ${Rs.SECTIONS.map(([k, t]) => sec(k, t)).join("")}</div>`;
 }
 function vCv(id, arg) {
-  const back = `<button class="back" data-act="nav" data-id="${id ? "path/cv" : "profile"}">${ic("left")} ${id ? "Resumes" : "Profile"}</button>`;
+  const back = `<button class="back" data-act="nav" data-id="path/apps">${ic("left")} Applications</button>`;
   cvTick();
   const T = Rs.transcript();
   const importer = `<div class="panel"><div class="hdr">${px("scroll")} Transcript</div><p class="small muted">${T ? `${esc(T.school || "")} · GPA ${T.gpaCumulative} · ${T.courses.length} courses` : "Import your transcript (the JSON file) so CVs can list your courses and GPA."}</p>
@@ -806,7 +838,7 @@ function vCv(id, arg) {
       <label class="f">Role<input data-f="role" value="${esc(a ? a.role || "" : "")}" placeholder="Junior consultant"></label>
       <label class="f">Track<select data-f="track">${Rs.TRACKS.map(t => `<option ${t === (a ? a.track : Rs.TRACKS[0]) ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></label>
       <p class="tiny muted">The app drafts a rough CV from the track. For one tailored to the company, ask Claude: "CV for ${esc(a ? a.firm : "Murex")}, ${esc(a && a.role ? a.role : "junior consultant")}".</p>
-      <div class="btns"><button class="btn go" data-act="cvnew" data-id="${esc(arg || "")}">Create</button><button class="btn" data-act="go" data-id="path/cv">Cancel</button></div></div>`;
+      <div class="btns"><button class="btn go" data-act="cvnew" data-id="${esc(arg || "")}">Create</button><button class="btn" data-act="go" data-id="path/apps">Cancel</button></div></div>`;
   }
   if (id) {
     const cv = Rs.byId(id); if (!cv) return `${back}<p class="empty">That CV is gone.</p>`;
@@ -827,9 +859,14 @@ function vCv(id, arg) {
     ${(cv.versions || []).length ? fold("cv-ver", `<b class="grow">Versions</b><span class="small muted">${cv.versions.length}</span>`, cv.versions.map((v, i) => `<div class="row between item small"><span>${esc(E.fmtDate(E.ymd(new Date(v.at))))} ${E.pad(new Date(v.at).getHours())}:${E.pad(new Date(v.at).getMinutes())}</span><button class="btn sm" data-act="cvrestore" data-id="${id}:${i}">Restore</button></div>`).join("")) : ""}
     <div class="btns"><button class="btn danger" data-act="cvdel" data-id="${id}">Delete CV</button></div>`;
   }
-  const L = Rs.all(), j = Rs.jp();
-  return `${back}<header class="top"><div><div class="hdr">Job hunt</div><h1>Resumes</h1></div></header>
-  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="path/cv/new">${ic("plus")} New CV</button></div>
+  history.replaceState(null, "", "#path/apps"); return vApps(null);
+}
+// v14: Resumes live on the Applications page (Library); a CV opens as its own screen.
+function cvList() {
+  const L = Rs.all(), j = Rs.jp(), T = Rs.transcript();
+  const importer = `<div class="panel"><div class="hdr">${px("scroll")} Transcript</div><p class="small muted">${T ? `${esc(T.school || "")} · GPA ${T.gpaCumulative} · ${T.courses.length} courses` : "Import your transcript (the JSON file) to fill courses and GPA."}</p>
+    <div class="btns"><label class="btn sm ${T ? "" : "go"}">${T ? "Replace" : "Import transcript"}<input type="file" accept="application/json,.json" data-ch="cvtranscript" hidden></label></div></div>`;
+  return `<div class="btns" style="margin-top:0"><button class="btn sm" data-act="go" data-id="path/cv/new">${ic("plus")} New CV</button></div>
   ${L.map(cv => { const a = cv.appId && live("applications").find(x => x.id === cv.appId), m = Rs.match(cv), nu = Rs.newSinceExport(cv).length;
     return `<button class="panel app-r" data-act="go" data-id="path/cv/${cv.id}" style="display:block;width:100%;text-align:left"><div class="row between"><b>${esc(cv.company)}</b><span class="tag">${esc(cv.track || "")}</span></div>
       <div class="small muted">${[cv.role, a && a.status, "edited " + E.fmtDate(E.ymd(new Date(cv.updated || cv.created)))].filter(Boolean).map(esc).join(" · ")}</div>
@@ -1245,7 +1282,7 @@ function runAssess() {
   const back = Mi.match(); if (back.length) { save(); toast(`${back.join(", ")} ${back.length === 1 ? "was" : "were"} off. ${back.length === 1 ? "It's" : "They're"} back on because you mined ${back.length === 1 ? "it" : "them"}.`, true); }
   if (Pa.issue()) save();
   mentalAuto();
-  const fresh = [...(Sy.has(1) ? St.assess() : []), ...(Sy.has(4) ? Soc.assess() : [])];
+  const fresh = [...(Sy.has(1) ? St.assess() : []), ...(Sy.has(4) && !E.hidden("people") ? Soc.assess() : [])];
   if (fresh.length) { save(); toast(`Penalty ${fresh.map(p => p.title).join(", ")} skipped. −${fresh.reduce((a, p) => a + p.xp, 0)} XP`, true); }
 }
 
@@ -1299,8 +1336,8 @@ function vProfile() {
   ${actPanel()}
   ${profilePath()}
   <button class="quiet-row" data-act="go" data-id="report"><span class="grow">Report Card${rcLine()}</span><span class="chev">${ic("right")}</span></button>
-  <button class="quiet-row" data-act="go" data-id="drill"><span class="grow">Mental math Drill${Dr.best("classic") != null ? ` · best ${Dr.best("classic")}` : ""}</span><span class="chev">${ic("right")}</span></button>
-  <button class="quiet-row" data-act="go" data-id="path/cv"><span class="grow">Resumes${Rs.all().length ? ` · ${Rs.all().length}` : ""}</span><span class="chev">${ic("right")}</span></button>
+  <button class="quiet-row" data-act="go" data-id="zetamac"><span class="grow">Zetamac${Dr.best("classic") != null ? ` · best ${Dr.best("classic")}` : ""}</span><span class="chev">${ic("right")}</span></button>
+  <button class="quiet-row" data-act="go" data-id="path/apps"><span class="grow">Applications and resumes${Rs.all().length ? ` · ${Rs.all().length} CVs` : ""}</span><span class="chev">${ic("right")}</span></button>
   ${sleepPanel()}
   <h2>Level <span class="n">${E.level()} · ${xp} XP</span></h2>
   <div class="panel">${bar(E.levelProgress(), "var(--acc)")}<div class="small muted">${LEVEL_XP - (xp % LEVEL_XP)} XP to level ${E.level() + 1} · ${E.xpWallet()} XP to spend</div>
@@ -1724,7 +1761,7 @@ function vClasses([sub, id, ch]) {
     <details style="margin-top:8px"><summary class="small">Other paths</summary>${Cl.CLASSES.filter(c => !Cl.CORE.includes(c.id)).map(classRow).join("")}</details>
     <h3 style="margin-top:12px">Specialisations</h3>${Cl.SPECS.map(sp => { const si = Cl.specInfo(sp.id); return `<div class="small item">${si.earned ? ic("check", "inl") + " " : ""}<b>${esc(sp.name)}</b> <span class="muted">· ${esc(Cl.CLASSES.find(c => c.id === sp.base).name)} + ${esc(Cl.plusName(sp.plus))}</span></div>`; }).join("")}`)}
   ${fold("cl-topics", `<b class="grow">Block topics, reports and penalties</b>`, vStudy())}
-  <div class="quiet-links"><button data-act="go" data-id="cards">Flashcard decks</button></div>`;
+  <div class="quiet-links"><button data-act="go" data-id="jlpt">Japanese and decks</button></div>`;
 }
 // v6 Arcs: chapters open 5 at a time as a checklist; the rest stay sealed until the Arc is cleared.
 function discArc(id, L, c) {
@@ -1811,6 +1848,32 @@ function vStudy() {
   ${fold("study-pens", `<b class="grow">Penalties</b><span class="small ${open.size ? "bad-t" : "muted"}">${open.size} open</span>`, `${pens.map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))} ${P.toHM(p.s || 0)}</span><span class="${open.has(p.id) ? "bad-t" : "muted"}">${p.waived ? "waived (one open at a time)" : `−${p.xp} XP · ${open.has(p.id) ? "open" : "cleared"}`}</span></div>`).join("") || `<p class="empty">None. Keep it that way.</p>`}`, open.size > 0)}`;
 }
 
+// v14: Finance, the Finance block syllabus on its own page: the topic now, the modules, then the report.
+let finOpen = null;
+function vFinance() {
+  const back = `<button class="back" data-act="nav" data-id="home">${ic("left")} Home</button>`, k = "fin", fg = St.focusGate();
+  const L = St.topics(k), cur = St.current(k), focus = (S.settings.study || {}).focus || 25;
+  const head = `${back}<header class="top"><div><div class="hdr">Finance blocks · ${L.filter(t => St.progress(k, t.id) >= 100).length}/${L.length} topics</div><h1>Finance</h1></div></header>`;
+  const nx = fg.open ? null : (() => { for (let i = 0; i < 8; i++) { const d = E.addDays(E.today(), i), o = St.questOcc(d).find(o => St.subjectOf(o.b) === k && (i || o.e > new Date().getHours() * 60 + new Date().getMinutes())); if (o) return { d, o }; } return null; })();
+  const now = `<div class="hero"><div class="row between"><span class="hdr">${px("coin")} ${cur ? esc(cur.module || "Now") : "Syllabus"}</span>${cur && St.behind(cur) ? tag("pen", "Behind") : cur && cur.by ? `<span class="hdr">by ${esc(E.fmtDate(cur.by))}</span>` : ""}</div>
+    <div class="now-t">${cur ? esc(cur.t) : "All topics done"}</div>
+    ${cur ? `<div class="small" style="margin-top:4px">${cur.do ? `<b>Do:</b> ${esc(cur.do)}` : ""}${cur.out ? `<br><b>Out:</b> ${esc(cur.out)}` : ""}</div><div class="tiny muted mono" style="margin-top:4px">${St.progress(k, cur.id)}% done</div>` : ""}
+    <div class="btns">${fg.open ? `<button class="btn go" data-act="nav" data-id="focus">${fg.ended ? "Report " : "Start focus · "}${esc(fg.o.b.title)}</button>` : nx ? `<span class="small muted">Next Finance block: ${esc(dayLabel(nx.d))} ${P.toHM(nx.o.s)}</span>` : `<span class="small muted">No Finance block this week. Add one in Plan.</span>`}</div></div>`;
+  const mods = [...new Set(L.map(t => t.module || "Topics"))];
+  const lib = mods.map(m => { const T = L.filter(t => (t.module || "Topics") === m), d = T.filter(t => St.progress(k, t.id) >= 100).length;
+    return fold("fin-" + m, `<b class="grow">${esc(m)}</b><span class="small muted">${d}/${T.length}</span>`, T.map(t => { const pr = St.progress(k, t.id), on = finOpen === t.id;
+      return `<button class="item tbtn" style="width:100%;text-align:left" data-act="finopen" data-id="${esc(t.id)}"><div class="row between small ${cur && t.id === cur.id ? "cur" : ""}"><span class="grow">${pr >= 100 ? ic("check", "inl") + " " : ""}${esc(t.t)}</span><span class="tiny mono muted">${t.by ? esc(E.fmtDate(t.by).slice(4)) + " · " : ""}${pr}%</span></div>
+        ${on ? `<div class="tiny" style="margin-top:4px">${t.do ? `<b>Do:</b> ${esc(t.do)}` : ""}${t.out ? `<br><b>Out:</b> ${esc(t.out)}` : ""}${t.h ? `<br><span class="muted">${t.h} h</span>` : ""}</div>` : ""}</button>`; }).join(""), !!(cur && T.includes(cur)));
+  }).join("") + `<button class="quiet-row" data-act="go" data-id="classes"><span class="grow">Class hall · disciplines and topic editing</span><span class="chev">${ic("right")}</span></button>`;
+  const logs = live("blockLog").filter(r => r.final && r.subj === k), pens = live("penalties").filter(p => !p.trial && St.subjectOf({ kind: "quest", title: p.title || "" }) === k);
+  const done = logs.filter(r => r.done || (r.gain || 0) > 0 || (r.poms || 0) > 0).length, hours = logs.reduce((a, r) => a + (r.poms || 0), 0) * focus / 60;
+  const r = (l, v) => `<div class="row between small"><span class="muted">${l}</span><span class="mono">${v}</span></div>`;
+  const report = `<div class="panel">${mods.map(m => { const T = L.filter(t => (t.module || "Topics") === m), d = T.filter(t => St.progress(k, t.id) >= 100).length; return `<div class="row between small" style="margin-top:6px"><span>${esc(m)}</span><span class="mono">${d}/${T.length}</span></div>${bar(d / (T.length || 1), "var(--sys)")}`; }).join("")}</div>
+    <div class="panel">${r("Blocks done", done)}${r("Blocks missed", pens.length)}${r("Focus hours reported", hours.toFixed(1))}${r("Open penalties", St.openPenalties().filter(p => pens.includes(p)).length)}</div>
+    ${pens.length ? fold("fin-pens", `<b class="grow">Missed blocks</b><span class="small muted">${pens.length}</span>`, pens.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15).map(p => `<div class="item row between small"><span class="grow">${esc(p.title)} · ${esc(dayLabel(p.date))}</span><span class="tiny mono muted">${p.waived ? "waived" : "−" + (p.xp || 0) + " XP"}</span></div>`).join("")) : ""}`;
+  return `${head}${subjSec("Do", now)}${subjSec("Library", lib)}${subjSec("Report", report)}`;
+}
+
 /* ================= FLASHCARDS ================= */
 let cardForm = null, rv = null, bulkOpen = false, recorder = null, newDeck = null; // editor, current review card, bulk paste open, live MediaRecorder, deck for the next new card
 const lastDeck = () => { try { return localStorage.getItem("kts-deck") || "My cards"; } catch (e) { return "My cards"; } };
@@ -1823,35 +1886,24 @@ function gateClosedHtml(g, what) {
     <b>${nx ? `Opens ${nx.date === E.today() ? "today" : esc(dayLabel(nx.date))} at ${P.toHM(nx.s)}` : "No study block this week"}</b>
     <div class="small muted">${what} run inside study blocks.${nx ? " Next: " + esc(nx.b.title) + "." : ""}</div></div></div></div>`;
 }
+// v14: the Flashcards page is folded into Japanese; its sub-screens (review, deck, editor) stay.
 function vCards([sub, a]) {
   if (sub === "review") return vReview();
   if (sub === "edit") return vCardEdit(a);
   if (sub === "deck") return vDeck(a);
-  const back = `<button class="back" data-act="nav" data-id="dungeon">${ic("left")} Dungeon</button>`;
-  const q = K.queue(), g = St.focusGate(), decks = K.deckNames(), done = K.reviewedToday();
-  const head = `${back}<header class="top"><div><div class="hdr">Study</div><h1>Flashcards</h1></div>${gear("dungeon")}</header>`;
-  const rev = `<div class="panel dgate ${g.open && q.length ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Due now</span><h3 style="margin:2px 0 4px">${q.length} card${q.length === 1 ? "" : "s"}</h3>
-    <div class="small muted">${done.n ? `${done.n} reviewed today, ${Math.round(done.ok / done.n * 100)}% right` : "None reviewed today"}</div></div>
-    ${q.length ? `<button class="btn go" data-act="nav" data-id="cards/review">Review</button>` : `<button class="btn" data-act="learnmore">Continue · +10 cards</button>`}</div></div>`;
-  const deckRows = decks.map(d => { const all = K.inDeck(d), due = K.dueCount(d);
-    return `<button class="panel tbtn row between" style="width:100%;margin:0 0 8px" data-act="go" data-id="cards/deck/${encodeURIComponent(d)}"><span class="grow" style="text-align:left"><b>${esc(d)}</b><div class="small muted">${all.length} card${all.length === 1 ? "" : "s"}${K.flipOnly(d) ? " · flip only until it has 4" : ""}</div></span><span class="small ${due ? "" : "muted"}">${due} due</span></button>`; }).join("");
-  const bulk = bulkOpen ? `<div class="panel" id="bulkForm"><h3>Bulk paste</h3><p class="tiny muted">One card per line: front | back. A tab works too, so you can paste two spreadsheet columns.</p>
+  history.replaceState(null, "", "#jlpt"); return vJlpt([]);
+}
+const bulkHtml = () => bulkOpen ? `<div class="panel" id="bulkForm"><h3>Bulk paste</h3><p class="tiny muted">One card per line: front | back. A tab works too, so you can paste two spreadsheet columns.</p>
     <textarea data-f="bulk" rows="8" placeholder="泳ぐ | to swim&#10;先輩 | senior"></textarea>
     <label class="f" style="margin-top:8px">Deck<input data-f="deck" list="dl-bulk" value="${esc(lastDeck())}"></label>${deckList("dl-bulk")}
     <div class="btns"><button class="btn go" data-act="bulkadd">Add cards</button><button class="btn" data-act="bulk">Cancel</button></div></div>` : "";
-  return `${head}${rev}
-  ${tip("cards", "New cards are multiple choice. Get one right 3 times over 2 different days and it becomes a flip card you grade yourself. Miss a flip card twice in a row and it goes back to choices.")}
-  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="go" data-id="cards/edit/new">${ic("plus")} New card</button><button class="btn" data-act="bulk">Bulk paste</button></div>
-  ${bulk}
-  <h2>Decks <span class="n">${cardsCount()}</span></h2>${deckRows || `<p class="empty">No cards yet. Add one or paste a list. Japanese vocabulary lives in the Lexicon.</p>`}
-`;
-}
 const cardsCount = () => K.cards().length;
 // Keeps what's typed in the card editor when it re-renders (image added, recording done).
 function keepCardForm() { if (cardForm && $("#cardForm")) Object.assign(cardForm, readForm("#cardForm")); }
 function vDeck(name) {
   const list = K.inDeck(name).sort((a, b) => (a.created || 0) - (b.created || 0));
-  return `<button class="back" data-act="nav" data-id="cards">${ic("left")} Flashcards</button>
+  const home = name === "Drill slow" ? ["zetamac", "Zetamac"] : ["jlpt", "Japanese"];
+  return `<button class="back" data-act="nav" data-id="${home[0]}">${ic("left")} ${home[1]}</button>
   <header class="top"><div><div class="hdr">Deck · ${list.length} cards</div><h1>${esc(name)}</h1></div></header>
   <div class="btns" style="margin-top:0"><button class="btn primary" data-act="newcardin" data-id="${esc(name)}">${ic("plus")} New card</button></div>
   ${list.map(c => `<button class="panel tbtn row between" style="width:100%;margin:0 0 8px;text-align:left" data-act="go" data-id="cards/edit/${c.id}"><span class="grow"><b class="${K.JA_RE.test(c.front) ? "ja" : ""}">${esc(c.front)}</b><div class="small muted">${esc(c.back)}</div></span>
@@ -1859,7 +1911,7 @@ function vDeck(name) {
 }
 function vCardEdit(id) {
   const c = id === "new" ? null : live("cards").find(x => x.id === id);
-  if (id !== "new" && !c) return `<button class="back" data-act="nav" data-id="cards">${ic("left")} Flashcards</button><p class="empty">That card is gone.</p>`;
+  if (id !== "new" && !c) return `<button class="back" data-act="nav" data-id="jlpt">${ic("left")} Japanese</button><p class="empty">That card is gone.</p>`;
   if (c) { if (!cardForm || cardForm.id !== c.id) cardForm = { id: c.id, img: c.img, aud: c.aud, front: c.front, back: c.back, deck: c.deck }; }
   else if (!cardForm || !cardForm.isNew) { cardForm = { id: uid(), isNew: true, img: null, aud: null, front: "", back: "", deck: newDeck || lastDeck() }; newDeck = null; }
   const f = cardForm, canRec = !!(window.MediaRecorder && navigator.mediaDevices);
@@ -2002,7 +2054,7 @@ function lexFace(c, showBack, noSay) {
 let rvS = { n: 0 };
 const pbar = p => `<div class="pbar" role="progressbar" aria-valuenow="${Math.round(p * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.max(0, Math.min(1, p)) * 100}%"></i></div>`;
 function vReview() {
-  const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "cards"}">${ic("left")} ${St.focusGate().open ? "Dungeon" : "Flashcards"}</button>`;
+  const back = `<button class="back" data-act="nav" data-id="${St.focusGate().open ? "focus" : "jlpt"}">${ic("left")} ${St.focusGate().open ? "Dungeon" : "Japanese"}</button>`;
   const g = St.focusGate();
   const q = K.queue(), done = K.reviewedToday(); // v6: open anytime, not only inside a block
   let c = rv && K.get(rv.id);
@@ -2011,7 +2063,7 @@ function vReview() {
   const head = `${back}<header class="top"><div><div class="hdr">Today's cards</div><h1>Flashcards</h1></div>${jpsOn() ? `<span class="row" style="gap:8px">${jpsTimer()}${jps.silent ? `<button class="btn sm" data-act="jpend">Back to class</button>` : ""}</span>` : ""}</header>${q.length ? pbar(rvS.n / (rvS.n + q.length)) : ""}`;
   if (!c && jpsOn()) return `${head}${sysBox("Cards cleared.", "Next in this session: today's grammar item, then fluency.", `<div class="btns"><button class="btn sm go" data-act="nav" data-id="jlpt">Next</button><button class="btn sm" data-act="jpend">End session</button></div>`)}`;
   if (!c) return `${head}${sysBox("Batch cleared.", `${done.n} reviews today${done.n ? ", " + Math.round(done.ok / done.n * 100) + "% right" : ""}.`,
-    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm go" data-act="learnmore">Continue · +10 cards</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="cards">Decks</button></div>`)}${dayTrack(true)}`;
+    `<div class="btns"><button class="btn sm primary" data-act="nav" data-id="jlpt/q">JLPT practice</button><button class="btn sm go" data-act="learnmore">Continue · +10 cards</button>${g.open ? `<button class="btn sm" data-act="nav" data-id="focus">Back to the block</button>` : ""}<button class="btn sm" data-act="nav" data-id="jlpt">Japanese</button></div>`)}${dayTrack(true)}`;
   const know = c.lex ? `<button class="link rvknow" data-act="rvknow" data-id="${c.id}">I know this · turn off</button>` : "";
   const shown = rv.mode === "mcq" ? rv.pick != null : rv.flip, sug = !c.pri && c.sugg && !c.suggNo;
   const star = shown ? `<div class="rvstar row" style="gap:8px"><button class="star ${c.pri ? "on" : ""} ${sug ? "pulse" : ""}" data-act="rvstar" data-id="${c.id}" aria-pressed="${!!c.pri}" aria-label="Priority card">${ic("star")}</button>
@@ -2107,31 +2159,38 @@ function vJlpt([sub, a]) {
   if (sub === "read") return vRead(a);
   const lvl = J.level(), wait = jlptNeed([lvl]);
   const res = jps && jps.res ? sysBox(`Session over: ${jps.res.n} card${jps.res.n === 1 ? "" : "s"} · +${jps.res.xp} XP`, jps.res.loot ? `Loot drop: +${jps.res.loot} XP.` : "Short sessions add up. Come back at the next gap.", `<div class="btns"><button class="btn sm" data-act="jpclose">Close</button></div>`) : "";
-  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="classes">${ic("left")} Study</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res + `<div class="panel jpq">${jpQuick()}</div>` + dayTrack() + n2Panel();
+  const head = `<header class="top"><div><button class="back" data-act="nav" data-id="home">${ic("left")} Home</button><div class="hdr">Any free gap</div><h1>Japanese</h1></div>${gear("dungeon")}</header>` + jpSearch() + res;
   const ladder = `<div class="ladder">${J.LEVELS.map(l => { const on = J.unlocked().includes(l), cleared = J.passedLevels().includes(l);
     return `<button class="rung ${l === lvl ? "cur" : ""} ${on ? "" : "off"}" data-act="jlptlvl" data-id="${l}" ${on ? "" : "disabled"}>${on ? "" : ic("lock", "inl")}${l}${cleared ? ` ${ic("check", "inl")}` : ""}</button>`; }).join("")}</div>`;
-  const lexRow = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`
-    + (() => { const w = Mi.week(), n = live("mined").length; return n ? `<button class="quiet-row" data-act="lexmined"><span class="grow">Mined this week: ${w.n}${w.deck ? ` · ${w.deck} in your JLPT deck` : ""}</span><span class="chev">${ic("right")}</span></button>` : ""; })();
-  if (wait) return head + lexRow + ladder + wait;
+  // v14: Do → Library → Report. One Start for reviews and new cards; the decks live here (the Flashcards page is gone).
+  const q = K.queue(), nNew = q.filter(c => !c.intro).length, nDue = q.length - nNew;
+  const start = q.length ? `<button class="btn go block big rvbig" data-act="go" data-id="cards/review">${px("scroll")} ${nDue ? `Review ${nDue} due` : "Start"}${nNew ? ` + ${nNew} new` : ""}</button>` : reviewBtn(Lx.ready());
+  const doHtml = `${start}<div class="panel jpq">${jpQuick()}</div>${passRow()}${n2Panel()}`;
+  const decks = K.deckNames().filter(d => d !== "Drill slow" && !/ mistakes$/.test(d) || /^JLPT/.test(d));
+  const lib = `<button class="quiet-row" data-act="go" data-id="lex"><span class="grow">${Lx.ready() ? `Lexicon · ${Lx.all("vocab").length.toLocaleString("en-US")} words, ${Lx.all("kanji").length} kanji` : "Lexicon · import your decks"}</span><span class="chev">${ic("right")}</span></button>`
+    + (() => { const w = Mi.week(), n = live("mined").length; return n ? `<button class="quiet-row" data-act="lexmined"><span class="grow">Mined words · ${n}${w.n ? ` · ${w.n} this week` : ""}</span><span class="chev">${ic("right")}</span></button>` : ""; })()
+    + fold("jp-decks", `<b class="grow">Your decks</b><span class="small muted">${decks.length}</span>`, `${decks.map(d => `<button class="item row between tbtn" style="width:100%" data-act="go" data-id="cards/deck/${encodeURIComponent(d)}"><span class="grow small" style="text-align:left">${esc(d)} <span class="muted">· ${K.inDeck(d).length}</span></span><span class="tiny ${K.dueCount(d) ? "" : "muted"}">${K.dueCount(d)} due</span></button>`).join("") || `<p class="small muted">No decks of your own yet.</p>`}
+      <div class="btns"><button class="btn sm" data-act="go" data-id="cards/edit/new">${ic("plus")} New card</button><button class="btn sm" data-act="bulk">Bulk paste</button></div>${bulkHtml()}`, !!bulkOpen) + resHtml("jp");
+  if (wait) return head + subjSec("Do", doHtml) + subjSec("Library", lib) + ladder + wait;
   const st = J.stats(lvl), g = { open: true }, nl = J.nextLock(lvl), tl = J.titles(); // v8: Japanese runs any time
   const exams = live("jlptExams").sort((x, y) => y.date.localeCompare(x.date) || (y.u || 0) - (x.u || 0));
   const lastMock = exams.find(x => x.kind === "mock" && x.lvl === lvl), mockOpen = RANK_ORDER.indexOf(st.rank) >= RANK_ORDER.indexOf(J.MOCK_AT);
   const secBars = J.SECS.map(([k, l]) => { const s = st.by[k]; return s.n ? `<div class="row between small" style="margin-top:8px"><span>${l}</span><span class="muted">${s.right}/${s.n}</span></div>${bar(s.right / s.n, "var(--sys)")}` : ""; }).join("");
-  const gateNote = g.open ? "" : `<p class="small muted">${ic("lock", "inl")} Practice opens in your next study block${g.next ? ": " + esc(dayLabel(g.next.date)) + " " + P.toHM(g.next.s) : ""}.</p>`;
-  return `${head}${reviewBtn(Lx.ready())}${passRow()}${lexRow}${ladder}
+  const practice = `<div class="btns"><button class="btn primary" data-act="nav" data-id="jlpt/q">JLPT practice</button>${J.SECS.map(([k, l]) => `<button class="btn sm" data-act="nav" data-id="jlpt/q/${k}">${l}</button>`).join("")}</div>
+  ${mockOpen ? `<div class="panel dgate open"><div class="row between"><div class="grow"><span class="k">Boss Raid · ${lvl} mock exam</span><h3 style="margin:2px 0 4px">${J.TITLES[lvl]}</h3>
+    <div class="small muted">Pass at 70% with no section under 35%.${lastMock ? ` Last: ${Math.round(lastMock.pct * 100)}% ${lastMock.pass ? "cleared" : "failed"}.` : ""}</div></div>
+    <button class="btn go" data-act="exam" data-id="mock">Enter</button></div></div>` : ""}
+  ${!S.settings.jlpt.placed ? `<div class="panel"><h3>Placement test</h3><p class="small muted">30 questions from N5, N4 and N3. Score 80% on a level and you skip it.</p>
+    <div class="btns"><button class="btn sm" data-act="exam" data-id="place">Take it</button></div></div>` : ""}`;
+  const report = `${dayTrack()}${ladder}
   ${tip("jlpt", "Original questions in the real JLPT formats. Right answers rank you up; wrong ones become flashcards in the JLPT mistakes deck. Reach Rank " + J.MOCK_AT + " to open the Boss Raid, a mock exam that unlocks the next level.")}
   <div class="panel"><div class="row between"><div><span class="k">${lvl} rank</span><div class="rankbig">${st.rank}</div></div><div style="text-align:right"><div class="dm big2">${st.right}/${st.open}</div><div class="small muted">mastered</div></div></div>
     ${bar(st.frac, "var(--sys)")}${secBars}
-    ${nl ? `<p class="tiny muted" style="margin-top:10px">${ic("lock", "inl")} ${nl.n} question${nl.n === 1 ? " unlocks" : "s unlock"} when Genki II lesson ${nl.lesson} is at 100% in Study topics.</p>` : ""}</div>
-  ${gateNote}
-  <div class="btns" style="margin-top:0"><button class="btn primary" data-act="nav" data-id="jlpt/q" ${g.open ? "" : "disabled"}>Practice</button>${J.SECS.map(([k, l]) => `<button class="btn sm" data-act="nav" data-id="jlpt/q/${k}" ${g.open ? "" : "disabled"}>${l}</button>`).join("")}</div>
-  <div class="panel dgate ${mockOpen && g.open ? "open" : ""}"><div class="row between"><div class="grow"><span class="k">Boss Raid · ${lvl} mock exam</span><h3 style="margin:2px 0 4px">${J.TITLES[lvl]}</h3>
-    <div class="small muted">${mockOpen ? `Pass at 70% with no section under 35%.${lastMock ? ` Last: ${Math.round(lastMock.pct * 100)}% ${lastMock.pass ? "cleared" : "failed"}.` : ""}` : `Opens at Rank ${J.MOCK_AT}.`}</div></div>
-    <button class="btn ${mockOpen && g.open ? "go" : ""}" data-act="exam" data-id="mock" ${mockOpen && g.open ? "" : "disabled"}>Enter</button></div></div>
-  ${!S.settings.jlpt.placed ? `<div class="panel"><h3>Placement test</h3><p class="small muted">30 questions from N5, N4 and N3. Score 80% on a level and you skip it. You're on Genki II, so this likely saves you N5.</p>
-    <div class="btns"><button class="btn sm" data-act="exam" data-id="place" ${g.open ? "" : "disabled"}>Take it</button></div></div>` : ""}
-  ${tl.length ? `<h2>Titles</h2><div class="chips">${tl.map(t => `<span class="chip">${ic("star", "inl")} ${esc(t)}</span>`).join("")}</div>` : ""}
+    ${nl ? `<p class="tiny muted" style="margin-top:10px">${ic("lock", "inl")} ${nl.n} question${nl.n === 1 ? " unlocks" : "s unlock"} when Genki II lesson ${nl.lesson} is at 100% in Study topics.</p>` : ""}
+    ${mockOpen ? "" : `<p class="tiny muted" style="margin-top:8px">Boss Raid opens at Rank ${J.MOCK_AT}.</p>`}</div>
+  ${tl.length ? `<div class="chips">${tl.map(t => `<span class="chip">${ic("star", "inl")} ${esc(t)}</span>`).join("")}</div>` : ""}
   ${exams.length ? fold("jlpt-exams", `<b class="grow">Exam history</b><span class="small muted">${exams.length}</span>`, exams.slice(0, 20).map(x => `<div class="item row between small"><span class="grow">${x.kind === "place" ? "Placement" : x.lvl + " Boss Raid"} · ${esc(dayLabel(x.date))}</span><span class="${x.pass ? "" : "muted"}">${Math.round(x.pct * 100)}% ${x.pass ? ic("check", "inl") : ""}</span></div>`).join("")) : ""}`;
+  return `${head}${subjSec("Do", doHtml + practice)}${subjSec("Library", lib)}${subjSec("Report", report)}`;
 }
 // v13.2: the daily passage. "Today's passage" shows once Claude has written it and the day's reviews are done.
 let pr = { id: null, open: -1, en: false, rd: false };
@@ -2861,10 +2920,11 @@ function vSettings([sec] = []) {
   ${sx("dungeon", "Dungeon", dungeonSettings())}
   ${Us.available() && Sy.has(1) ? sx("usage", "Phone limit", usageSettings(), Us.isGranted() ? Us.cfg().limitMin + " min" : "off") : ""}
   ${Al.available() && Sy.has(1) ? sx("alarms", "Alarms", alarmSettings(), Al.granted() ? "on" : "off") : ""}
-  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises"], [1, "train/runs", "Runs"], [3, "cards", "Flashcard decks"], [4, "people/habits", "Habit library"], [1, "path/res", "Resources"], [1, "lex", "Japanese decks (Lexicon)"], [1, "path/cv", "Resumes"]].filter(([n]) => Sy.has(n)).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}
+  ${Sy.has(1) ? sx("library", "Library", `<div class="list">${[[1, "train/pick/browse", "Exercises", "train"], [4, "people/habits", "Habit library", "people"], [1, "lex", "Japanese decks (Lexicon)"], [1, "path/apps", "Applications and resumes"]].filter(([n, , , h]) => Sy.has(n) && !(h === "train" ? E.trainOff() : h && E.hidden(h))).map(([, r, l]) => `<button class="quiet-row" style="margin-top:0" data-act="go" data-id="${r}"><span class="grow">${l}</span><span class="chev">${ic("right")}</span></button>`).join("")}
     <label class="quiet-row" style="margin-top:0"><span class="grow">Import transcript${Rs.transcript() ? ` · GPA ${Rs.transcript().gpaCumulative}, ${Rs.transcript().courses.length} courses` : ""}</span><input type="file" accept="application/json,.json" data-ch="cvtranscript" hidden><span class="chev">${ic("right")}</span></label></div>`) : ""}
   ${sx("habits", "Daily quests", bodySettings())}
-  ${S.settings.train && S.settings.train.pauseUntil ? sx("trainpause", "Workout", E.trainPaused() ? `<p class="small">Paused until ${esc(E.fmtDate(S.settings.train.pauseUntil))}. No workout blocks, Workout quest or workout penalties until then. Your workout data is kept.</p><div class="btns"><button class="btn sm" data-act="trainresume">Resume now</button></div>` : `<p class="small muted">Training is on.</p>`, E.trainPaused() ? "paused" : "on") : ""}
+  ${sx("hidden", "Hidden areas", `<p class="small muted">Hidden areas have no pages, quests, alerts or penalties. Their data stays, and Claude can still log food and weight.</p>${[["body", "Body and food"], ["people", "People and Trials"], ["train", "Workout"], ["care", "Care routine"]].map(([k, l]) => `<div class="row between item"><span class="small">${l}${k === "train" && E.trainPaused() ? ` <span class="muted">· paused until ${esc(E.fmtDate(S.settings.train.pauseUntil))}</span>` : ""}</span><button class="sw ${E.hidden(k) ? "" : "on"}" role="switch" aria-checked="${!E.hidden(k)}" aria-label="Show ${l}" data-act="hidearea" data-id="${k}"><i></i></button></div>`).join("")}`, (S.settings.hidden || []).length ? (S.settings.hidden || []).length + " hidden" : "none")}
+  ${S.settings.train && S.settings.train.pauseUntil && !E.hidden("train") ? sx("trainpause", "Workout", E.trainPaused() ? `<p class="small">Paused until ${esc(E.fmtDate(S.settings.train.pauseUntil))}. No workout blocks, Workout quest or workout penalties until then. Your workout data is kept.</p><div class="btns"><button class="btn sm" data-act="trainresume">Resume now</button></div>` : `<p class="small muted">Training is on.</p>`, E.trainPaused() ? "paused" : "on") : ""}
   ${sx("money", "Money and Store", moneySettings())}
   ${sx("rewards", "Rewards", `<p class="small muted">Every XP gain has this chance to unlock a random reward. One reward per line.</p>
     <label class="f">Chance (%)<input type="number" min="0" max="100" data-ch="chance" value="${Math.round((st.rewardChance ?? 0.18) * 100)}"></label>
@@ -3321,7 +3381,7 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
     }
     case "taskundo": { const k = live("tasks").find(x => x.id === id); if (!k) return;
       if (k.path) { if (!Pa.undo(k)) toast("Undo the later item in this stream first"); save(); return render(); } E.revokeXP("task:" + id); E.revokeXP("task:" + id + ":ahead"); put("tasks", { ...k, done: false, doneAt: null }); save(); return render(); }
-    case "drillgo": { const [m, sec] = id.split(":"); sheet = null; drillResult = null; Dr.start(m, +sec || Dr.SECS); } if (route()[0] !== "drill") location.hash = "drill"; drillTick(); return render();
+    case "drillgo": { const [m, sec] = id.split(":"); sheet = null; drillResult = null; Dr.start(m, +sec || Dr.SECS); } if (route()[0] !== "zetamac") location.hash = "zetamac"; drillTick(); return render();
     case "drk": { const ok = Dr.key(id); drillPaint(ok); return; }
     case "drskip": Dr.skip(); drillPaint(true); return;
     case "drquit": if (confirm("Stop this run? It won't be saved.")) { Dr.quit(); clearInterval(drillT); render(); } return;
@@ -3496,7 +3556,9 @@ Weekly saving needed for ${yen(mp.goal)}: ${yen(mp.saveWeek)} → ${yen(after)}.
       const p = on && K.pairOf(c); if (p && confirm(`Star its look-alike ${Lx.face(p)} too?`)) K.setPri(p.id, true);
       save(); toast(on ? "Priority: first in the queue, back more often" : "Priority removed"); return render();
     }
+    case "hidearea": { const h = new Set(S.settings.hidden || []); h.has(id) ? h.delete(id) : h.add(id); S.settings.hidden = [...h]; touchSettings(); save(); return render(); }
     case "trainresume": if (!confirm("Resume workout now? Lift and Calisthenics blocks and the Workout quest come back today.")) return; S.settings.train = { ...S.settings.train, pauseUntil: E.today() }; touchSettings(); save(); toast("Training resumes today"); return render();
+    case "finopen": finOpen = finOpen === id ? null : id; return render();
     case "rvsugno": K.unsugg(id); save(); return render();
     case "rvnext": rv = null; return render();
     case "pword": { pr.open = pr.open === +id ? -1 : +id; const p = Ps.byId(pr.id); if (p && pr.open >= 0) { Ps.tap(p, +id); save(); } return render(); }
@@ -3740,7 +3802,7 @@ function renameStyle() {
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { usageTick(); pendingRoute(); } });
   // v10: a hardware or Bluetooth keyboard works in the Drill too.
   document.addEventListener("keydown", e => {
-    if (!Dr.running() || route()[0] !== "drill" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!Dr.running() || route()[0] !== "zetamac" || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key === "Backspace" ? "del" : e.key === "Enter" || e.key === " " ? null : /^[\d.-]$/.test(e.key) ? e.key : null;
     if (!k) return; e.preventDefault(); drillPaint(Dr.key(k));
   });
