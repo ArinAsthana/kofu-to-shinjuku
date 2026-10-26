@@ -214,7 +214,7 @@ async function getDay(env, a) {
 // Mirrors js/engine.js moneyPlan, paceAt and funBudget (keep in step).
 async function getMoney(env) {
   const [money, bills, wishlist, settings] = await Promise.all(["money", "bills", "wishlist", "settings"].map(s => readStore(env, s).then(x => x.data)));
-  const t = nowTokyo().date, m = { goal: 500000, debtStart: 142000, ...(settings.money || {}) }, grad = settings.dates?.graduation || "2027-08-31";
+  const t = nowTokyo().date, m = { goal: 70000, debtStart: 142000, ...(settings.money || {}) }, grad = settings.dates?.graduation || "2027-08-31";
   const fun = { monthly: 5000, ...(settings.fun || {}) }, y = n => "¥" + Math.round(n).toLocaleString("en-US");
   const reps = live(money).sort((a, b) => a.date.localeCompare(b.date) || a.u - b.u), first = reps[0], last = reps[reps.length - 1];
   const pace = r => { if (!first || !r) return { ok: true, behind: 0 };

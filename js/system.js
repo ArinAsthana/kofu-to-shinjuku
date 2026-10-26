@@ -12,7 +12,7 @@ import { START } from "./path.js";
 export const FI = { target: 130000000, born: "2004-01-14", finalGate: "2049-01-14", perYear: 3750000, realReturn: 0.05 };
 
 export const ACTS = [
-  { id: "I", name: "Escape Kofu", when: "now to first job", objective: "¥500k saved, debt-free, one offer in a target role" },
+  { id: "I", name: "Escape Kofu", when: "now to first job", objective: "Debt-free, a ¥70k buffer, one offer in a target role" },
   { id: "II", name: "Foothold", when: "job years 1 to 3", objective: "Savings rate 30%+, a promotion, an MBA through 社費留学 or a scholarship" },
   { id: "III", name: "Ascent", when: "about 28 to 35", objective: "Income ¥10M+ a year, family, home base chosen" },
   { id: "IV", name: "Compounding", when: "about 35 to 45", objective: "Invested total on pace for the target" },
@@ -115,7 +115,7 @@ export function seeMilestone(id) { const x = sys(); if (!x.seen.includes(id)) x.
 
 /* ---------- reveals: at most one System message a day ---------- */
 const REVEALS = [
-  { id: "act1", text: "Act I has begun: Escape Kofu.", sub: "Objective: ¥500k saved, debt-free, and one offer. Everything else is noise for now." },
+  { id: "act1", text: "Act I has begun: Escape Kofu.", sub: "Objective: debt-free, a ¥70k buffer, and one offer. Everything else is noise for now." },
   { id: "shield", text: "Streak shield active.", sub: "One missed day a week won't break your streak. Two will." },
   { id: "loot", text: "Blocks can drop loot.", sub: "Finish the block. Sometimes there's more than the base XP." },
   { id: "comeback", text: "Missed a day? The next one starts with a comeback quest.", sub: "Clear any one quest for a bonus. No pile-up." },
@@ -135,7 +135,7 @@ export function markReveal(id, t = E.today()) { const x = sys(); if (!x.revealed
 /* ---------- Sunday report: one insight a week ---------- */
 const INSIGHTS = [
   "Act I has three parts: savings, debt, an offer. Nothing else counts yet.",
-  "The weekly money number is the whole savings plan. Hit it and the ¥500k arrives by graduation.",
+  "The weekly money number is the whole savings plan. Hit it and the ¥70k buffer arrives by graduation.",
   "Accounting is shared by all three target roles. It's studied first for that reason.",
   "Japanese is the multiplier: every target firm in Tokyo weighs it.",
   "A missed day costs less than a missed week. The shield exists so one bad day stays one day.",
