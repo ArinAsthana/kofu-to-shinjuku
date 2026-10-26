@@ -140,7 +140,7 @@ export const RPE = [6, 7, 7.5, 8, 8.5, 9, 9.5, 10];
 
 /* ---------- money (schema 2) ---------- */
 // Arin's first report (2026-10-10). Seeded once with fixed ids so syncing devices never duplicate it.
-export const MONEY = { goal: 500000, debtStart: 142000 };
+export const MONEY = { goal: 70000, debtStart: 142000 }; // v13.4: debt-free plus a ¥70k buffer by graduation
 export const MONEY_SEED = [{ id: "seed-2026-10-10", u: 1, date: "2026-10-10", bank: 22000, debt: 142000 }];
 export const BILL_SEED = [{ id: "seed-health", u: 1, name: "National health insurance", amount: null, freq: "month", kind: "insurance", paid: {} }];
 

@@ -190,6 +190,8 @@ export function migrate(s) {
   s.settings.habitTargets = Object.assign(base.settings.habitTargets, s.settings.habitTargets || {});
   s.settings.dates = Object.assign(base.settings.dates, s.settings.dates || {});
   s.settings.money = Object.assign(base.settings.money, s.settings.money || {});
+  // v13.4: the goal moved from ¥500k to ¥70k (Arin, 26 Oct 2026). Once, only if it was still the old default.
+  if (!s.settings.money.g70) { if (s.settings.money.goal === 500000) { s.settings.money.goal = 70000; s.settings.u = Date.now(); } s.settings.money.g70 = true; }
   s.settings.plan = Object.assign(base.settings.plan, s.settings.plan || {});
   s.settings.sessions = s.settings.sessions || {};
   s.settings.windDown = Object.assign(base.settings.windDown, s.settings.windDown || {});
